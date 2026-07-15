@@ -1,0 +1,33 @@
+# Реальные продакшн-данные для разового переноса (сотрудники/статистика/
+# пользователи и т.д.) — не должны попасть в git.
+migration-staging/
+
+# Секреты — .env содержит реальные боевые креды (S3/RustFS, PG_PASSWORD).
+# .env.example — шаблон без секретов, коммитить можно и нужно.
+.env
+.env.local
+
+# Node.js (и бэкенд backend/, и frontend-app/)
+node_modules/
+npm-debug.log*
+
+# Собранный фронтенд — пересобирается Docker'ом (Dockerfile, stage
+# frontend-builder), коммитить незачем.
+frontend-app/dist/
+frontend/app/dist/
+
+# .NET build-артефакты — backend-dotnet и все консольные tools/*
+backend-dotnet/bin/
+backend-dotnet/obj/
+tools/*/bin/
+tools/*/obj/
+
+# Реальные накопленные данные Node-бэкенда (JSON-файлы статистики/сессий и
+# т.п.) — не то, что должно жить в git рядом с кодом.
+backend/data/
+backend/vs-sessions.json
+backend/vs-logins.json
+
+*.log
+.DS_Store
+Thumbs.db

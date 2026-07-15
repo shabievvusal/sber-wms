@@ -1,0 +1,101 @@
+services:
+  # Trek 2, Фаза 0 — reverse-proxy перед node и dotnet. Единственный сервис с
+  # внешним портом теперь caddy (раньше — node напрямую), см. Caddyfile.
+  caddy:
+    image: caddy:2-alpine
+    restart: on-failure
+    ports:
+      - "${PORT:-3009}:3009"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      node:
+        condition: service_healthy
+      dotnet:
+        condition: service_started
+
+  node:
+    build:
+      context: .
+      # Фронтенд собирается из `frontend-app/` — обычной подпапки этого же
+      # build context (см. Dockerfile, stage frontend-builder). До
+      # объединения фронтенда и бэкенда в один репозиторий (2026-07-15)
+      # здесь был доп.контекст на сиблинг-папку `new zlp` — больше не
+      # нужен, обе части проекта теперь в одном каталоге.
+    image: wms-node
+    restart: on-failure
+    expose:
+      - "3009"
+    env_file: .env
+    environment:
+      - NODE_HOST_PROJECT_PATH=${PWD}
+      # .env's PORT — это внешний, хост-фейсинговый порт для caddy (маппинг
+      # ниже), а не порт, на котором должен слушать сам node. Caddyfile
+      # жёстко проксирует на node:3009, поэтому node ВСЕГДА должен слушать
+      # именно 3009 внутри контейнера — эта строка перекрывает PORT из
+      # env_file (Compose: explicit environment важнее env_file), иначе
+      # server.js (`process.env.PORT || 3000`) слушал бы порт из .env и
+      # Caddy получал бы "connection refused".
+      - PORT=3009
+    volumes:
+      - node-persist:/app/persist
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app/host-project
+      - ./backend/server.js:/app/backend/server.js
+      - ./backend/vs-auth.js:/app/backend/vs-auth.js
+      - ./backend/vs-auth-pg.js:/app/backend/vs-auth-pg.js
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:'+process.env.PORT+'/api/status', r => process.exit(r.statusCode===200?0:1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Фаза 0 — /api/dotnet-status. Фаза 1 — route-rk-pg.js перенесён целиком
+  # (routes/ship/receive/eo/drivers/cfz/photos/events), см. Program.cs.
+  # env_file: .env — нужен целиком (не только PG_*), т.к. фото теперь льются
+  # в S3 отсюда же (S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET/
+  # S3_PUBLIC_URL), та же переменная DOTNET_PORT (если задана) тоже отсюда.
+  dotnet:
+    build: ./backend-dotnet
+    restart: on-failure
+    expose:
+      - "5080"
+    env_file: .env
+    environment:
+      - PG_HOST=postgres
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_DB=${PG_DB:-zlp}
+      - PG_USER=${PG_USER:-zlp}
+      - PG_PASSWORD=${PG_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Без healthcheck: mcr.microsoft.com/dotnet/aspnet:9.0 не содержит
+    # curl/wget по умолчанию, а Caddy и так ждёт только service_started
+    # (не service_healthy) для этого сервиса — см. depends_on у caddy выше.
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${PG_DB:-zlp}
+      POSTGRES_USER:     ${PG_USER:-zlp}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-zlp} -d ${PG_DB:-zlp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  node-persist:
+    driver: local
+  pg-data:
+    driver: local

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- RouteService.cs сортирует водителей/ЦФЗ через CultureInfo("ru-RU")
+         (аналог localeCompare('ru') в оригинале) — для этого нужны реальные
+         культуры ICU, InvariantGlobalization с ними несовместим. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.410.7" />
+    <!-- Фаза 4: hashPassword/verifyPassword в vs-auth-pg.js используют
+         crypto.scryptSync(password, salt, 64) (Node-дефолты N=16384, r=8,
+         p=1) — .NET не имеет встроенного scrypt. Проверено вручную
+         (round-trip против реального хэша из Node): SCrypt.ComputeDerivedKey
+         с теми же параметрами даёт байт-в-байт идентичный результат. Пакет
+         таргетит .NET Framework (не netstandard/net9 нативно) — работает
+         через совместимость, NU1701-предупреждение при сборке ожидаемо. -->
+    <PackageReference Include="SCrypt" Version="2.0.0.2" />
+  </ItemGroup>
+</Project>

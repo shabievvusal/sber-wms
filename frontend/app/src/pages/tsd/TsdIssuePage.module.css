@@ -1,0 +1,500 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.subtitle,
+.meta {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.subtitle {
+  margin-top: 4px;
+}
+
+.tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: 700 13px/1 var(--font);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.tabActive {
+  color: var(--text);
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+
+.counters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+  max-width: 560px;
+  margin-bottom: 14px;
+}
+
+.counter {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.counter span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.counter strong {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.issueCard,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.issueCard {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-width: 560px;
+  min-height: 320px;
+  margin: 42px auto 12px;
+  cursor: text;
+}
+
+.toolbar {
+  margin-bottom: 14px;
+}
+
+.scanForm {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scanVisual {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding-top: 28px;
+  text-align: center;
+}
+
+.scanIcon {
+  display: grid;
+  place-items: center;
+  width: 132px;
+  height: 132px;
+  border: 1.5px solid #bbf7d0;
+  border-radius: 28px;
+  background: #f0fdf4;
+  color: var(--green);
+}
+
+.scanTitle {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.scanHint,
+.issueHint {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.issueHint {
+  min-height: 22px;
+  max-width: 460px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.hiddenSubmit {
+  display: none;
+}
+
+.scanInput,
+.input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--text);
+  font: 500 13px/1 var(--font);
+  outline: none;
+}
+
+.scanInput {
+  min-width: 260px;
+  flex: 1;
+}
+
+.input {
+  min-width: 190px;
+}
+
+.scanInput:focus,
+.input:focus {
+  border-color: var(--green);
+}
+
+.card {
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-muted);
+  text-align: left;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.printTable {
+  min-width: 760px;
+}
+
+.statusTable {
+  min-width: 720px;
+}
+
+.printTable th:nth-child(1),
+.printTable td:nth-child(1) {
+  width: 42px;
+}
+
+.printTable th:nth-child(2),
+.printTable td:nth-child(2),
+.statusTable th:nth-child(1),
+.statusTable td:nth-child(1) {
+  width: 170px;
+}
+
+.printTable th:nth-child(4),
+.printTable td:nth-child(4),
+.statusTable th:nth-child(3),
+.statusTable td:nth-child(3) {
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+}
+
+.printTable th:nth-child(5),
+.printTable td:nth-child(5),
+.statusTable th:nth-child(4),
+.statusTable td:nth-child(4) {
+  width: 110px;
+}
+
+.printTable th:nth-child(6),
+.printTable td:nth-child(6),
+.statusTable th:nth-child(5),
+.statusTable td:nth-child(5) {
+  width: 90px;
+}
+
+.printTable th:nth-child(7),
+.printTable td:nth-child(7),
+.statusTable th:nth-child(6),
+.statusTable td:nth-child(6) {
+  width: 72px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sortBtn:hover {
+  color: var(--text);
+}
+
+.checkBox {
+  position: relative;
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 1.5px solid #9ca3af;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.checkBoxOn {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.checkBoxOn::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.badgeOk,
+.badgeWarn {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badgeOk {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badgeWarn {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.printPortal {
+  display: none;
+}
+
+.printLabel {
+  width: 100mm;
+  height: 75mm;
+  display: grid;
+  grid-template-rows: 52mm 9mm 9mm;
+  align-items: center;
+  justify-items: center;
+  padding: 3mm 5mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+}
+
+.printQr {
+  width: 50mm;
+  height: 50mm;
+}
+
+.printName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 17pt/1.1 Arial, sans-serif;
+}
+
+.printCompany {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font: 700 15pt/1.1 Arial, sans-serif;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 16px;
+  }
+
+  .header {
+    display: grid;
+  }
+
+  .tabs,
+  .counters,
+  .tab {
+    width: 100%;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .counters {
+    grid-template-columns: 1fr;
+  }
+
+  .scanInput,
+  .input {
+    min-width: 100%;
+  }
+}
+
+@media print {
+  :global(body.tsd-printing #root) {
+    display: none !important;
+  }
+
+  :global(body.tsd-printing) {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  :global(body.tsd-printing) .printPortal {
+    display: grid;
+    grid-template-columns: 100mm;
+    align-content: start;
+    justify-content: start;
+    gap: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  :global(body.tsd-printing) .printLabel {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  :global(body.tsd-printing) .printLabel:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  @page {
+    size: 100mm 75mm;
+    margin: 0;
+  }
+}

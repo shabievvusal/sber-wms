@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Палитра СберЛогистики — перенесена как есть из существующего проекта
+ * (../zlp-main-main/frontend/app/src/index.css), не generic-shadcn тема.
+ */
+:root {
+  --radius: 0.625rem;
+
+  --sber-green:       #21A038;
+  --sber-green-dark:  #178030;
+  --sber-green-light: #E8F5EC;
+  --sber-green-mid:   #B8DEC2;
+
+  --background: #F5F7FA;
+  --foreground: #1D1D1B;
+  --card: #FFFFFF;
+  --card-foreground: #1D1D1B;
+  --popover: #FFFFFF;
+  --popover-foreground: #1D1D1B;
+  --primary: var(--sber-green);
+  --primary-foreground: #FFFFFF;
+  --secondary: #EEF2F6;
+  --secondary-foreground: #1D1D1B;
+  --muted: #EEF2F6;
+  --muted-foreground: #6B7280;
+  --accent: var(--sber-green-light);
+  --accent-foreground: var(--sber-green-dark);
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --success: var(--sber-green-dark);
+  --success-foreground: #FFFFFF;
+  --warning: #D97706;
+  --warning-foreground: #1D1D1B;
+  --border: #DDE2EA;
+  --input: #DDE2EA;
+  --ring: var(--sber-green);
+}
+
+.dark {
+  --background: #14171A;
+  --foreground: #F5F7FA;
+  --card: #1D2126;
+  --card-foreground: #F5F7FA;
+  --popover: #1D2126;
+  --popover-foreground: #F5F7FA;
+  --primary: var(--sber-green);
+  --primary-foreground: #FFFFFF;
+  --secondary: #262B31;
+  --secondary-foreground: #F5F7FA;
+  --muted: #262B31;
+  --muted-foreground: #9CA3AF;
+  --accent: #1E3324;
+  --accent-foreground: var(--sber-green);
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --success: var(--sber-green);
+  --success-foreground: #0B1F10;
+  --warning: #F59E0B;
+  --warning-foreground: #1D1D1B;
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 18%);
+  --ring: var(--sber-green);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+/* Инпуты с `list` (datalist-подсказки компаний в EmployeesCard/QuickAssignDialog)
+   рисуют нативную стрелку выбора в Chrome/Edge — подсказки остаются, стрелка убрана. */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
+/* Тонкая полоса загрузки поверх таблицы (см. TopLoadingBar) — вместо подмены
+   содержимого на скелет при каждом обновлении данных. Абсолютно спозиционирована,
+   поэтому не влияет на высоту контейнера и не двигает вёрстку. */
+@keyframes loading-bar-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+

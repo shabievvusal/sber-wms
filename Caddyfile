@@ -1,0 +1,119 @@
+# Trek 2. Фаза 0 — passthrough на node + /api/dotnet-status (проверочный).
+# Фаза 1 — /api/rk/* и /rk-photos/* переехали на dotnet (route-rk-pg.js
+# перенесён целиком), кроме ОДНОГО исключения: /eos/request-refresh трогает
+# не Postgres, а собственное in-memory состояние server.js (eoRefreshQueue,
+# отдаётся через отдельный /api/status) — не относится к домену route-rk-pg.js,
+# остаётся на node. Порядок важен: более специфичный путь (request-refresh)
+# должен матчиться РАНЬШЕ общего /api/rk/*.
+# Фаза 2 — tsd-pg.js целиком и часть empl-pg.js (чистый CRUD над employees)
+# переехали на dotnet. GET /api/empl/find-unregistered, POST /api/empl/
+# enrich-names и /api/empl/upgrade-fio-ids остаются на node — они читают
+# локальные файлы (data/*/HH.json, names_registry.json, raw_tmp/), которые
+# не смонтированы в контейнер dotnet; сюда попадают через общий handle{node}
+# ниже (для них отдельных блоков не нужно).
+# /api/tsd/manual-employees* (2026-07-15) — сотрудники без executorId
+# (не встречаются в статистике WMS), заводятся вручную в Настройках
+# исключительно для выдачи ТСД; отдельная таблица tsd_manual_employees,
+# не пересекается с /api/employees. Тоже на dotnet (TsdService.cs).
+# Фаза 4 — vs-auth.js/server.js (аутентификация) → dotnet. /api/vs/auth/*
+# (register/login/me/logout) и /api/vs/admin/{roles,pending,users}* (CRUD
+# ролей/заявок/пользователей) — целиком на dotnet, читают те же таблицы
+# vs_users/vs_sessions (Фаза 0) + новые vs_custom_roles/vs_pending_users/
+# vs_logins (Фаза 4) напрямую. /api/vs/telegram/* (зависит от config.json
+# приложения и живого Telegram Bot API), /api/vs/admin/auto-fetch-settings,
+# /api/vs/admin/company-day-cache/invalidate, /api/vs/admin/product-weights/*
+# и /api/node/* остаются на node — попадают в общий handle{node} ниже.
+# Фаза 3 — storage.js (4 домена: ops/placement/receiving/remains) → dotnet.
+# /api/date/* целиком (все 6 путей — только чтение/сохранение агрегата,
+# весь домен storage.js), /api/shifts*, /api/analysis/employee-rates,
+# /api/stats/monthly-company, /api/stats/monthly-employees,
+# /api/stats/{placement,receiving,remains}/monthly-employees, GET
+# /api/product-weights (чтение) — на dotnet. POST /api/stats/{placement,
+# receiving,remains}/save и POST /api/save-fetched-data ОСТАЮТСЯ на node
+# (дуал-райт: Node пишет JSON-файлы как раньше — для совместимости с
+# ArticleSpeeds/WeightScan/MissingWeightRebuild/EmployeePerformance,
+# читающими только файлы — и параллельно шлёт те же raw-items напрямую в
+# dotnet:5080/api/stats/*/ingest, минуя Caddy; эти /ingest-пути НЕ проксируются
+# наружу через Caddy вообще). GET /api/analysis/article-speeds, POST/DELETE
+# /api/vs/admin/product-weights/*, /api/stats/send-{hourly,idles}-telegram
+# остаются на node — попадают в общий handle{node} ниже.
+:3009 {
+	handle /api/dotnet-status* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/rk/routes/*/eos/request-refresh {
+		reverse_proxy node:3009
+	}
+	handle /api/rk/* {
+		reverse_proxy dotnet:5080
+	}
+	handle /rk-photos/* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/tsd-assignments* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/tsd-settings* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/tsd/manual-employees* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/empl {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/empl/add-new {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/date/* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/shifts {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/shifts/current {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/shifts/*/items {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/analysis/employee-rates {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/monthly-company {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/placement/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/receiving/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/remains/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/product-weights {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/auth/* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/admin/roles* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/admin/pending* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/admin/users* {
+		reverse_proxy dotnet:5080
+	}
+	handle {
+		reverse_proxy node:3009
+	}
+}
