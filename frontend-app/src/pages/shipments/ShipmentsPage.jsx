@@ -611,7 +611,7 @@ export default function ShipmentsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Отгрузки и приёмка (РК)</h1>
+          <h1 className="text-xl font-semibold">Отгрузка и приёмка (РК, ЯЩ, ТЧ, паллеты)</h1>
           <p className="text-sm text-muted-foreground">Маршруты СТПС: отгрузка, приёмка, сверка расхождений</p>
         </div>
         <div className="flex items-center gap-2">
