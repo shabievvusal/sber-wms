@@ -5,7 +5,7 @@
 export function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '')
   const [page, id] = raw.split('/')
-  return { page: page || 'shipments', id: id || null }
+  return { page: page || 'stats', id: id || null }
 }
 
 export function hashFor(page, id) {
