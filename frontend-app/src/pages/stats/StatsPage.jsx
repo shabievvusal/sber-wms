@@ -71,7 +71,16 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [fetching, setFetching] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState(null)
+  // «Обновлено» должно показывать время ПОСЛЕДНЕГО реального
+  // save-fetched-data (status.lastRun с бэкенда), а не момент открытия
+  // страницы статистики — раньше здесь стоял `new Date().toISOString()`
+  // при каждом `loadSummary()`, то есть просто текущее время (пользователь
+  // 2026-07-16: «время последнего обновления статистики сейчас берёт
+  // актуальное время, а не последний save-fetched-data»). В оригинале это
+  // `status?.lastRun` из общего контекста — здесь своего контекста нет,
+  // грузим `api.getStatus()` отдельно.
+  const [status, setStatus] = useState(null)
+  const loadStatus = useCallback(() => { api.getStatus().then(setStatus).catch(() => {}) }, [])
   const [engineNote, setEngineNote] = useState('')
   const [newEmployees, setNewEmployees] = useState([])
   const autoFetchEnabled = readLs(LS_AUTO_FETCH_ENABLED, '0') === '1'
@@ -105,11 +114,11 @@ export default function StatsPage() {
         setError(err.message || 'Не удалось загрузить статистику')
       }
     })
-    setLastUpdated(new Date().toISOString())
     setLoading(false)
   }, [dateStr, shift, operation, idleThresholdMinutes])
 
   useEffect(() => { loadSummary() }, [dateStr, shift, operation]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadStatus() }, [loadStatus])
 
   // Полный список компаний из реестра сотрудников (Настройки → Сотрудники),
   // не только те, что встретились в статистике за просматриваемый день/смену
@@ -186,6 +195,7 @@ export default function StatsPage() {
       toast.error('Ошибка обновления: ' + (err.message || 'WMS недоступен'))
     }
     await loadSummary({ silent: true })
+    loadStatus()
     setFetching(false)
   }
   const handleRequestFetch = async () => {
@@ -515,7 +525,7 @@ export default function StatsPage() {
         operation={operation} onOperationChange={setOperation}
         fetchHourFrom={fetchHourFrom} fetchHourTo={fetchHourTo}
         onFetchHourFromChange={setFetchHourFrom} onFetchHourToChange={setFetchHourTo}
-        lastUpdated={lastUpdated} engineNote={engineNote} autoFetchEnabled={autoFetchEnabled}
+        lastUpdated={status?.lastRun} engineNote={engineNote} autoFetchEnabled={autoFetchEnabled}
         onFetch={handleFetch} onRequestFetch={handleRequestFetch} onRecheck={handleRecheck} fetching={fetching}
         actions={actions}
       />

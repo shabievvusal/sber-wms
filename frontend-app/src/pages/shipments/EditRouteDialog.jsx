@@ -236,6 +236,7 @@ export default function EditRouteDialog({ route, open, onOpenChange, onSaved }) 
           extra={<>
             <label className="space-y-1 text-xs text-muted-foreground">Темп. до (°C)<Input type="number" value={shipTempBefore} onChange={e => setShipTempBefore(e.target.value)} placeholder="-18" /></label>
             <label className="space-y-1 text-xs text-muted-foreground">Темп. после (°C)<Input type="number" value={shipTempAfter} onChange={e => setShipTempAfter(e.target.value)} placeholder="-18" /></label>
+            <label className="space-y-1 text-xs text-muted-foreground">Рохли (отд.)<Input type="number" min="0" value={shipRokhlya} onChange={e => setShipRokhlya(e.target.value)} placeholder="0" /></label>
           </>}
           cfzList={cfzList}
           itemsState={shipItems}
