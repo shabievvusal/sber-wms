@@ -22,8 +22,8 @@ import {
   LS_ALLOWED_IDLE, LS_HE_MODE, LS_IDLE_THRESHOLD,
 } from './constants'
 import {
-  buildFullZoneCatalog, buildZoneCatalog, computeWorkedMinutesInShift, getCurrentShiftInfo, getElapsedShiftMinutes,
-  getShiftHours, isKdkZoneKey, zoneColor,
+  buildFullZoneCatalog, buildRollingRange, buildZoneCatalog, computeWorkedMinutesInShift, getCurrentShiftInfo,
+  getDueFullRefreshTime, getElapsedShiftMinutes, getShiftHours, isKdkZoneKey, normalizeAutoFetchSettings, todayStr, zoneColor,
 } from './format'
 import { Download } from 'lucide-react'
 
@@ -151,25 +151,34 @@ export default function StatsPage() {
   // остальные); без токена — прежний same-origin путь без изменений.
   // «Новые сотрудники из WMS» — реальный результат updateNamesRegistry на
   // бэкенде (см. save-fetched-data), пробрасывается через fetchDataViaBrowser.
-  const handleFetch = async () => {
-    setFetching(true)
-    setError('')
+  //
+  // Вынесено в отдельную `runFetch` (раньше было прямо в handleFetch) —
+  // нужно и кнопке «Обновить данные» (silent=false, обычный диапазон часов),
+  // и автообновлению ниже (silent=true, часто со скользящим окном
+  // `rangeOverride` вместо обычного диапазона).
+  const runFetch = useCallback(async ({ rangeOverride = null, silent = false } = {}) => {
+    if (!silent) { setFetching(true); setError('') }
     const token = getStoredToken()
     try {
       if (token) {
-        const [y, m, d] = dateStr.split('-').map(Number)
-        const clampH = h => Math.max(0, Math.min(23, h))
-        const fromH = Number(fetchHourFrom)
-        const toH = Number(fetchHourTo)
         let fromDate, toDate
-        if (shift === 'night' && clampH(fromH) >= clampH(toH)) {
-          const next = new Date(y, m - 1, d)
-          next.setDate(next.getDate() + 1)
-          fromDate = new Date(y, m - 1, d, clampH(fromH), 0, 0, 0)
-          toDate = new Date(next.getFullYear(), next.getMonth(), next.getDate(), Math.max(0, clampH(toH) - 1), 59, 59, 999)
+        if (rangeOverride) {
+          fromDate = rangeOverride.fromDate
+          toDate = rangeOverride.toDate
         } else {
-          fromDate = new Date(y, m - 1, d, clampH(fromH), 0, 0, 0)
-          toDate = new Date(y, m - 1, d, Math.max(clampH(fromH), clampH(toH) - 1), 59, 59, 999)
+          const [y, m, d] = dateStr.split('-').map(Number)
+          const clampH = h => Math.max(0, Math.min(23, h))
+          const fromH = Number(fetchHourFrom)
+          const toH = Number(fetchHourTo)
+          if (shift === 'night' && clampH(fromH) >= clampH(toH)) {
+            const next = new Date(y, m - 1, d)
+            next.setDate(next.getDate() + 1)
+            fromDate = new Date(y, m - 1, d, clampH(fromH), 0, 0, 0)
+            toDate = new Date(next.getFullYear(), next.getMonth(), next.getDate(), Math.max(0, clampH(toH) - 1), 59, 59, 999)
+          } else {
+            fromDate = new Date(y, m - 1, d, clampH(fromH), 0, 0, 0)
+            toDate = new Date(y, m - 1, d, Math.max(clampH(fromH), clampH(toH) - 1), 59, 59, 999)
+          }
         }
         const opts = { operationCompletedAtFrom: fromDate.toISOString(), operationCompletedAtTo: toDate.toISOString() }
 
@@ -178,26 +187,117 @@ export default function StatsPage() {
           fetchPlacementViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
           fetchRemainsViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
         ])
-        const placementText = placementRes?.__error ? ' · размещение не загружено' : ` · размещение: ${placementRes.fetched ?? '?'}/${placementRes.added ?? '?'}`
-        const remainsText = remainsRes?.__error ? ' · остатки не загружены' : ` · остатки: ${remainsRes.fetched ?? '?'}/${remainsRes.added ?? '?'}`
-        toast.success(`Комплектация: получено ${selectionRes.fetched ?? '?'}, добавлено ${selectionRes.added ?? '?'}${placementText}${remainsText}`)
-        const enginePart = selectionRes.engine === 'dotnet' ? '.NET' : selectionRes.engine === 'node' ? 'Node' : (selectionRes.engine || 'Браузер')
-        const totalMsPart = selectionRes.timings?.totalMs ? ` · итого ${(selectionRes.timings.totalMs / 1000).toFixed(1)}с` : ''
-        setEngineNote(`${enginePart}${totalMsPart} · комплектация +${selectionRes.added ?? 0}`)
+        if (!silent) {
+          const placementText = placementRes?.__error ? ' · размещение не загружено' : ` · размещение: ${placementRes.fetched ?? '?'}/${placementRes.added ?? '?'}`
+          const remainsText = remainsRes?.__error ? ' · остатки не загружены' : ` · остатки: ${remainsRes.fetched ?? '?'}/${remainsRes.added ?? '?'}`
+          toast.success(`Комплектация: получено ${selectionRes.fetched ?? '?'}, добавлено ${selectionRes.added ?? '?'}${placementText}${remainsText}`)
+          const enginePart = selectionRes.engine === 'dotnet' ? '.NET' : selectionRes.engine === 'node' ? 'Node' : (selectionRes.engine || 'Браузер')
+          const totalMsPart = selectionRes.timings?.totalMs ? ` · итого ${(selectionRes.timings.totalMs / 1000).toFixed(1)}с` : ''
+          setEngineNote(`${enginePart}${totalMsPart} · комплектация +${selectionRes.added ?? 0}`)
+        }
         if (selectionRes.newEmployees?.length) setNewEmployees(selectionRes.newEmployees)
-      } else {
+      } else if (!rangeOverride) {
+        // Скользящее окно (rangeOverride) есть только у автообновления, а оно
+        // без браузерного WMS-токена бессмысленно — серверный same-origin
+        // фетч ниже поддерживает только обычный диапазон часов вручную.
         const res = await api.fetchData({ dateStr, shift, fromHour: Number(fetchHourFrom), toHour: Number(fetchHourTo) })
-        toast.success('Данные обновлены')
-        setEngineNote(res?.duration != null ? `Node · итого ${(res.duration / 1000).toFixed(1)}с · получено ${res.count ?? '?'}` : '')
+        if (!silent) {
+          toast.success('Данные обновлены')
+          setEngineNote(res?.duration != null ? `Node · итого ${(res.duration / 1000).toFixed(1)}с · получено ${res.count ?? '?'}` : '')
+        }
+      } else {
+        throw new Error('Нет WMS-токена для автообновления')
       }
     } catch (err) {
-      setError(err.message || 'Не удалось обновить данные')
-      toast.error('Ошибка обновления: ' + (err.message || 'WMS недоступен'))
+      if (!silent) {
+        setError(err.message || 'Не удалось обновить данные')
+        toast.error('Ошибка обновления: ' + (err.message || 'WMS недоступен'))
+      }
+      throw err
     }
     await loadSummary({ silent: true })
     loadStatus()
-    setFetching(false)
-  }
+    if (!silent) setFetching(false)
+  }, [dateStr, shift, fetchHourFrom, fetchHourTo, loadSummary, loadStatus])
+
+  const handleFetch = () => runFetch({ silent: false }).catch(() => {})
+
+  // ─── Автообновление (Настройки → Система → «Автообновление») ────────────
+  // Раньше был перенесён только флаг `autoFetchEnabled` (localStorage) без
+  // какой-либо логики, что его использует — сам планировщик (полный сбор по
+  // расписанию `fullRefreshTimes` + короткий инкрементальный каждые
+  // `incrementalMinutes`) не был перенесён вообще (пользователь 2026-07-16:
+  // «автообновление статистики не работает»). Портировано из
+  // AppContext.jsx's doAutoFetch — здесь нет глобального контекста, поэтому
+  // планировщик живёт прямо на странице статистики и работает только пока
+  // она открыта (тот же принцип очевиден из подписи в самом
+  // AutoFetchCard.jsx: «Включите на одном компьютере»).
+  const autoFetchSettingsRef = useRef(normalizeAutoFetchSettings(null))
+  const autoFetchBusyRef = useRef(false)
+  const lastAutoFullRunKeyRef = useRef(readLs('vs_auto_fetch_last_full_key', ''))
+  const lastAutoIncrementalRunRef = useRef(Number(readLs('vs_auto_fetch_last_incremental', '0')) || 0)
+
+  const loadAutoFetchSettings = useCallback(() => {
+    api.getAutoFetchSettings().then(s => { autoFetchSettingsRef.current = normalizeAutoFetchSettings(s) }).catch(() => {})
+  }, [])
+
+  const doAutoFetch = useCallback(async ({ forceIncremental = false } = {}) => {
+    if (dateStr !== todayStr()) return
+    if (autoFetchBusyRef.current) return
+    const settings = autoFetchSettingsRef.current
+    const now = new Date()
+    const dueFullTime = getDueFullRefreshTime(settings, now)
+    const fullRunKey = dueFullTime ? `${todayStr()}_${dueFullTime}` : ''
+    const shouldRunFull = Boolean(dueFullTime && fullRunKey !== lastAutoFullRunKeyRef.current)
+    const incrementalMs = Math.max(5, Number(settings.incrementalMinutes) || 30) * 60_000
+    const shouldRunIncremental = forceIncremental || (Date.now() - lastAutoIncrementalRunRef.current >= incrementalMs)
+    if (!shouldRunFull && !shouldRunIncremental) return
+    if (!getStoredToken()) return
+
+    autoFetchBusyRef.current = true
+    try {
+      const rangeOverride = shouldRunFull ? null : buildRollingRange(settings, now)
+      await runFetch({ rangeOverride, silent: true })
+      if (shouldRunFull) {
+        lastAutoFullRunKeyRef.current = fullRunKey
+        try { localStorage.setItem('vs_auto_fetch_last_full_key', fullRunKey) } catch { /* ignore */ }
+      }
+      lastAutoIncrementalRunRef.current = Date.now()
+      try { localStorage.setItem('vs_auto_fetch_last_incremental', String(lastAutoIncrementalRunRef.current)) } catch { /* ignore */ }
+      await api.markUpdated()
+      loadStatus()
+    } catch { /* ignore — тихий фоновый сбой, попробуем на следующем тике */ }
+    finally { autoFetchBusyRef.current = false }
+  }, [dateStr, runFetch, loadStatus])
+
+  useEffect(() => {
+    loadAutoFetchSettings()
+    const t = setInterval(loadAutoFetchSettings, 60_000)
+    return () => clearInterval(t)
+  }, [loadAutoFetchSettings])
+
+  useEffect(() => {
+    if (!autoFetchEnabled) return
+    const t = setInterval(() => doAutoFetch(), 60_000)
+    return () => clearInterval(t)
+  }, [autoFetchEnabled, doAutoFetch])
+
+  // fetchRequested (кто-то нажал «Запросить обновление» без своего WMS-токена)
+  // → немедленный внеочередной инкрементальный фетч на устройстве с
+  // автообновлением, не дожидаясь минутного тика выше.
+  useEffect(() => {
+    if (!autoFetchEnabled) return
+    const t = setInterval(async () => {
+      if (autoFetchBusyRef.current) return
+      try {
+        const fresh = await api.getStatus()
+        setStatus(fresh)
+        if (fresh?.fetchRequested) await doAutoFetch({ forceIncremental: true })
+      } catch { /* ignore */ }
+    }, 10_000)
+    return () => clearInterval(t)
+  }, [autoFetchEnabled, doAutoFetch])
+
   const handleRequestFetch = async () => {
     try { await api.requestFetch(); toast.success('Запрос отправлен киоск-устройству') }
     catch (err) { toast.error('Ошибка: ' + (err.message || 'не удалось отправить запрос')) }
@@ -250,7 +350,6 @@ export default function StatsPage() {
       }))
   }, [summary, filterCompany])
 
-  const shiftLabel = shift === 'night' ? 'Ночь' : 'День'
   const hours = getShiftHours(shift)
 
   // «Пики по часам» должны учитывать фильтр по компании (CompanyFilter) —
@@ -530,7 +629,7 @@ export default function StatsPage() {
         actions={actions}
       />
 
-      {!isOperationStats && <StatsCards summary={summary} shiftLabel={shiftLabel} dateStr={dateStr} />}
+      {!isOperationStats && <StatsCards summary={summary} shift={shift} dateStr={dateStr} />}
 
       {!isOperationStats && <MissingWeightPanel />}
 

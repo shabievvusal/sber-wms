@@ -246,28 +246,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] })
 
       {sorted && sorted.length > 0 && (
         <>
-          {/* Мобильные карточки — до md (768px) */}
-          <div className="divide-y rounded-md border md:hidden">
-            {sorted.map((r, i) => (
-              <div key={i} className="p-3 text-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{r.name}</div>
-                    <div className="text-xs text-muted-foreground">{r.company} · {fmtDate(r.date)}</div>
-                  </div>
-                  <div className="shrink-0 text-right font-semibold">{r.total}</div>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>В работе: {fmtWorked(r.workedMinutes)}</span>
-                  <span>{rateHourLabel}: {r.szPerHour ?? '—'}</span>
-                  <span>{rateMinLabel}: {r.szPerMin ?? '—'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Десктопная таблица — от md и шире */}
-          <div className="hidden overflow-x-auto rounded-md border md:block">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>

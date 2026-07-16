@@ -77,83 +77,6 @@ function Legend({ mode, zoneCatalog }) {
   return null
 }
 
-// Мобильная карточка — НЕ построчный перенос (24 колонки-часа нечитаемы на
-// телефоне даже по одной в ряд): сверху сразу видны дневные итоги (те же,
-// что и в отдельных колонках справа от часовой сетки в десктопной версии),
-// почасовая раскладка/IdleTimeline по умолчанию свёрнута в разворот по тапу —
-// тот же принцип «сначала итог, детали по запросу», что и у остальных
-// карточек сайта. Но на собрании бригадирам нужно читать часы всех сотрудников
-// подряд, а не тапать по каждому отдельно — поэтому разворот каждой строки
-// управляется извне (`expanded`/`onToggle`), а не локальным состоянием, и есть
-// общая кнопка «Развернуть всех» в родителе (решение пользователя от
-// 2026-07-12: «всех сотрудников под одну часовую таблицу»).
-function MobileHourlyRow({ row, hours, mode, isReceiving, showIdlesCol, shift, expanded, onToggle }) {
-  return (
-    <div className="p-3 text-sm">
-      <div className="flex cursor-pointer items-start justify-between gap-2" onClick={onToggle}>
-        <div className="min-w-0">
-          <div className="truncate font-medium" title={row.name}>{shortFio(row.name)}</div>
-          <div className="text-xs text-muted-foreground">{row.company || '—'}</div>
-        </div>
-        <div className="text-right">
-          <div className="font-bold">
-            {row.total}
-            {isReceiving && <span className="ml-1 text-[10px] font-normal opacity-75">({fmtNum(row.secondaryTotal || 0)} ЕО)</span>}
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            {row._worked != null && row._worked > 0 ? `${Math.floor(row._worked / 60)}ч ${row._worked % 60}м в работе` : '—'}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span>Старт: {row.firstAt ? formatTime(row.firstAt) : '—'}</span>
-        <span>Пик: {row.lastAt ? formatTime(row.lastAt) : '—'}</span>
-        <span>Вес ХР: {row._weight.storage > 0 ? fmtWeight(row._weight.storage) : '—'}</span>
-        <span>Вес КДК: {row._weight.kdk > 0 ? fmtWeight(row._weight.kdk) : '—'}</span>
-        <span>Вес итог: {row._weight.total > 0 ? fmtWeight(row._weight.total) : '—'}</span>
-      </div>
-
-      {expanded && (
-        <div className="mt-2 border-t pt-2">
-          {showIdlesCol ? (
-            <IdleTimeline intervals={row._idleIntervals} shift={shift} workedMinutes={row._worked} />
-          ) : (
-            <div className="grid grid-cols-3 gap-1.5">
-              {hours.map(h => {
-                const v = row.byHour?.[h] || 0
-                const wg = row.weightByHour?.[h] || 0
-                const zoneKey = row.byHourZone?.[h]
-                const cellStyle = v > 0 ? (mode === 'hourly' ? zoneCellStyle(zoneKey) : szCellStyle(v)) : {}
-                const cellTitle = v > 0 ? [
-                  hourRangeLabel(h),
-                  isReceiving ? `${fmtNum(v)} поставок` : `${fmtNum(v)} оп.`,
-                  isReceiving ? `${fmtNum(row.secondaryByHour?.[h] || 0)} ЕО` : null,
-                  zoneKey ? zoneLabel(zoneKey) : null,
-                  wg > 0 ? fmtWeight(wg) : null,
-                ].filter(Boolean).join(' — ') : undefined
-                return (
-                  <div key={h} className="rounded-sm border px-1.5 py-1 text-center text-xs" style={cellStyle} title={cellTitle}>
-                    <div className="text-[10px] opacity-75">{hourRangeLabel(h)}</div>
-                    {v > 0 ? (
-                      <>
-                        <div className="font-semibold">{v}</div>
-                        {isReceiving
-                          ? <div className="text-[10px] opacity-75">{fmtNum(row.secondaryByHour?.[h] || 0)} ЕО</div>
-                          : wg > 0 && <div className="text-[10px] opacity-75">{fmtWeight(wg)}</div>}
-                      </>
-                    ) : <div className="opacity-40">—</div>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Перенесено из оригинала (HourlyEmployeeTable.jsx) дословно — первый заход
 // урезал структуру (объединённый заголовок «Старт/Пик» вместо настоящей
 // двухстрочной ячейки, ни одна колонка кроме Компании/Исполнителя/Итого не
@@ -167,8 +90,6 @@ function MobileHourlyRow({ row, hours, mode, isReceiving, showIdlesCol, shift, e
 export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, operation, shift, dateStr, allowedIdleMinutes }) {
   const [sortCol, setSortCol] = useState('total')
   const [sortDir, setSortDir] = useState('desc')
-  const [expandedRows, setExpandedRows] = useState(() => new Set())
-  const [allExpanded, setAllExpanded] = useState(false)
   // Фильтр «час + зона» (запрос пользователя 2026-07-15): выбрал час и зону —
   // остаются только те, кто в этот час работал именно в этой зоне
   // (byHourZone[час] === зона). Работает поверх уже отфильтрованных по
@@ -176,16 +97,6 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
   // компании учитывается сам по себе, без отдельной проводки.
   const [filterHour, setFilterHour] = useState('')
   const [filterZone, setFilterZone] = useState('')
-
-  const toggleRow = key => setExpandedRows(prev => {
-    const next = new Set(prev)
-    next.has(key) ? next.delete(key) : next.add(key)
-    return next
-  })
-  const toggleAll = () => {
-    setAllExpanded(v => !v)
-    setExpandedRows(new Set())
-  }
 
   const shiftMinutes = useMemo(() => getElapsedShiftMinutes(dateStr, shift), [dateStr, shift])
   const isReceiving = operation === 'receiving'
@@ -287,39 +198,7 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
         </div>
       )}
 
-      {/* Мобильные карточки — до md (768px), см. MobileHourlyRow выше.
-          «Развернуть всех» — для собрания, когда бригадирам нужно читать
-          часы всех сотрудников подряд одним списком, а не тапать по каждому
-          (решение пользователя от 2026-07-12). */}
-      <div className="flex items-center justify-end md:hidden">
-        <button type="button" className="text-xs font-medium text-primary" onClick={toggleAll}>
-          {allExpanded ? 'Свернуть всех' : 'Развернуть всех'}
-        </button>
-      </div>
-      <div className="divide-y rounded-md border md:hidden">
-        {hourZoneActive && !sorted.length && (
-          <div className="p-6 text-center text-sm text-muted-foreground">Никто не работал в выбранной зоне в этот час</div>
-        )}
-        {sorted.map(row => {
-          const key = row.executorId || row.name
-          return (
-            <MobileHourlyRow
-              key={key}
-              row={row}
-              hours={displayHours}
-              mode={mode}
-              isReceiving={isReceiving}
-              showIdlesCol={showIdlesCol}
-              shift={shift}
-              expanded={allExpanded || expandedRows.has(key)}
-              onToggle={() => toggleRow(key)}
-            />
-          )
-        })}
-      </div>
-
-      {/* Десктопная таблица — от md и шире */}
-      <div className="hidden overflow-x-auto rounded-md border md:block">
+      <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>

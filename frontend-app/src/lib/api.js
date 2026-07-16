@@ -464,6 +464,14 @@ export async function requestFetch() {
   return req('/api/vs/request-fetch', { method: 'POST' })
 }
 
+// Вызывается устройством с включённым автообновлением (AutoFetchCard) после
+// завершения фетча — обновляет status.lastRun и сбрасывает fetchRequested,
+// чтобы остальные устройства увидели актуальное время и не слали повторных
+// запросов.
+export async function markUpdated() {
+  return req('/api/vs/mark-updated', { method: 'POST' })
+}
+
 // Серверный фетч селекции данными из WMS собственным токеном бэкенда (без
 // браузерного bearer-токена) — same-origin, в отличие от
 // fetchDataViaBrowser/fetchPlacementViaBrowser/fetchRemainsViaBrowser

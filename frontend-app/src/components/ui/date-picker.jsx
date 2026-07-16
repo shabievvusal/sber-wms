@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { CalendarIcon, X } from 'lucide-react'
+import { CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -118,4 +118,65 @@ function DateRangePicker({ from, to, onChange, placeholder = 'Выберите �
   )
 }
 
-export { DatePicker, DateRangePicker }
+const MONTH_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+const MONTH_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+
+/**
+ * Компактный выбор месяца — одна кнопка-триггер («Июль 2026») + попап с
+ * навигацией по годам и сеткой 3×4 месяцев, вместо нативного <input
+ * type="month"> (разный вид в разных браузерах/ОС) или двух отдельных
+ * select'ов месяц/год. value/onChange — строка "YYYY-MM".
+ */
+function MonthPicker({ value, onChange, placeholder = 'Выберите месяц', className }) {
+  const [open, setOpen] = React.useState(false)
+  const [y, m] = value ? value.split('-').map(Number) : []
+  const now = new Date()
+  const [viewYear, setViewYear] = React.useState(y || now.getFullYear())
+
+  React.useEffect(() => { if (open) setViewYear(y || now.getFullYear()) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const label = y && m ? `${MONTH_FULL[m - 1]} ${y}` : placeholder
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className={cn('justify-start gap-2 font-normal', !value && 'text-muted-foreground', className)}>
+          <CalendarIcon className="size-4 shrink-0 opacity-70" />
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-3" align="start">
+        <div className="mb-2 flex items-center justify-between">
+          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setViewYear(v => v - 1)}>
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="text-sm font-medium">{viewYear}</span>
+          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setViewYear(v => v + 1)}>
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          {MONTH_SHORT.map((name, i) => {
+            const mNum = i + 1
+            const active = viewYear === y && mNum === m
+            return (
+              <button
+                key={name}
+                type="button"
+                className={cn(
+                  'rounded-md px-2 py-1.5 text-sm hover:bg-accent',
+                  active && 'bg-primary text-primary-foreground hover:bg-primary',
+                )}
+                onClick={() => { onChange?.(`${viewYear}-${String(mNum).padStart(2, '0')}`); setOpen(false) }}
+              >
+                {name}
+              </button>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+export { DatePicker, DateRangePicker, MonthPicker }

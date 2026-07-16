@@ -1,6 +1,6 @@
 import { Package, ClipboardList, Hash, Scale, HardHat, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fmtNum, fmtWeight } from './format'
+import { fmtNum, fmtWeight, shiftLabel } from './format'
 
 function Tile({ Icon, label, value, accent }) {
   return (
@@ -19,7 +19,7 @@ function Tile({ Icon, label, value, accent }) {
 // операции «Комплектация» (для остальных 3 операций скрыты, как и в оригинале).
 // Плотность/размеры (28px значение, 20px паддинг, залитая зелёным акцентная
 // плитка, иконка над значением) — как в оригинале, а не уменьшенный вариант.
-export function StatsCards({ summary, shiftLabel, dateStr }) {
+export function StatsCards({ summary, shift, dateStr }) {
   const hourly = summary?.hourly || []
   const storageOps = hourly.reduce((s, h) => s + (h.storageOps || 0), 0)
 
@@ -32,7 +32,7 @@ export function StatsCards({ summary, shiftLabel, dateStr }) {
       <Tile Icon={Scale} label="Вес (КДК)" value={fmtWeight(summary?.totalWeightKdkGrams)} />
       <Tile Icon={Scale} label="Вес итог" value={fmtWeight(summary?.totalWeightGrams)} />
       <Tile Icon={HardHat} label="Сотрудников" value={fmtNum(summary?.executors?.length)} />
-      <Tile Icon={Calendar} label="Дата" value={<span className="text-base font-semibold">{dateStr}<br />{shiftLabel}</span>} />
+      <Tile Icon={Calendar} label="Дата" value={<span className="text-base font-semibold">{shiftLabel(dateStr, shift)}</span>} />
     </div>
   )
 }

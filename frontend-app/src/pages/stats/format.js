@@ -280,3 +280,69 @@ export function parseIdleIntervalsForTimeline(intervals, shift) {
   }
   return out
 }
+
+/** «16.07.2026 День (9:00–21:00)» — как в оригинале (utils/format.js).
+ * Одна строка, дата в привычном DD.MM.YYYY, а не сырой ISO. */
+export function shiftLabel(date, type) {
+  if (!date) return ''
+  const [y, m, d] = date.split('-')
+  const dateStr = d && m && y ? `${d}.${m}.${y}` : date
+  return type === 'day' ? `${dateStr} День (9:00–21:00)` : `${dateStr} Ночь (21:00–9:00)`
+}
+
+// ─── Автообновление статистики (перенос из AppContext.jsx оригинала) ───────
+// Планировщик, который на ОДНОМ включённом устройстве периодически дёргает
+// WMS (полный сбор по расписанию + короткий инкрементальный по интервалу),
+// чтобы у ВСЕХ остальных статистика обновлялась сама — без своего браузерного
+// токена. Настройки (fullRefreshTimes/incrementalMinutes/
+// incrementalLookbackMinutes) — уже существовавший `AutoFetchCard.jsx`
+// (Настройки → Система), сам планировщик раньше не был перенесён вообще —
+// был перенесён только флаг «включено» без какой-либо логики, что его
+// использует (пользователь 2026-07-16: «автообновление статистики не
+// работает»).
+
+export const DEFAULT_AUTO_FETCH_SETTINGS = { fullRefreshTimes: [], incrementalMinutes: 30, incrementalLookbackMinutes: 40 }
+const AUTO_FETCH_FULL_WINDOW_MINUTES = 5
+
+function timeToMinutes(time) {
+  const match = String(time || '').match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+  const hh = Number(match[1]), mm = Number(match[2])
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null
+  return hh * 60 + mm
+}
+
+export function normalizeAutoFetchSettings(settings) {
+  return {
+    ...DEFAULT_AUTO_FETCH_SETTINGS,
+    ...(settings || {}),
+    fullRefreshTimes: Array.isArray(settings?.fullRefreshTimes) && settings.fullRefreshTimes.length
+      ? settings.fullRefreshTimes
+      : DEFAULT_AUTO_FETCH_SETTINGS.fullRefreshTimes,
+    incrementalMinutes: Number(settings?.incrementalMinutes) || DEFAULT_AUTO_FETCH_SETTINGS.incrementalMinutes,
+    incrementalLookbackMinutes: Number(settings?.incrementalLookbackMinutes) || DEFAULT_AUTO_FETCH_SETTINGS.incrementalLookbackMinutes,
+  }
+}
+
+/** Время (`"HH:MM"`) из fullRefreshTimes, если сейчас в его 5-минутном окне — иначе null. */
+export function getDueFullRefreshTime(settings, now = new Date()) {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  for (const time of settings.fullRefreshTimes || []) {
+    const minutes = timeToMinutes(time)
+    if (minutes == null) continue
+    if (nowMinutes >= minutes && nowMinutes < minutes + AUTO_FETCH_FULL_WINDOW_MINUTES) return time
+  }
+  return null
+}
+
+/** Скользящее окно последних N минут для короткого инкрементального сбора. */
+export function buildRollingRange(settings, now = new Date()) {
+  const lookback = Math.max(5, Number(settings.incrementalLookbackMinutes) || DEFAULT_AUTO_FETCH_SETTINGS.incrementalLookbackMinutes)
+  return { fromDate: new Date(now.getTime() - lookback * 60_000), toDate: now }
+}
+
+/** Календарная дата (не привязана к смене) — для проверки «смотрим ли сегодня». */
+export function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}

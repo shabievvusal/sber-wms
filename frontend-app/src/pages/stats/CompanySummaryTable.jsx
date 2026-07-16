@@ -7,47 +7,6 @@ import { fmtNum, fmtWeight, hourRangeLabel } from './format'
 const headCls = 'h-8 border px-2 text-center text-xs'
 const cellCls = 'border px-2 py-1.5 text-center text-[13px]'
 
-// Мобильная карточка — итоги всегда видны, почасовая раскладка (когда включён
-// тумблер «По часам») уходит в разворот вертикальной сеткой вместо ещё 24
-// колонок — тот же принцип, что и в MobileHourlyRow (HourlyEmployeeTable.jsx).
-function MobileCompanyRow({ r, hours, showHours }) {
-  const [expanded, setExpanded] = useState(false)
-  const canExpand = showHours && hours.length > 0
-
-  return (
-    <div className="p-3 text-sm">
-      <div className={canExpand ? 'flex cursor-pointer items-start justify-between gap-2' : 'flex items-start justify-between gap-2'} onClick={canExpand ? () => setExpanded(v => !v) : undefined}>
-        <span className="font-bold">{r.companyName}</span>
-        <div className="text-right">
-          <div className="font-semibold">{fmtNum(r.totalTasks)}</div>
-          <div className="text-[11px] text-muted-foreground">{fmtWeight(r.weightTotalGrams)}</div>
-        </div>
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span>Сотрудников: {fmtNum(r.employeesCount)}</span>
-        <span>СЗ/Ч: {fmtNum(r.szch)}</span>
-        <span>ВЕС/Ч: {fmtWeight(r.vezch || 0)}</span>
-      </div>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span>СЗ хран.: {fmtNum(r.szStorage)}</span>
-        <span>СЗ КДК: {fmtNum(r.szKdk)}</span>
-        <span>Вес хран.: {fmtWeight(r.weightStorageGrams)}</span>
-        <span>Вес КДК: {fmtWeight(r.weightKdkGrams)}</span>
-      </div>
-      {canExpand && expanded && (
-        <div className="mt-2 grid grid-cols-4 gap-1.5 border-t pt-2">
-          {hours.map(h => (
-            <div key={h} className="rounded-sm border px-1.5 py-1 text-center text-xs">
-              <div className="text-[10px] text-muted-foreground" title={hourRangeLabel(h)}>{h}</div>
-              <div className="font-semibold">{r.byHour?.[h] ?? '—'}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Перенесено из оригинала (CompanySummaryTable.jsx) — сводка по компаниям за
 // выбранный день. Плотная grid-таблица (граница на каждой ячейке,
 // центрированный текст) — как в оригинале, а не обычная строчная таблица.
@@ -76,13 +35,7 @@ export function CompanySummaryTable({ companySummary, filterCompany }) {
         <span className="text-xs text-muted-foreground">По часам</span>
         <Switch checked={showHours} onCheckedChange={setShowHours} />
       </div>
-      {/* Мобильные карточки — до md (768px) */}
-      <div className="divide-y rounded-md border md:hidden">
-        {rows.map(r => <MobileCompanyRow key={r.companyName} r={r} hours={hours} showHours={showHours} />)}
-      </div>
-
-      {/* Десктопная таблица — от md и шире */}
-      <div className="hidden overflow-hidden rounded-md border md:block">
+      <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>

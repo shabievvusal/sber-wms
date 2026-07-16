@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { Button } from '@/components/ui/button'
+import { MonthPicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
 import { fmtNum, fmtWeight, getCurrentShiftInfo } from './format'
@@ -57,7 +58,7 @@ export function MonthlyCompanySummaryTable() {
     <div className="space-y-3">
       <p className="-mt-1 text-xs text-muted-foreground">Итог СЗ, сотрудников, рабочих дней</p>
       <div className="flex flex-wrap items-center gap-2">
-        <input type="month" className={selectClass} value={month} onChange={e => setMonth(e.target.value)} />
+        <MonthPicker value={month} onChange={setMonth} className="h-8" />
         <select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
           <option value="">Все смены</option>
           <option value="day">День (9–21)</option>
@@ -78,54 +79,7 @@ export function MonthlyCompanySummaryTable() {
           {data.month && (
             <div className="text-xs text-muted-foreground">{MONTH_NAMES[data.month - 1]} {data.year} · {data.daysInMonth} дней</div>
           )}
-          {/* Мобильные карточки — до md (768px) */}
-          <div className="divide-y rounded-md border md:hidden">
-            {companies.map(c => {
-              const szd = c.workDays > 0 && c.employees > 0 ? Math.round(c.totalTasks / c.employees / c.workDays) : 0
-              const vezd = c.workDays > 0 && c.employees > 0 ? Math.round(c.weightTotalGrams / c.employees / c.workDays) : 0
-              return (
-                <div key={c.name} className="p-3 text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-bold">{c.name}</span>
-                    <div className="text-right">
-                      <div className="font-bold">{fmtNum(c.totalTasks)}</div>
-                      <div className="text-[11px] text-muted-foreground">{fmtWeight(c.weightTotalGrams)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>Сотрудников: {c.employees}</span>
-                    <span>Раб. дней: {c.workDays}</span>
-                    <span>СЗ/Д: {szd}</span>
-                    <span>ВЕС/Д: {fmtWeight(vezd)}</span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>СЗ хран.: {fmtNum(c.storageOps)}</span>
-                    <span>СЗ КДК: {fmtNum(c.kdkOps)}</span>
-                    <span>Вес хран.: {fmtWeight(c.weightStorageGrams)}</span>
-                    <span>Вес КДК: {fmtWeight(c.weightKdkGrams)}</span>
-                  </div>
-                </div>
-              )
-            })}
-            <div className="bg-muted/30 p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-bold">ИТОГО</span>
-                <div className="text-right">
-                  <div className="font-bold">{fmtNum(totals.totalTasks)}</div>
-                  <div className="text-[11px] text-muted-foreground">{fmtWeight(totals.weightTotalGrams)}</div>
-                </div>
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>СЗ хран.: {fmtNum(totals.storageOps)}</span>
-                <span>СЗ КДК: {fmtNum(totals.kdkOps)}</span>
-                <span>Вес хран.: {fmtWeight(totals.weightStorageGrams)}</span>
-                <span>Вес КДК: {fmtWeight(totals.weightKdkGrams)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Десктопная таблица — от md и шире */}
-          <div className="hidden overflow-hidden rounded-md border md:block">
+          <div className="overflow-hidden rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
