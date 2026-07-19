@@ -28,6 +28,8 @@ import FetchModal from './FetchModal'
 import ReportModal from './ReportModal'
 import EditRouteDialog from './EditRouteDialog'
 import Lightbox from '@/components/shared/Lightbox'
+import ShipmentsPageClassic from './ShipmentsPageClassic'
+import { LS_SHIPMENTS_CLASSIC } from '@/pages/settings/ShipmentsDesignCard'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Эскиз редизайна ShipmentsPage. Тот же подход, что и весь new zlp: Tailwind +
@@ -453,6 +455,20 @@ const MobileRouteCard = memo(function MobileRouteCard({ route: r, confirming, me
 })
 
 export default function ShipmentsPage() {
+  // Тумблер в Настройках (Система → «Дизайн Отгрузки») — просмотр/
+  // редактирование существующих маршрутов в оригинальном визуальном виде
+  // вместо этого (Tailwind) дизайна, см. ShipmentsPageClassic.jsx. Ленивый
+  // useState — переключение тумблера применяется при следующем заходе на
+  // страницу, что нормально для UI-предпочтения такого рода.
+  const [classic] = useState(() => {
+    try { return localStorage.getItem(LS_SHIPMENTS_CLASSIC) === '1' } catch { return false }
+  })
+  if (classic) return <ShipmentsPageClassic />
+
+  return <ShipmentsPageModern />
+}
+
+function ShipmentsPageModern() {
   const [activeTab, setActiveTab] = useState('routes')
 
   // ── Routes tab ──────────────────────────────────────────────────────────

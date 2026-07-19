@@ -16,28 +16,52 @@ const LS_KEY = 'sidebar_collapsed'
 // показаны для полноты картины меню, но неактивны («скоро»), а не притворяются рабочими.
 // «Комплектация» в оригинале — не отдельная страница, а сворачиваемая группа
 // с 3 дочерними страницами (`children`), см. PLAN.md.
+// `module` — тот же module-код, что и у ролей (Настройки → Роли,
+// AuthConstants.ModulesByRole на бэкенде) — используется и для скрытия
+// пунктов меню недоступных ролей (см. `hasModuleAccess`/`SidebarNav`
+// ниже), и для гейта прямой навигации по хэшу (App.jsx). Раньше ЭТОГО
+// поля не было вообще — роли/доступы в Настройках сохранялись, но их
+// никто не читал ни здесь, ни в App.jsx (пользователь 2026-07-16: «роли
+// раздал, доступы дал, но они вообще не учитываются!!!») — см. оригинал
+// (Layout.jsx's NAV_ITEMS + hasModuleAccess, App.jsx's ModuleRoute).
 export const NAV_ITEMS = [
-  { key: 'stats', Icon: BarChart2, label: 'Статистика', page: 'stats' },
-  { key: 'monitor', Icon: Monitor, label: 'Мониторинг', page: 'monitor' },
-  { key: 'analysis', Icon: TrendingUp, label: 'Анализ', page: 'analysis' },
-  { key: 'shift_plan', Icon: Users, label: 'План смены', page: 'shift_plan' },
-  { key: 'tsd', Icon: ScanBarcode, label: 'Выдача ТСД', page: 'tsd' },
-  { key: 'consolidation', Icon: Package, label: 'Консолидация', page: 'consolidation' },
-  { key: 'docs', Icon: FileText, label: 'Документы', page: 'docs' },
+  { key: 'stats', Icon: BarChart2, label: 'Статистика', page: 'stats', module: 'stats' },
+  { key: 'monitor', Icon: Monitor, label: 'Мониторинг', page: 'monitor', module: 'monitor' },
+  { key: 'analysis', Icon: TrendingUp, label: 'Анализ', page: 'analysis', module: 'analysis' },
+  { key: 'shift_plan', Icon: Users, label: 'План смены', page: 'shift_plan', module: 'shift_plan' },
+  { key: 'tsd', Icon: ScanBarcode, label: 'Выдача ТСД', page: 'tsd', module: 'tsd' },
+  { key: 'consolidation', Icon: Package, label: 'Консолидация', page: 'consolidation', module: 'consolidation' },
+  { key: 'docs', Icon: FileText, label: 'Документы', page: 'docs', module: 'docs' },
   {
-    key: 'picking', Icon: ClipboardList, label: 'Комплектация', page: null,
+    key: 'picking', Icon: ClipboardList, label: 'Комплектация', page: null, module: 'picking',
     children: [
-      { key: 'picking-piece', Icon: ListChecks, label: 'Штучный отбор', page: 'picking-piece' },
-      { key: 'picking-kdk', Icon: Boxes, label: 'Зависшие задачи', page: 'picking-kdk' },
-      { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo' },
+      { key: 'picking-piece', Icon: ListChecks, label: 'Штучный отбор', page: 'picking-piece', module: 'picking' },
+      { key: 'picking-kdk', Icon: Boxes, label: 'Зависшие задачи', page: 'picking-kdk', module: 'picking' },
+      { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo', module: 'picking' },
     ],
   },
-  { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments' },
-  { key: 'supplies', Icon: PackageSearch, label: 'Поставки', page: 'supplies' },
-  { key: 'reports', Icon: ClipboardList, label: 'Отчёты', page: 'reports' },
-  { key: 'violations', Icon: AlertTriangle, label: 'Нарушения', page: 'violations' },
-  { key: 'settings', Icon: Settings, label: 'Настройки', page: 'settings' },
+  { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },
+  { key: 'supplies', Icon: PackageSearch, label: 'Поставки', page: 'supplies', module: 'supplies' },
+  { key: 'reports', Icon: ClipboardList, label: 'Отчёты', page: 'reports', module: 'reports' },
+  { key: 'violations', Icon: AlertTriangle, label: 'Нарушения', page: 'violations', module: 'violations' },
+  { key: 'settings', Icon: Settings, label: 'Настройки', page: 'settings', module: 'settings' },
 ]
+
+// Страницы вне сайдбара («киоск»-роуты, доступные только напрямую по хэшу,
+// как и в оригинале — отдельные top-level роуты вне Layout) — свой module
+// каждая, но не пункты меню.
+export const HIDDEN_PAGE_MODULES = {
+  receive: 'receive',
+  'consolidation-form': 'consolidation_form',
+}
+
+// 1:1 с оригиналом (Layout.jsx): `stats` доступна всегда, остальное — только
+// если модуль есть в списке модулей пользователя (роль или ручной
+// override — `resolveModules`/`ResolveModulesAsync` уже мержит это на
+// бэкенде, здесь просто читаем готовый `user.modules`).
+export function hasModuleAccess(userModules, module) {
+  return !module || module === 'stats' || (userModules || []).includes(module)
+}
 
 // Заголовок текущей страницы для мобильного топ-бара — ищем и среди верхнего
 // уровня, и среди детей групп (сейчас только «Комплектация»).
@@ -54,6 +78,12 @@ export function findNavLabel(page) {
 // выезжающего drawer'а (Sheet в App.jsx), чтобы не дублировать разметку и
 // логику сворачиваемой группы «Комплектация» в двух местах.
 export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
+  const { user } = useAuth()
+  const userModules = user?.modules || []
+  const visibleItems = NAV_ITEMS
+    .filter(item => hasModuleAccess(userModules, item.module))
+    .map(item => item.children ? { ...item, children: item.children.filter(c => hasModuleAccess(userModules, c.module)) } : item)
+
   const [expanded, setExpanded] = useState(() => {
     const initial = new Set()
     for (const item of NAV_ITEMS) {
@@ -70,7 +100,7 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
 
   return (
     <nav className="flex flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden py-2">
-      {NAV_ITEMS.map(({ key, Icon, label, page, children }) => {
+      {visibleItems.map(({ key, Icon, label, page, children }) => {
         const active = page && page === activePage
         const disabled = !page && !children
         const isGroup = !!children

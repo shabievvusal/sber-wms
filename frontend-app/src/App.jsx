@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Sidebar, SidebarNav, findNavLabel } from '@/components/layout/Sidebar'
+import { Sidebar, SidebarNav, findNavLabel, NAV_ITEMS, HIDDEN_PAGE_MODULES, hasModuleAccess } from '@/components/layout/Sidebar'
 import LoginPage from '@/components/layout/LoginPage'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
@@ -51,6 +51,15 @@ const PAGES = {
   stats: StatsPage,
 }
 
+// page → module, для гейта доступа (см. `hasModuleAccess`/App.jsx ниже) —
+// собран из самого NAV_ITEMS (единственный источник правды для пунктов
+// меню) плюс «киоск»-страницы вне меню (HIDDEN_PAGE_MODULES).
+const PAGE_MODULE = { ...HIDDEN_PAGE_MODULES }
+for (const item of NAV_ITEMS) {
+  if (item.page) PAGE_MODULE[item.page] = item.module
+  for (const child of item.children || []) PAGE_MODULE[child.page] = child.module
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -72,15 +81,30 @@ function AppGate() {
 }
 
 function AppShell() {
+  const { user } = useAuth()
   const [route, setRoute] = useState(parseHash)
   const [navOpen, setNavOpen] = useState(false)
-  const ActivePage = PAGES[route.page] ?? ShipmentsPage
+
+  // Гейт по модулю роли (1:1 с оригиналом — ModuleRoute в App.jsx) —
+  // до этого проверка была ТОЛЬКО в голове у пользователя: роли/доступы
+  // сохранялись в Настройках, но ни пункты меню, ни сама навигация их не
+  // читали вообще (пользователь 2026-07-16: «роли раздал, доступы дал, но
+  // они вообще не учитываются!!!»). Пункты меню отфильтрованы в
+  // SidebarNav — это вторая линия защиты для прямой навигации по хэшу
+  // (набранный вручную URL, старая закладка, роль поменяли только что).
+  const requiredModule = PAGE_MODULE[route.page]
+  const allowed = hasModuleAccess(user?.modules, requiredModule)
+  const ActivePage = allowed ? (PAGES[route.page] ?? ShipmentsPage) : StatsPage
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseHash())
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  useEffect(() => {
+    if (!allowed && route.page !== 'stats') setHash('stats')
+  }, [allowed, route.page])
 
   const navigate = p => { setHash(p); setNavOpen(false) }
 

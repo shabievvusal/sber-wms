@@ -48,7 +48,13 @@ public class StatsService
     private static string? ResolveCompany(Dictionary<string, string>? idMap, string? executorId)
     {
         if (string.IsNullOrEmpty(executorId) || idMap == null) return null;
-        return idMap.TryGetValue(executorId, out var c) ? c : null;
+        // Сотрудник может существовать в реестре, но без назначенной компании
+        // (company = "" в базе, не NULL) — пустую строку нужно приравнивать к
+        // «не нашли», иначе она проходит мимо `?? "—"` у всех вызывающих (в C#
+        // `??` не ловит "", в отличие от JS-оригинала, где `r.company || '—'`
+        // ловит и то, и другое) — именно так пустая ячейка «Компания» в
+        // сводке долетала до фронтенда вместо «—» (пользователь 2026-07-16).
+        return idMap.TryGetValue(executorId, out var c) && !string.IsNullOrEmpty(c) ? c : null;
     }
 
     // ─── Веса товаров (product_weights) — свежий запрос, без кэша ──────────────

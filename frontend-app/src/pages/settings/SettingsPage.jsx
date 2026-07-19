@@ -11,6 +11,7 @@ import { UsersCard } from './UsersCard'
 import { DocsCard } from './DocsCard'
 import { SupervisorsCard } from './SupervisorsCard'
 import { AutoFetchCard } from './AutoFetchCard'
+import { ShipmentsDesignCard } from './ShipmentsDesignCard'
 import { TsdSettingsCard, TsdManualEmployeesCard } from './TsdSettingsCard'
 import { ProductWeightsCard } from './ProductWeightsCard'
 import { ZonesSettingsCard } from './ZonesSettingsCard'
@@ -100,6 +101,7 @@ export default function SettingsPage() {
 
           <TabsContent value="system" className="space-y-4">
             <AutoFetchCard isAdmin={currentUser?.role === 'admin'} />
+            <ShipmentsDesignCard />
             <TsdSettingsCard />
             <TsdManualEmployeesCard />
             <ProductWeightsCard />
