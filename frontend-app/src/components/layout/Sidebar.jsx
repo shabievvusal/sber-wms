@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, TrendingUp, Users, ScanBarcode, Package, FileText,
   ClipboardList, ListChecks, Boxes, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronLeft, ChevronRight, ChevronDown, UserCircle, LogOut,
+  ChevronLeft, ChevronRight, ChevronDown, UserCircle, LogOut, Combine,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useAuth } from '@/context/AuthContext'
@@ -43,6 +43,7 @@ export const NAV_ITEMS = [
   { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },
   { key: 'supplies', Icon: PackageSearch, label: 'Поставки', page: 'supplies', module: 'supplies' },
   { key: 'reports', Icon: ClipboardList, label: 'Отчёты', page: 'reports', module: 'reports' },
+  { key: 'stock-consolidation', Icon: Combine, label: 'Объединение остатков', page: 'stock-consolidation', module: 'stock_consolidation' },
   { key: 'violations', Icon: AlertTriangle, label: 'Нарушения', page: 'violations', module: 'violations' },
   { key: 'settings', Icon: Settings, label: 'Настройки', page: 'settings', module: 'settings' },
 ]

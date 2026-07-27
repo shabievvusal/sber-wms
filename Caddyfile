@@ -113,6 +113,12 @@
 	handle /api/vs/admin/users* {
 		reverse_proxy dotnet:5080
 	}
+	# «Объединение остатков» (2026-07-27) — сравнение выгрузки остатков по МХ
+	# (Excel) с выгрузкой задач комплектации (CSV), см.
+	# backend-dotnet/Endpoints/StockConsolidationEndpoints.cs.
+	handle /api/reports/stock-consolidation* {
+		reverse_proxy dotnet:5080
+	}
 	handle {
 		reverse_proxy node:3009
 	}

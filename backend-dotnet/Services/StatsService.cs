@@ -74,12 +74,21 @@ public class StatsService
     }
 
     // ─── Merge-key (аналог getMergeKeyFromLight из storage.js) ─────────────────
-
+    //
+    // PICK_BY_LINE (КДК) — составной ключ исполнитель+ячейка+товар: одна и та
+    // же раскладка может прийти несколькими сырыми записями, их нужно
+    // схлопнуть в одну. PIECE_SELECTION_PICKING (Хранение) — НЕ составной
+    // ключ, а `id` самой записи (общий случай ниже): это законченная
+    // операция отбора (operationStartedAt/operationCompletedAt) со своим
+    // стабильным id из WMS, и один и тот же товар из одной и той же ячейки
+    // МОЖЕТ браться повторно под разные заказы в течение часа — это разные
+    // СЗ, схлопывать их по исполнитель+ячейка+товар нельзя (был баг,
+    // 2026-07-27: подтверждено вживую структурой ответа WMS — id уникален на
+    // операцию, а не на исполнитель+ячейку+товар).
     private static string GetMergeKeyFromLight(string? operationType, string? type, string? executor, string? cell, string? nomenclatureCode, string? productName, string? itemId)
     {
         var t = (operationType ?? type ?? "").ToUpperInvariant();
-        var isTaskType = t == "PICK_BY_LINE" || t == "PIECE_SELECTION_PICKING";
-        if (isTaskType)
+        if (t == "PICK_BY_LINE")
         {
             var exec = executor ?? "";
             var c = cell ?? "";

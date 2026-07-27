@@ -351,6 +351,19 @@ export async function deleteProductWeightsExcel() {
   return req('/api/vs/admin/product-weights', { method: 'DELETE' })
 }
 
+// ─── Отчёты: объединение остатков ────────────────────────────────────────────
+
+export async function uploadStockConsolidationReport(tasksCsvFile, stockXlsxFile, temperature) {
+  const fd = new FormData()
+  fd.append('tasksCsv', tasksCsvFile)
+  fd.append('stockXlsx', stockXlsxFile)
+  fd.append('temperature', temperature)
+  const r = await fetch('/api/reports/stock-consolidation', { method: 'POST', credentials: 'include', body: fd })
+  const data = await r.json()
+  if (!r.ok) throw new Error(data.error || 'Ошибка загрузки')
+  return data
+}
+
 // ─── Настройки: сотрудники ───────────────────────────────────────────────────
 
 export async function getEmployees() {

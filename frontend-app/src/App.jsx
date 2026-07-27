@@ -25,6 +25,7 @@ import ShiftPlanPage from '@/pages/shift-plan/ShiftPlanPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
 import ConsolidationFormPage from '@/pages/consolidation-form/ConsolidationFormPage'
 import StatsPage from '@/pages/stats/StatsPage'
+import StockConsolidationPage from '@/pages/stock-consolidation/StockConsolidationPage'
 
 // Песочница дизайна без роутера — переключение между готовыми страницами
 // через боковое меню (Sidebar.jsx), как в оригинальном Layout.jsx, вместо
@@ -38,6 +39,7 @@ const PAGES = {
   supplies: SuppliesPage,
   monitor: MonitorPage,
   reports: ReportsPage,
+  'stock-consolidation': StockConsolidationPage,
   docs: DocsPage,
   analysis: AnalysisPage,
   receive: ReceivePage,

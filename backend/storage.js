@@ -57,11 +57,22 @@ function getCurrentShiftKey() {
   return getShiftKey(new Date().toISOString());
 }
 
-/** Получить mergeKey из полного объекта операции (API) */
+/**
+ * Получить mergeKey из полного объекта операции (API).
+ * PICK_BY_LINE (КДК) — составной ключ исполнитель+ячейка+товар: одна и та же
+ * раскладка может прийти несколькими сырыми записями, их нужно схлопнуть в одну.
+ * PIECE_SELECTION_PICKING (Хранение) — НЕ составной ключ, а `id` самой записи
+ * (см. также случай "иначе" ниже): это законченная операция отбора
+ * (operationStartedAt/operationCompletedAt), с собственным стабильным id из
+ * WMS, и один и тот же товар из одной и той же ячейки МОЖЕТ браться повторно
+ * под разные заказы в течение часа — это разные СЗ, схлопывать их по
+ * исполнитель+ячейка+товар нельзя (был баг, 2026-07-27: подтверждено вживую
+ * структурой ответа WMS — id уникален на операцию, а не на исполнитель+
+ * ячейку+товар).
+ */
 function getMergeKey(item) {
   const type = (item.operationType || item.type || '').toUpperCase();
-  const isTaskType = type === 'PICK_BY_LINE' || type === 'PIECE_SELECTION_PICKING';
-  if (isTaskType) {
+  if (type === 'PICK_BY_LINE') {
     const exec = (item.responsibleUser && (item.responsibleUser.id || [item.responsibleUser.lastName, item.responsibleUser.firstName].filter(Boolean).join(' '))) || '';
     const cell = (item.targetAddress && item.targetAddress.cellAddress) || (item.sourceAddress && item.sourceAddress.cellAddress) || '';
     const product = (item.product && (item.product.nomenclatureCode || item.product.name)) || '';
@@ -70,11 +81,10 @@ function getMergeKey(item) {
   return `id|${item.id || ''}`;
 }
 
-/** MergeKey для уже облегчённого объекта (поля верхнего уровня) */
+/** MergeKey для уже облегчённого объекта (поля верхнего уровня) — см. getMergeKey. */
 function getMergeKeyFromLight(light) {
   const type = (light.operationType || light.type || '').toUpperCase();
-  const isTaskType = type === 'PICK_BY_LINE' || type === 'PIECE_SELECTION_PICKING';
-  if (isTaskType) {
+  if (type === 'PICK_BY_LINE') {
     const exec = light.executor || '';
     const cell = light.cell || '';
     const product = light.nomenclatureCode || light.productName || '';

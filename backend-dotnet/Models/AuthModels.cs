@@ -86,7 +86,7 @@ public static class AuthConstants
     {
         "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings",
         "shipments", "receive", "consolidation_form", "reports", "supplies", "picking",
-        "shift_plan", "tsd", "violations",
+        "shift_plan", "tsd", "violations", "stock_consolidation",
     };
 
     public static readonly List<string> AllActions = new() { "fetch_data", "recheck_data", "request_fetch", "edit_thresholds" };
@@ -95,11 +95,11 @@ public static class AuthConstants
 
     public static readonly Dictionary<string, List<string>> ModulesByRole = new()
     {
-        ["admin"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "supplies", "picking", "shift_plan", "tsd", "violations" },
-        ["group_leader"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "picking", "shift_plan", "tsd", "violations" },
+        ["admin"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "supplies", "picking", "shift_plan", "tsd", "violations", "stock_consolidation" },
+        ["group_leader"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "picking", "shift_plan", "tsd", "violations", "stock_consolidation" },
         ["supervisor"] = new() { "stats", "data", "monitor", "analysis", "docs", "shipments", "reports", "picking", "shift_plan", "tsd" },
         ["manager"] = new() { "stats", "data", "monitor", "analysis", "docs", "shipments", "reports", "picking", "shift_plan", "tsd" },
-        ["developer"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "supplies", "picking", "shift_plan", "tsd", "violations" },
+        ["developer"] = new() { "stats", "data", "monitor", "analysis", "consolidation", "docs", "settings", "shipments", "receive", "consolidation_form", "reports", "supplies", "picking", "shift_plan", "tsd", "violations", "stock_consolidation" },
     };
 
     public static readonly Dictionary<string, List<string>> ActionsByRole = new()

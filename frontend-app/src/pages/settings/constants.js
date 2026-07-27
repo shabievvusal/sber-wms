@@ -9,6 +9,7 @@ export const VS_MODULE_LABELS = {
   reports: 'Отчёты', supplies: 'Поставки',
   picking: 'Комплектация', shift_plan: 'План смены',
   tsd: 'Выдача ТСД', violations: 'Нарушения',
+  stock_consolidation: 'Объединение остатков',
 }
 export const ALL_MODULES = Object.keys(VS_MODULE_LABELS)
 

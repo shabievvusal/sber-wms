@@ -40,6 +40,7 @@ builder.Services.AddScoped<TsdService>();
 builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<S3Service>();
 builder.Services.AddSingleton<PhotoService>();
 builder.Services.AddSingleton<SseService>();
@@ -73,6 +74,7 @@ app.MapTsdEndpoints();
 app.MapEmployeeEndpoints();
 app.MapStatsEndpoints();
 app.MapAuthEndpoints();
+app.MapStockConsolidationEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";
 app.Run($"http://0.0.0.0:{port}");
