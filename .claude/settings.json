@@ -71,7 +71,10 @@
       "Bash(npm uninstall *)",
       "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}\\\\n' -F 'tasksCsv=@[2026-07-27] Задачи на комплектацию.csv' -F 'stockXlsx=@Детализация по остаткам на МХ \\(2\\).xlsx' -F temperature=MEDIUM_COLD -H 'Cookie: vs_sid=5816a13aeaf64dd2315f8ac94b873d183a6f0956ab581cff' http://localhost:3009/api/reports/stock-consolidation -o C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/response_mediumcold.json)",
       "Bash(node -c backend/storage.js)",
-      "Bash(curl -s -o /dev/null -w \"node status: %{http_code}\\\\n\" http://localhost:3009/)"
+      "Bash(curl -s -o /dev/null -w \"node status: %{http_code}\\\\n\" http://localhost:3009/)",
+      "Bash(git status *)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit:$?\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\shabi\\.claude\\plans"
