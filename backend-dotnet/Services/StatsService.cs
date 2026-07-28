@@ -77,15 +77,19 @@ public class StatsService
     //
     // PICK_BY_LINE (КДК) — составной ключ исполнитель+ячейка+товар: одна и та
     // же раскладка может прийти несколькими сырыми записями, их нужно
-    // схлопнуть в одну. PIECE_SELECTION_PICKING (Хранение) — НЕ составной
-    // ключ, а `id` самой записи (общий случай ниже): это законченная
-    // операция отбора (operationStartedAt/operationCompletedAt) со своим
-    // стабильным id из WMS, и один и тот же товар из одной и той же ячейки
-    // МОЖЕТ браться повторно под разные заказы в течение часа — это разные
-    // СЗ, схлопывать их по исполнитель+ячейка+товар нельзя (был баг,
-    // 2026-07-27: подтверждено вживую структурой ответа WMS — id уникален на
-    // операцию, а не на исполнитель+ячейку+товар).
-    private static string GetMergeKeyFromLight(string? operationType, string? type, string? executor, string? cell, string? nomenclatureCode, string? productName, string? itemId)
+    // схлопнуть в одну. PIECE_SELECTION_PICKING (Хранение) — тоже составной
+    // ключ, но с добавлением штрихкода тары-получателя (targetBarcode): один
+    // и тот же физический отбор WMS может прислать несколькими записями с
+    // РАЗНЫМИ id (например, отбор в несколько заходов в одну и ту же тару) —
+    // их нужно схлопывать в одну, как и раньше. При этом тот же товар из той
+    // же ячейки, но в РАЗНУЮ тару (= другой заказ) — это разные СЗ,
+    // схлопывать нельзя. Штрихкод тары различает именно это: одна тара —
+    // один реальный отбор, разные тары — разные заказы.
+    // (2026-07-27: сначала пробовали дедуп по голому `id` записи — оказалось,
+    // что id уникален на каждую под-запись одного и того же отбора, а не на
+    // сам отбор, из-за чего счётчик СЗ устойчиво завышался в разы и
+    // продолжал расти дальше.)
+    private static string GetMergeKeyFromLight(string? operationType, string? type, string? executor, string? cell, string? nomenclatureCode, string? productName, string? itemId, string? targetBarcode = null)
     {
         var t = (operationType ?? type ?? "").ToUpperInvariant();
         if (t == "PICK_BY_LINE")
@@ -94,6 +98,14 @@ public class StatsService
             var c = cell ?? "";
             var product = !string.IsNullOrEmpty(nomenclatureCode) ? nomenclatureCode : (productName ?? "");
             return $"task|{exec}|{c}|{product}";
+        }
+        if (t == "PIECE_SELECTION_PICKING")
+        {
+            var exec = executor ?? "";
+            var c = cell ?? "";
+            var product = !string.IsNullOrEmpty(nomenclatureCode) ? nomenclatureCode : (productName ?? "");
+            var tb = targetBarcode ?? "";
+            return $"piece|{exec}|{c}|{product}|{tb}";
         }
         return $"id|{itemId ?? ""}";
     }
@@ -799,7 +811,8 @@ public class StatsService
             var cell = (targetAddr != null ? GetStr(targetAddr.Value, "cellAddress") : null)
                 ?? (sourceAddr != null ? GetStr(sourceAddr.Value, "cellAddress") : null) ?? "";
 
-            var mergeKey = GetMergeKeyFromLight(operationType, type, executor, cell, nomenclatureCode, productName, GetStr(raw, "id"));
+            var targetBarcodeForKey = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
+            var mergeKey = GetMergeKeyFromLight(operationType, type, executor, cell, nomenclatureCode, productName, GetStr(raw, "id"), targetBarcodeForKey);
 
             // `HashSet.Add` возвращает false и для уже существующих в БД ключей
             // (сет засеян ими выше), и для дублей внутри этого же батча — "первый

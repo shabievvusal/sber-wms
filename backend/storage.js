@@ -61,14 +61,17 @@ function getCurrentShiftKey() {
  * Получить mergeKey из полного объекта операции (API).
  * PICK_BY_LINE (КДК) — составной ключ исполнитель+ячейка+товар: одна и та же
  * раскладка может прийти несколькими сырыми записями, их нужно схлопнуть в одну.
- * PIECE_SELECTION_PICKING (Хранение) — НЕ составной ключ, а `id` самой записи
- * (см. также случай "иначе" ниже): это законченная операция отбора
- * (operationStartedAt/operationCompletedAt), с собственным стабильным id из
- * WMS, и один и тот же товар из одной и той же ячейки МОЖЕТ браться повторно
- * под разные заказы в течение часа — это разные СЗ, схлопывать их по
- * исполнитель+ячейка+товар нельзя (был баг, 2026-07-27: подтверждено вживую
- * структурой ответа WMS — id уникален на операцию, а не на исполнитель+
- * ячейку+товар).
+ * PIECE_SELECTION_PICKING (Хранение) — тоже составной ключ, но с добавлением
+ * штрихкода тары-получателя (targetAddress.handlingUnitBarcode): один и тот
+ * же физический отбор WMS может прислать несколькими записями с РАЗНЫМИ id
+ * (например, отбор в несколько заходов в одну и ту же тару) — их нужно
+ * схлопывать в одну, как и раньше. При этом тот же товар из той же ячейки,
+ * но в РАЗНУЮ тару (= другой заказ) — это разные СЗ, схлопывать нельзя.
+ * Штрихкод тары различает именно это: одна тара — один реальный отбор,
+ * разные тары — разные заказы. (2026-07-27: сначала пробовали дедуп по
+ * голому `id` записи — оказалось, что id уникален на каждую под-запись
+ * одного и того же отбора, а не на сам отбор, из-за чего счётчик СЗ
+ * устойчиво завышался в разы и продолжал расти дальше.)
  */
 function getMergeKey(item) {
   const type = (item.operationType || item.type || '').toUpperCase();
@@ -77,6 +80,13 @@ function getMergeKey(item) {
     const cell = (item.targetAddress && item.targetAddress.cellAddress) || (item.sourceAddress && item.sourceAddress.cellAddress) || '';
     const product = (item.product && (item.product.nomenclatureCode || item.product.name)) || '';
     return `task|${exec}|${cell}|${product}`;
+  }
+  if (type === 'PIECE_SELECTION_PICKING') {
+    const exec = (item.responsibleUser && (item.responsibleUser.id || [item.responsibleUser.lastName, item.responsibleUser.firstName].filter(Boolean).join(' '))) || '';
+    const cell = (item.targetAddress && item.targetAddress.cellAddress) || (item.sourceAddress && item.sourceAddress.cellAddress) || '';
+    const product = (item.product && (item.product.nomenclatureCode || item.product.name)) || '';
+    const targetBarcode = (item.targetAddress && item.targetAddress.handlingUnitBarcode) || '';
+    return `piece|${exec}|${cell}|${product}|${targetBarcode}`;
   }
   return `id|${item.id || ''}`;
 }
@@ -89,6 +99,13 @@ function getMergeKeyFromLight(light) {
     const cell = light.cell || '';
     const product = light.nomenclatureCode || light.productName || '';
     return `task|${exec}|${cell}|${product}`;
+  }
+  if (type === 'PIECE_SELECTION_PICKING') {
+    const exec = light.executor || '';
+    const cell = light.cell || '';
+    const product = light.nomenclatureCode || light.productName || '';
+    const targetBarcode = light.targetBarcode || '';
+    return `piece|${exec}|${cell}|${product}|${targetBarcode}`;
   }
   return `id|${light.id || ''}`;
 }
