@@ -15,6 +15,7 @@ import { ShipmentsDesignCard } from './ShipmentsDesignCard'
 import { TsdSettingsCard, TsdManualEmployeesCard } from './TsdSettingsCard'
 import { ProductWeightsCard } from './ProductWeightsCard'
 import { ZonesSettingsCard } from './ZonesSettingsCard'
+import { DeleteShiftDataCard } from './DeleteShiftDataCard'
 import { Users, Lock, FileText, Settings as SettingsIcon } from 'lucide-react'
 
 const TAB_DEFS = [
@@ -106,6 +107,7 @@ export default function SettingsPage() {
             <TsdManualEmployeesCard />
             <ProductWeightsCard />
             <ZonesSettingsCard />
+            {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
           </TabsContent>
         </Tabs>
       )}

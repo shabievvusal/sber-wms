@@ -185,6 +185,24 @@ public class SaveStorageRequest
     public Dictionary<string, decimal>? WeightByEmployee { get; set; }
 }
 
+// Удаление/подсчёт данных за смену во всех 4 доменах статистики сразу
+// (Настройки → Система, только admin/developer) — см.
+// StatsService.CountShiftDataAsync/DeleteShiftDataAsync.
+public class ShiftDataRequest
+{
+    public string Date { get; set; } = "";
+    public string Shift { get; set; } = "";
+}
+
+public class ShiftDataCounts
+{
+    public int Ops { get; set; }
+    public int Placement { get; set; }
+    public int Receiving { get; set; }
+    public int Remains { get; set; }
+    public int Total => Ops + Placement + Receiving + Remains;
+}
+
 public class OpsIngestRequest
 {
     public System.Text.Json.JsonElement? Value { get; set; }

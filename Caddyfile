@@ -37,6 +37,9 @@
 # наружу через Caddy вообще). GET /api/analysis/article-speeds, POST/DELETE
 # /api/vs/admin/product-weights/*, /api/stats/send-{hourly,idles}-telegram
 # остаются на node — попадают в общий handle{node} ниже.
+# 2026-07-27 — /api/stats/shift-data/{count,delete} (новое): удаление/подсчёт
+# данных за смену сразу во всех 4 доменах статистики (Настройки → Система,
+# только admin/developer) — на dotnet, там же живут все 4 таблицы.
 :3009 {
 	handle /api/dotnet-status* {
 		reverse_proxy dotnet:5080
@@ -96,6 +99,12 @@
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/remains/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/shift-data/count* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/shift-data/delete* {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/product-weights {

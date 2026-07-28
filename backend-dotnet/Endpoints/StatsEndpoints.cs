@@ -349,6 +349,32 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
+        // ─── Удаление/подсчёт данных за смену (Настройки → Система, только
+        // admin/developer — безвозвратное удаление боевых данных сразу из всех
+        // 4 доменов статистики) ─────────────────────────────────────────────
+
+        app.MapGet("/api/stats/shift-data/count", async (string date, string shift, StatsService svc) =>
+        {
+            try
+            {
+                var counts = await svc.CountShiftDataAsync(date, shift);
+                return Results.Json(counts);
+            }
+            catch (ArgumentException err) { return Results.Json(new { error = err.Message }, statusCode: 400); }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+
+        app.MapPost("/api/stats/shift-data/delete", async (ShiftDataRequest body, StatsService svc) =>
+        {
+            try
+            {
+                var counts = await svc.DeleteShiftDataAsync(body.Date, body.Shift);
+                return Results.Json(counts);
+            }
+            catch (ArgumentException err) { return Results.Json(new { error = err.Message }, statusCode: 400); }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+
         // ─── Анализ: employee-rates / monthly-company / monthly-employees ──
 
         app.MapGet("/api/analysis/employee-rates", async (string? dateFrom, string? dateTo, string? shift, int? idleThresholdMinutes, HttpContext ctx, StatsService svc, SessionService sessions) =>

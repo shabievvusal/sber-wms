@@ -364,6 +364,20 @@ export async function uploadStockConsolidationReport(tasksCsvFile, stockXlsxFile
   return data
 }
 
+// ─── Настройки: удаление данных за смену (admin/developer) ──────────────────
+
+export async function getShiftDataCount(date, shift) {
+  return req(`/api/stats/shift-data/count?date=${encodeURIComponent(date)}&shift=${encodeURIComponent(shift)}`)
+}
+
+export async function deleteShiftData(date, shift) {
+  return req('/api/stats/shift-data/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, shift }),
+  })
+}
+
 // ─── Настройки: сотрудники ───────────────────────────────────────────────────
 
 export async function getEmployees() {
