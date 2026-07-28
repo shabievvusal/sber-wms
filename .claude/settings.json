@@ -74,7 +74,13 @@
       "Bash(curl -s -o /dev/null -w \"node status: %{http_code}\\\\n\" http://localhost:3009/)",
       "Bash(git status *)",
       "Bash(git check-ignore *)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(node C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/parse_xlsx.js)",
+      "Bash(node C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/parse_xlsx.js C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/act_extract 40)",
+      "Bash(node C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/parse_act.js C:/Users/shabi/AppData/Local/Temp/claude/b---------------new-zlp-backend/f282c890-fe95-4f29-b88d-39416beff69a/scratchpad/act_extract)",
+      "Bash(curl -s -H \"Cookie: vs_sid=5816a13aeaf64dd2315f8ac94b873d183a6f0956ab581cff\" http://localhost:3009/api/empl)",
+      "Bash(curl -s -H \"Cookie: vs_sid=5816a13aeaf64dd2315f8ac94b873d183a6f0956ab581cff\" \"http://localhost:3009/api/stats/monthly-employees?dateFrom=2026-07-01&dateTo=2026-07-27&shift=day\")",
+      "Bash(node verify_shiftplan.tmp.cjs)"
     ],
     "additionalDirectories": [
       "C:\\Users\\shabi\\.claude\\plans"

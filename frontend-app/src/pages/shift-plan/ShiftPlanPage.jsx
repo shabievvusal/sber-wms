@@ -1,44 +1,57 @@
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { DateRangePicker } from '@/components/ui/date-picker'
+import { DatePicker, DateRangePicker } from '@/components/ui/date-picker'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
-import { daysAgoStr, fmtNum, planStatus, todayStr } from './format'
-import { RefreshCw, Users } from 'lucide-react'
+import { daysAgoStr, fmtNum, todayStr } from './format'
+import { loadActConstants, loadCompanyFullNames } from './actConstants'
+import { buildActWorkbook } from './actTemplate'
+import { RefreshCw, Users, FileDown, ArrowRight } from 'lucide-react'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
-const STATUS_BORDER = {
-  ok: 'border-l-4 border-l-success',
-  warn: 'border-l-4 border-l-warning',
-  bad: 'border-l-4 border-l-destructive',
-  neutral: 'border-l-4 border-l-border',
-}
-
-// Перенесено из оригинала (frontend/app/src/pages/shift-plan/ShiftPlanPage.jsx)
-// — инструмент подбора состава: по истории «СЗ» (складских заданий) за
-// период считает средний результат/смену на сотрудника по выбранной
-// компании, ранжирует и проверяет, закроет ли топ-N (по заявке) плановый
-// показатель смены. Единственный вызов — same-origin (`getMonthlyEmployees`
-// → `/api/stats/monthly-employees`), при ошибке — пустой список и текст
-// ошибки. `DateRangeDropdown` оригинала (самодельный календарь) заменён на
-// общий `DateRangePicker` проекта — та же техническая замена, что и в
-// разделе «Комплектация».
+// План смены на основе заявки (2026-07-28): вместо подбора состава для ОДНОЙ
+// компании (как было) — заявка теперь по каждой аутстафф-компании отдельно
+// (сколько человек нужно с каждой), подбор идёт по каждой своим топ-N по
+// среднему СЗ/смену, и если кто-то из выбранных не дотягивает до целевого
+// норматива — система предлагает (не подставляет молча) замену человеком
+// из другой компании, который норматив выполняет и не занят в чужой
+// заявке. Итоговый состав → Акт учёта времени на каждую компанию (см.
+// actTemplate.js), все акты — в одном ZIP.
 export default function ShiftPlanPage() {
   const [companies, setCompanies] = useState([])
-  const [company, setCompany] = useState('')
+  const [requested, setRequested] = useState({}) // { [company]: string (числовой инпут) }
   const [shift, setShift] = useState('day')
+  const [planDate, setPlanDate] = useState(todayStr())
   const [dateRange, setDateRange] = useState({ from: daysAgoStr(14), to: todayStr() })
-  const [peopleCount, setPeopleCount] = useState('28')
   const [targetTasksPerEmployee, setTargetTasksPerEmployee] = useState('750')
   const [shiftRows, setShiftRows] = useState([])
   const [loadedRange, setLoadedRange] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [accepted, setAccepted] = useState(() => new Set()) // "company#index"
+  const [generating, setGenerating] = useState(false)
+
+  // Калькулятор потребности в сотрудниках (2026-07-28) — только аутсорс,
+  // штат (свои сотрудники) в акты не попадает, здесь лишь вычитается из
+  // общей потребности. Вес по 4 категориям / ЦУ = потребность на операционные
+  // сутки (день+ночь); ночной общий выход и штат (день/ночь) — известные
+  // числа, вводятся руками (не считаются). Грузчики/работники заморозки —
+  // тоже ручные добавки к итоговому аутсорсу текущей смены (не про вес
+  // категории «Заморозка» выше — это про людей, не про килограммы).
+  const [weights, setWeights] = useState({ kdk: '', hs: '', hsh: '', zamorozka: '' })
+  const [tsu, setTsu] = useState('1200')
+  const [nightTotalOutput, setNightTotalOutput] = useState('')
+  const [dayOwnStaff, setDayOwnStaff] = useState('')
+  const [nightOwnStaff, setNightOwnStaff] = useState('')
+  const [extraLoaders, setExtraLoaders] = useState('')
+  const [extraFreezerWorkers, setExtraFreezerWorkers] = useState('')
 
   useEffect(() => {
     api.getEmployees()
@@ -46,10 +59,7 @@ export default function ShiftPlanPage() {
       .catch(() => setCompanies([]))
   }, [])
 
-  // react-day-picker вызывает onChange уже после первого клика по диапазону
-  // (пока `to` ещё не выбран) — не завязываем доступность кнопки на `to`,
-  // иначе она гаснет ровно в момент, когда пользователь начинает менять даты.
-  const canLoad = Boolean(company && dateRange.from)
+  const canLoad = Boolean(dateRange.from)
 
   const load = async () => {
     if (!canLoad) return
@@ -57,6 +67,7 @@ export default function ShiftPlanPage() {
     const to = dateRange.to || from
     setLoading(true)
     setError('')
+    setAccepted(new Set())
     await withMinDuration(async () => {
       try {
         const data = await api.getMonthlyEmployees(from, to, shift)
@@ -70,32 +81,165 @@ export default function ShiftPlanPage() {
     setLoading(false)
   }
 
-  const companyRates = useMemo(() => {
-    const byName = new Map()
+  // Ранжирование по КАЖДОЙ компании отдельно — та же формула среднего
+  // СЗ/смену, что была раньше только для одной выбранной компании, просто
+  // без фильтра и сгруппированная по company.
+  const ratesByCompany = useMemo(() => {
+    const byKey = new Map()
     for (const row of shiftRows) {
       const rowCompany = row.company || '—'
-      if (company && rowCompany !== company) continue
-      if (!byName.has(row.name)) byName.set(row.name, { name: row.name, tasksCount: 0, shiftsWorked: 0, bestShift: 0 })
-      const acc = byName.get(row.name)
+      const key = `${rowCompany}||${row.name}`
+      if (!byKey.has(key)) byKey.set(key, { name: row.name, company: rowCompany, tasksCount: 0, shiftsWorked: 0, bestShift: 0 })
+      const acc = byKey.get(key)
       acc.tasksCount += row.total
       acc.shiftsWorked += 1
       acc.bestShift = Math.max(acc.bestShift, row.total)
     }
-    return [...byName.values()]
-      .map(r => ({ ...r, avgPerShift: r.tasksCount / r.shiftsWorked, projectedTasks: r.tasksCount / r.shiftsWorked }))
-      .sort((a, b) => b.avgPerShift - a.avgPerShift || b.tasksCount - a.tasksCount || a.name.localeCompare(b.name, 'ru'))
-  }, [company, shiftRows])
+    const all = [...byKey.values()].map(r => ({ ...r, avgPerShift: r.tasksCount / r.shiftsWorked }))
+    const grouped = new Map()
+    for (const r of all) {
+      if (!grouped.has(r.company)) grouped.set(r.company, [])
+      grouped.get(r.company).push(r)
+    }
+    for (const arr of grouped.values()) {
+      arr.sort((a, b) => b.avgPerShift - a.avgPerShift || b.tasksCount - a.tasksCount || a.name.localeCompare(b.name, 'ru'))
+    }
+    return grouped
+  }, [shiftRows])
 
+  // Подбор + предложения замены — чистое вычисление плана. Пересчитывается
+  // при изменении заявки/цели, не требует повторного похода в API.
   const plan = useMemo(() => {
-    const requested = Math.max(0, Number(peopleCount) || 0)
-    const targetPerEmployee = Math.max(0, Number(targetTasksPerEmployee) || 0)
-    const totalTarget = requested * targetPerEmployee
-    const selected = companyRates.slice(0, requested)
-    const projected = selected.reduce((sum, row) => sum + row.projectedTasks, 0)
-    const qualified = selected.filter(row => !targetPerEmployee || row.projectedTasks >= targetPerEmployee).length
-    const gap = Math.max(0, totalTarget - projected)
-    return { requested, targetPerEmployee, totalTarget, selected, projected, qualified, gap, status: planStatus(projected, totalTarget) }
-  }, [companyRates, peopleCount, targetTasksPerEmployee])
+    const target = Math.max(0, Number(targetTasksPerEmployee) || 0)
+    const slotsByCompany = new Map() // company -> [{ name, avgPerShift, qualified, suggestion }]
+    const usedKeys = new Set()
+
+    for (const company of companies) {
+      const need = Math.max(0, Math.floor(Number(requested[company]) || 0))
+      if (need <= 0) continue
+      const rates = ratesByCompany.get(company) || []
+      const selected = rates.slice(0, need)
+      slotsByCompany.set(company, selected.map(r => {
+        usedKeys.add(`${r.company}||${r.name}`)
+        return { name: r.name, avgPerShift: r.avgPerShift, qualified: !target || r.avgPerShift >= target, suggestion: null }
+      }))
+    }
+
+    // Пул кандидатов на замену: в нормативе, ещё никем не занят.
+    const pool = [...ratesByCompany.values()].flat()
+      .filter(r => !usedKeys.has(`${r.company}||${r.name}`))
+      .filter(r => !target || r.avgPerShift >= target)
+      .sort((a, b) => b.avgPerShift - a.avgPerShift)
+    const poolUsed = new Set()
+
+    for (const [company, slots] of slotsByCompany) {
+      slots.forEach(slot => {
+        if (slot.qualified) return
+        const candidate = pool.find(c => c.company !== company && !poolUsed.has(`${c.company}||${c.name}`))
+        if (candidate) {
+          poolUsed.add(`${candidate.company}||${candidate.name}`)
+          slot.suggestion = { name: candidate.name, company: candidate.company, avgPerShift: candidate.avgPerShift }
+        }
+      })
+    }
+
+    // Итоговый состав по компаниям — с учётом принятых замен (человек идёт
+    // в акт своей ФАКТИЧЕСКОЙ компании, не той, что его запросила).
+    const finalByCompany = new Map()
+    const pushFinal = (company, name) => {
+      if (!finalByCompany.has(company)) finalByCompany.set(company, [])
+      finalByCompany.get(company).push(name)
+    }
+    for (const [company, slots] of slotsByCompany) {
+      slots.forEach((slot, index) => {
+        const isAccepted = accepted.has(`${company}#${index}`)
+        if (isAccepted && slot.suggestion) pushFinal(slot.suggestion.company, slot.suggestion.name)
+        else pushFinal(company, slot.name)
+      })
+    }
+
+    return { slotsByCompany, finalByCompany, target }
+  }, [companies, requested, ratesByCompany, accepted, targetTasksPerEmployee])
+
+  // Потребность в операционные сутки = общий вес / ЦУ. Ночь вычитается из
+  // сумму (день+ночь), день дальше уменьшается на свой дневной штат — как
+  // ночь уменьшается на свой ночной штат — остаток обеих смен = сколько
+  // комплектовщиков-аутсорса нужно заказать. Плюс ручные добавки
+  // (грузчики/заморозка) — только к смене, которая сейчас выбрана вверху.
+  const calc = useMemo(() => {
+    const totalWeight = ['kdk', 'hs', 'hsh', 'zamorozka'].reduce((s, k) => s + (Number(weights[k]) || 0), 0)
+    const tsuNum = Number(tsu) || 0
+    const totalNeed = tsuNum > 0 ? totalWeight / tsuNum : 0
+    const night = Math.max(0, Number(nightTotalOutput) || 0)
+    const dayTotal = Math.max(0, totalNeed - night)
+    const dayOutsourcePickers = Math.max(0, dayTotal - (Number(dayOwnStaff) || 0))
+    const nightOutsourcePickers = Math.max(0, night - (Number(nightOwnStaff) || 0))
+    const extra = Math.max(0, Number(extraLoaders) || 0) + Math.max(0, Number(extraFreezerWorkers) || 0)
+    const outsourcePickersForShift = shift === 'night' ? nightOutsourcePickers : dayOutsourcePickers
+    const outsourceTotalForShift = outsourcePickersForShift + extra
+    return { totalWeight, totalNeed, night, dayTotal, dayOutsourcePickers, nightOutsourcePickers, outsourcePickersForShift, outsourceTotalForShift }
+  }, [weights, tsu, nightTotalOutput, dayOwnStaff, nightOwnStaff, extraLoaders, extraFreezerWorkers, shift])
+
+  const totalRequested = Object.values(requested).reduce((s, v) => s + (Math.max(0, Math.floor(Number(v) || 0)) || 0), 0)
+  const totalFinal = [...plan.finalByCompany.values()].reduce((s, arr) => s + arr.length, 0)
+  const pendingSuggestions = [...plan.slotsByCompany.entries()]
+    .flatMap(([company, slots]) => slots.map((s, i) => ({ company, index: i, slot: s })))
+    .filter(x => !x.slot.qualified && x.slot.suggestion)
+  const acceptedCount = pendingSuggestions.filter(x => accepted.has(`${x.company}#${x.index}`)).length
+
+  const toggleAccept = (company, index) => setAccepted(prev => {
+    const key = `${company}#${index}`
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
+
+  const handleGenerateActs = async () => {
+    if (totalFinal === 0) { toast.info('Нет ни одного человека в итоговом составе'); return }
+    setGenerating(true)
+    try {
+      const ExcelJS = (await import('exceljs')).default
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+      const constants = loadActConstants()
+      const fullNames = loadCompanyFullNames()
+      // Date.UTC, а не `new Date(iso)` — иначе в часовых поясах восточнее UTC
+      // (Москва, UTC+3) полночь по местному времени уходит в предыдущий день
+      // по UTC, а ExcelJS сериализует дату в xlsx по UTC-компонентам: дата в
+      // акте съезжала бы на день назад ровно у пользователей из РФ.
+      const [y, m, d] = planDate.split('-').map(Number)
+      const dateObj = new Date(Date.UTC(y, m - 1, d))
+
+      for (const [company, names] of plan.finalByCompany) {
+        if (!names.length) continue
+        const wb = buildActWorkbook(ExcelJS, {
+          customerName: constants.customerName,
+          contractorFullName: fullNames[company]?.trim() || company,
+          warehouseAddress: constants.warehouseAddress,
+          warehouseType: constants.warehouseType,
+          warehouseCategory: constants.warehouseCategory,
+          date: dateObj,
+          shift,
+          employees: names.map(name => ({ name })),
+        })
+        const buf = await wb.xlsx.writeBuffer()
+        zip.file(`Акт ${company} ${planDate}.xlsx`, buf)
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Акты_${planDate}_${shift === 'night' ? 'ночь' : 'день'}.zip`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast.success(`Сформировано актов: ${plan.finalByCompany.size}`)
+    } catch (err) {
+      toast.error('Ошибка формирования актов: ' + err.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const loadedShiftLabel = loadedRange?.shift === 'night' ? 'Ночь' : 'День'
 
@@ -104,18 +248,15 @@ export default function ShiftPlanPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">План смены</h1>
-          <p className="text-sm text-muted-foreground">Рекомендованный состав по компании на основе среднего результата за смену</p>
+          <p className="text-sm text-muted-foreground">Заявка по каждой компании — подбор состава по истории, с предложением замен из других компаний</p>
         </div>
-        <Badge variant="secondary"><Users className="size-3.5" /> {company || 'Выберите компанию'}</Badge>
+        <Badge variant="secondary"><Users className="size-3.5" /> Заявка: {totalRequested} чел.</Badge>
       </div>
 
       <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-3">
         <label className="space-y-1 text-sm">
-          <span className="block text-xs text-muted-foreground">Компания</span>
-          <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
-            <option value="">Выберите компанию</option>
-            {companies.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <span className="block text-xs text-muted-foreground">Дата смены</span>
+          <DatePicker value={planDate} onChange={e => setPlanDate(e.target.value)} className="h-8 w-36" />
         </label>
         <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Смена</span>
@@ -129,10 +270,6 @@ export default function ShiftPlanPage() {
           <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="block text-xs text-muted-foreground">Заявка, чел.</span>
-          <Input className="h-8 w-24" type="number" min="1" value={peopleCount} onChange={e => setPeopleCount(e.target.value)} />
-        </label>
-        <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">План СЗ на сотрудника</span>
           <Input className="h-8 w-28" type="number" min="0" value={targetTasksPerEmployee} onChange={e => setTargetTasksPerEmployee(e.target.value)} />
         </label>
@@ -141,78 +278,194 @@ export default function ShiftPlanPage() {
         </Button>
       </div>
 
+      <div className="rounded-lg border bg-card p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Калькулятор потребности в сотрудниках (только аутсорс, штат не заказывается)
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">КДК, кг</span>
+            <Input type="number" min="0" className="h-8" value={weights.kdk} onChange={e => setWeights(w => ({ ...w, kdk: e.target.value }))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">ХС, кг</span>
+            <Input type="number" min="0" className="h-8" value={weights.hs} onChange={e => setWeights(w => ({ ...w, hs: e.target.value }))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">ХСХ, кг</span>
+            <Input type="number" min="0" className="h-8" value={weights.hsh} onChange={e => setWeights(w => ({ ...w, hsh: e.target.value }))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Заморозка, кг</span>
+            <Input type="number" min="0" className="h-8" value={weights.zamorozka} onChange={e => setWeights(w => ({ ...w, zamorozka: e.target.value }))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">ЦУ (норматив, кг/чел.)</span>
+            <Input type="number" min="1" className="h-8" value={tsu} onChange={e => setTsu(e.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Ночь — общий выход</span>
+            <Input type="number" min="0" className="h-8" value={nightTotalOutput} onChange={e => setNightTotalOutput(e.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Свой штат, день</span>
+            <Input type="number" min="0" className="h-8" value={dayOwnStaff} onChange={e => setDayOwnStaff(e.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Свой штат, ночь</span>
+            <Input type="number" min="0" className="h-8" value={nightOwnStaff} onChange={e => setNightOwnStaff(e.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Грузчики, доп. чел.</span>
+            <Input type="number" min="0" className="h-8" value={extraLoaders} onChange={e => setExtraLoaders(e.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-xs text-muted-foreground">Заморозка, доп. чел.</span>
+            <Input type="number" min="0" className="h-8" value={extraFreezerWorkers} onChange={e => setExtraFreezerWorkers(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3 rounded-md bg-muted/30 p-3 text-sm sm:grid-cols-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Потребность в сутки</div>
+            <div className="font-semibold">{fmtNum(calc.totalNeed, 1)} чел.</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">День, всего (сутки − ночь)</div>
+            <div className="font-semibold">{fmtNum(calc.dayTotal, 1)} чел.</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Аутсорс, комплектовщики (день / ночь)</div>
+            <div className="font-semibold">{fmtNum(calc.dayOutsourcePickers, 1)} / {fmtNum(calc.nightOutsourcePickers, 1)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Итого аутсорса на выбранную смену ({shift === 'night' ? 'ночь' : 'день'})</div>
+            <div className="text-base font-semibold text-primary">{fmtNum(calc.outsourceTotalForShift, 1)} чел.</div>
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          Указано по компаниям ниже: <strong>{totalRequested}</strong> из <strong>{fmtNum(calc.outsourceTotalForShift, 1)}</strong> нужных —
+          {' '}распределите остаток по компаниям вручную.
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Заявка по компаниям</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {companies.map(company => (
+            <label key={company} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm">
+              <span className="truncate" title={company}>{company}</span>
+              <Input
+                type="number" min="0" className="h-7 w-16 shrink-0"
+                value={requested[company] ?? ''}
+                onChange={e => setRequested(prev => ({ ...prev, [company]: e.target.value }))}
+              />
+            </label>
+          ))}
+          {companies.length === 0 && <div className="text-sm text-muted-foreground">Нет компаний — добавьте сотрудников в Настройках</div>}
+        </div>
+      </div>
+
       {error && <div className="text-sm text-destructive">{error}</div>}
 
       {loadedRange && (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className={`rounded-lg border bg-card p-4 ${STATUS_BORDER[plan.status]}`}>
-              <div className="text-xs text-muted-foreground">Прогноз состава</div>
-              <div className="text-xl font-semibold">{fmtNum(plan.projected)}</div>
+            <div className="rounded-lg border bg-card p-4">
+              <div className="text-xs text-muted-foreground">Запрошено</div>
+              <div className="text-xl font-semibold">{totalRequested} чел.</div>
               <div className="text-xs text-muted-foreground">{loadedShiftLabel} · {loadedRange.dateFrom} – {loadedRange.dateTo}</div>
             </div>
             <div className="rounded-lg border bg-card p-4">
-              <div className="text-xs text-muted-foreground">План на смену</div>
-              <div className="text-xl font-semibold">{fmtNum(plan.totalTarget)}</div>
-              <div className="text-xs text-muted-foreground">{plan.requested} чел. × {plan.targetPerEmployee} СЗ</div>
+              <div className="text-xs text-muted-foreground">Итоговый состав</div>
+              <div className="text-xl font-semibold">{totalFinal} чел.</div>
+              <div className="text-xs text-muted-foreground">{plan.finalByCompany.size} компани{plan.finalByCompany.size === 1 ? 'я' : 'и'}</div>
             </div>
             <div className="rounded-lg border bg-card p-4">
-              <div className="text-xs text-muted-foreground">Прогноз к плану</div>
-              <div className="text-xl font-semibold">{plan.gap > 0 ? `-${fmtNum(plan.gap)} СЗ` : 'Закрывается'}</div>
-              <div className="text-xs text-muted-foreground">{plan.gap > 0 ? 'Не хватает СЗ до плана' : 'План смены выполняется'}</div>
+              <div className="text-xs text-muted-foreground">Предложено замен</div>
+              <div className="text-xl font-semibold">{pendingSuggestions.length}</div>
+              <div className="text-xs text-muted-foreground">не в нормативе, есть кем заменить</div>
             </div>
             <div className="rounded-lg border bg-card p-4">
-              <div className="text-xs text-muted-foreground">В нормативе</div>
-              <div className="text-xl font-semibold">{plan.qualified} / {plan.requested}</div>
-              <div className="text-xs text-muted-foreground">
-                {companyRates.length ? `Со статистикой: ${companyRates.length}` : 'Нет сотрудников со статистикой'}
-              </div>
+              <div className="text-xs text-muted-foreground">Принято замен</div>
+              <div className="text-xl font-semibold">{acceptedCount} / {pendingSuggestions.length}</div>
+              <div className="text-xs text-muted-foreground">отметьте «Заменить» в таблице ниже</div>
             </div>
           </div>
 
-          <div className="rounded-lg border">
-            {!plan.selected.length ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">По выбранной компании нет сотрудников со статистикой за период</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">#</TableHead>
-                    <TableHead>Роль</TableHead>
-                    <TableHead>ФИО</TableHead>
-                    <TableHead className="text-right">СЗ/смена</TableHead>
-                    <TableHead className="text-right">Прогноз СЗ</TableHead>
-                    <TableHead className="text-right">Лучший итог</TableHead>
-                    <TableHead className="text-right">СЗ в истории</TableHead>
-                    <TableHead className="text-right">Смен</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {plan.selected.map((row, index) => (
-                    <TableRow key={row.name}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        <Badge variant={row.projectedTasks >= plan.targetPerEmployee ? 'success' : 'secondary'}>
-                          {row.projectedTasks >= plan.targetPerEmployee ? 'В нормативе' : 'Ниже плана'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{row.name}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.avgPerShift, 1)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.projectedTasks, 1)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.bestShift)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.tasksCount)}</TableCell>
-                      <TableCell className="text-right">{row.shiftsWorked}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <div className="space-y-4">
+            {[...plan.slotsByCompany.entries()].map(([company, slots]) => (
+              <div key={company} className="rounded-lg border">
+                <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+                  <div className="font-medium">{company}</div>
+                  <div className="text-xs text-muted-foreground">Запрошено {slots.length} · В итоговом составе {plan.finalByCompany.get(company)?.length || 0}</div>
+                </div>
+                {slots.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">Нет сотрудников со статистикой за период</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">#</TableHead>
+                        <TableHead>Статус</TableHead>
+                        <TableHead>Ф.И.О.</TableHead>
+                        <TableHead className="text-right">СЗ/смена</TableHead>
+                        <TableHead>Замена</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {slots.map((slot, index) => {
+                        const key = `${company}#${index}`
+                        const isAccepted = accepted.has(key)
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{index + 1}</TableCell>
+                            <TableCell>
+                              <Badge variant={slot.qualified ? 'success' : 'warning'}>
+                                {slot.qualified ? 'В нормативе' : 'Ниже плана'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={isAccepted ? 'text-muted-foreground line-through' : ''}>{slot.name}</TableCell>
+                            <TableCell className="text-right">{fmtNum(slot.avgPerShift, 1)}</TableCell>
+                            <TableCell>
+                              {!slot.qualified && (
+                                slot.suggestion ? (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Checkbox checked={isAccepted} onCheckedChange={() => toggleAccept(company, index)} />
+                                    <ArrowRight size={13} className="text-muted-foreground" />
+                                    <span className="font-medium">{slot.suggestion.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({slot.suggestion.company}, {fmtNum(slot.suggestion.avgPerShift, 1)} СЗ/смену)
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Нет свободной замены в нормативе</span>
+                                )
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            ))}
+            {plan.slotsByCompany.size === 0 && (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">Заполните заявку по компаниям выше</div>
             )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleGenerateActs} disabled={generating || totalFinal === 0}>
+              <FileDown className="size-3.5" /> {generating ? 'Формирую...' : `Сформировать акты (${plan.finalByCompany.size})`}
+            </Button>
           </div>
         </>
       )}
 
       {!loadedRange && !loading && (
-        <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">Заполните заявку и нажмите «Подобрать»</div>
+        <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">Заполните заявку по компаниям и нажмите «Подобрать»</div>
       )}
       {loading && <Spinner label="Загружаю статистику сотрудников..." />}
     </div>
