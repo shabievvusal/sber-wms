@@ -125,8 +125,14 @@ export default function ShiftPlanPage() {
       }))
     }
 
-    // Пул кандидатов на замену: в нормативе, ещё никем не занят.
-    const pool = [...ratesByCompany.values()].flat()
+    // Пул кандидатов на замену: ТОЛЬКО из компаний, которые есть в заявке
+    // (пользователь сам выбирает, с какими компаниями работает на эту смену —
+    // предлагать сотрудников из компаний вне заявки не нужно), в нормативе,
+    // ещё никем не занят.
+    const requestedCompanies = new Set(slotsByCompany.keys())
+    const pool = [...ratesByCompany.entries()]
+      .filter(([company]) => requestedCompanies.has(company))
+      .flatMap(([, rates]) => rates)
       .filter(r => !usedKeys.has(`${r.company}||${r.name}`))
       .filter(r => !target || r.avgPerShift >= target)
       .sort((a, b) => b.avgPerShift - a.avgPerShift)
