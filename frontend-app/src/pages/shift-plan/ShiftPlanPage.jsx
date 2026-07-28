@@ -38,18 +38,18 @@ export default function ShiftPlanPage() {
   const [accepted, setAccepted] = useState(() => new Set()) // "company#index"
   const [generating, setGenerating] = useState(false)
 
-  // Калькулятор потребности в сотрудниках (2026-07-28) — только аутсорс,
-  // штат (свои сотрудники) в акты не попадает, здесь лишь вычитается из
-  // общей потребности. Вес по 4 категориям / ЦУ = потребность на операционные
-  // сутки (день+ночь); ночной общий выход и штат (день/ночь) — известные
-  // числа, вводятся руками (не считаются). Грузчики/работники заморозки —
-  // тоже ручные добавки к итоговому аутсорсу текущей смены (не про вес
-  // категории «Заморозка» выше — это про людей, не про килограммы).
+  // Калькулятор потребности в сотрудниках (2026-07-28) — только на ДЕНЬ (для
+  // ночи известен уже готовый общий выход, отдельно не считаем — «Ночь» ниже
+  // нужна только чтобы вычесть её из суток и получить день). Штат — свои
+  // сотрудники, в акты не попадают, вычитаются из потребности. Грузчики и
+  // работники заморозки — это НЕ добавка сверху, а внутреннее распределение
+  // одного и того же доступного по весу пула: если по весу доступно 88
+  // человек и 8 из них — грузчики, значит комплектовщиков заказываем
+  // 88 − 8 = 80, а не 88 + 8.
   const [weights, setWeights] = useState({ kdk: '', hs: '', hsh: '', zamorozka: '' })
   const [tsu, setTsu] = useState('1200')
   const [nightTotalOutput, setNightTotalOutput] = useState('')
   const [dayOwnStaff, setDayOwnStaff] = useState('')
-  const [nightOwnStaff, setNightOwnStaff] = useState('')
   const [extraLoaders, setExtraLoaders] = useState('')
   const [extraFreezerWorkers, setExtraFreezerWorkers] = useState('')
 
@@ -161,24 +161,23 @@ export default function ShiftPlanPage() {
     return { slotsByCompany, finalByCompany, target }
   }, [companies, requested, ratesByCompany, accepted, targetTasksPerEmployee])
 
-  // Потребность в операционные сутки = общий вес / ЦУ. Ночь вычитается из
-  // сумму (день+ночь), день дальше уменьшается на свой дневной штат — как
-  // ночь уменьшается на свой ночной штат — остаток обеих смен = сколько
-  // комплектовщиков-аутсорса нужно заказать. Плюс ручные добавки
-  // (грузчики/заморозка) — только к смене, которая сейчас выбрана вверху.
+  // Потребность в операционные сутки = общий вес / ЦУ. Ночь (уже известный
+  // общий выход) вычитается из суток, чтобы получить день. День дальше
+  // уменьшается на свой дневной штат — остаток = сколько аутсорса доступно
+  // по весу на день. Грузчики/заморозка — это распределение ВНУТРИ этого же
+  // пула (не добавка сверху): сколько из доступных по весу людей уходит на
+  // другие роли, остаток — комплектовщики к заказу.
   const calc = useMemo(() => {
     const totalWeight = ['kdk', 'hs', 'hsh', 'zamorozka'].reduce((s, k) => s + (Number(weights[k]) || 0), 0)
     const tsuNum = Number(tsu) || 0
     const totalNeed = tsuNum > 0 ? totalWeight / tsuNum : 0
     const night = Math.max(0, Number(nightTotalOutput) || 0)
     const dayTotal = Math.max(0, totalNeed - night)
-    const dayOutsourcePickers = Math.max(0, dayTotal - (Number(dayOwnStaff) || 0))
-    const nightOutsourcePickers = Math.max(0, night - (Number(nightOwnStaff) || 0))
-    const extra = Math.max(0, Number(extraLoaders) || 0) + Math.max(0, Number(extraFreezerWorkers) || 0)
-    const outsourcePickersForShift = shift === 'night' ? nightOutsourcePickers : dayOutsourcePickers
-    const outsourceTotalForShift = outsourcePickersForShift + extra
-    return { totalWeight, totalNeed, night, dayTotal, dayOutsourcePickers, nightOutsourcePickers, outsourcePickersForShift, outsourceTotalForShift }
-  }, [weights, tsu, nightTotalOutput, dayOwnStaff, nightOwnStaff, extraLoaders, extraFreezerWorkers, shift])
+    const dayOutsourcePool = Math.max(0, dayTotal - (Number(dayOwnStaff) || 0))
+    const otherRoles = Math.max(0, Number(extraLoaders) || 0) + Math.max(0, Number(extraFreezerWorkers) || 0)
+    const dayOutsourcePickers = Math.max(0, dayOutsourcePool - otherRoles)
+    return { totalWeight, totalNeed, night, dayTotal, dayOutsourcePool, otherRoles, dayOutsourcePickers }
+  }, [weights, tsu, nightTotalOutput, dayOwnStaff, extraLoaders, extraFreezerWorkers])
 
   const totalRequested = Object.values(requested).reduce((s, v) => s + (Math.max(0, Math.floor(Number(v) || 0)) || 0), 0)
   const totalFinal = [...plan.finalByCompany.values()].reduce((s, arr) => s + arr.length, 0)
@@ -312,15 +311,11 @@ export default function ShiftPlanPage() {
             <Input type="number" min="0" className="h-8" value={dayOwnStaff} onChange={e => setDayOwnStaff(e.target.value)} />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-xs text-muted-foreground">Свой штат, ночь</span>
-            <Input type="number" min="0" className="h-8" value={nightOwnStaff} onChange={e => setNightOwnStaff(e.target.value)} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-xs text-muted-foreground">Грузчики, доп. чел.</span>
+            <span className="text-xs text-muted-foreground">Грузчики, чел. (из доступных по весу)</span>
             <Input type="number" min="0" className="h-8" value={extraLoaders} onChange={e => setExtraLoaders(e.target.value)} />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-xs text-muted-foreground">Заморозка, доп. чел.</span>
+            <span className="text-xs text-muted-foreground">Заморозка, чел. (из доступных по весу)</span>
             <Input type="number" min="0" className="h-8" value={extraFreezerWorkers} onChange={e => setExtraFreezerWorkers(e.target.value)} />
           </label>
         </div>
@@ -335,17 +330,17 @@ export default function ShiftPlanPage() {
             <div className="font-semibold">{fmtNum(calc.dayTotal, 1)} чел.</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Аутсорс, комплектовщики (день / ночь)</div>
-            <div className="font-semibold">{fmtNum(calc.dayOutsourcePickers, 1)} / {fmtNum(calc.nightOutsourcePickers, 1)}</div>
+            <div className="text-xs text-muted-foreground">Доступно аутсорса по весу (день)</div>
+            <div className="font-semibold">{fmtNum(calc.dayOutsourcePool, 1)} чел.</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Итого аутсорса на выбранную смену ({shift === 'night' ? 'ночь' : 'день'})</div>
-            <div className="text-base font-semibold text-primary">{fmtNum(calc.outsourceTotalForShift, 1)} чел.</div>
+            <div className="text-xs text-muted-foreground">Комплектовщиков к заказу (минус грузчики/заморозка)</div>
+            <div className="text-base font-semibold text-primary">{fmtNum(calc.dayOutsourcePickers, 1)} чел.</div>
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          Указано по компаниям ниже: <strong>{totalRequested}</strong> из <strong>{fmtNum(calc.outsourceTotalForShift, 1)}</strong> нужных —
-          {' '}распределите остаток по компаниям вручную.
+          {fmtNum(calc.dayOutsourcePool, 1)} доступно по весу − {fmtNum(calc.otherRoles, 1)} грузчики/заморозка = {fmtNum(calc.dayOutsourcePickers, 1)} комплектовщиков.
+          {' '}Указано по компаниям ниже: <strong>{totalRequested}</strong> из <strong>{fmtNum(calc.dayOutsourcePickers, 1)}</strong> — распределите остаток вручную.
         </div>
       </div>
 
