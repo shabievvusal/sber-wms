@@ -13,6 +13,7 @@ const REMAINS_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/storage-zone-movemen
 const MONITORING_STATS_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/stats'
 const INBOUND_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/inbound/tasks'
 const MOVEMENTS_URL = 'https://api-p01.samokat.ru/wmsout-wwh/movements/picking-refill/tasks'
+const SHIPMENT_ORDERS_URL = 'https://api-p01.samokat.ru/wmsout-wwh/shipment-order/shipments'
 const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage_dc' }
 
 const LS_ACCESS_KEY = 'wms_access_token'
@@ -127,6 +128,32 @@ export async function getPieceSelectionTasks(token, {
     shipmentNumber, routeNumber, targetHandlingUnitBarcode, responsibleUserId,
     pageNumber, pageSize,
   })
+}
+
+// «Пропуски в отборе» (PickingGapsPage.jsx) — список заказов на отгрузку
+// (склад «Хранение») и детали одного заказа с товарами. Тело POST-запроса
+// подтверждено реальным запросом из DevTools (Copy as cURL), поля кроме
+// перечисленных ниже в оригинале всегда null — не добавляем лишних
+// параметров, которых не видели в реальном вызове.
+export async function getShipmentOrders(token, {
+  pageNumber = 1,
+  pageSize = 100,
+  shippedDateFrom,
+  shippedDateTo,
+  status,
+  temperatureMode = null,
+} = {}) {
+  return samokatPost(token, SHIPMENT_ORDERS_URL, {
+    shipmentNumber: null, orderId: null, shipmentType: null, routeNumber: null,
+    shippedDateFrom, shippedDateTo, status,
+    incompleteReservationsOnly: null, availableForCorrectionOnly: null,
+    cityId: null, shipToId: null, temperatureMode,
+    correctedOnly: null, pageNumber, pageSize,
+  })
+}
+
+export async function getShipmentOrderDetail(token, id) {
+  return wmsGet(`${SHIPMENT_ORDERS_URL}/${encodeURIComponent(id)}`, token)
 }
 
 // Последний завершённый пик КДК (PICK_BY_LINE) для исполнителя —

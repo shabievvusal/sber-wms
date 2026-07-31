@@ -38,6 +38,7 @@ export const NAV_ITEMS = [
       { key: 'picking-piece', Icon: ListChecks, label: 'Штучный отбор', page: 'picking-piece', module: 'picking' },
       { key: 'picking-kdk', Icon: Boxes, label: 'Зависшие задачи', page: 'picking-kdk', module: 'picking' },
       { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo', module: 'picking' },
+      { key: 'picking-gaps', Icon: AlertTriangle, label: 'Пропуски в отборе', page: 'picking-gaps', module: 'picking' },
     ],
   },
   { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },

@@ -20,6 +20,12 @@ export const STATUS_LABELS = {
 
 export const DEFAULT_STATUSES = ['COMPLETED', 'CREATED', 'IN_PROGRESS', 'PENDING']
 
+// Статусы ЗАКАЗА (не задания штучного отбора) — PickingGapsPage.jsx.
+export const SHIPMENT_ORDER_STATUS_LABELS = {
+  WAITING_FOR_PICKING: 'Ждёт комплектации',
+  PICKING: 'Комплектация',
+}
+
 // UUID зон WMS конкретного окружения — как и в оригинале, зашиты во
 // фронтенде (WMS не отдаёт справочник зон отдельным эндпоинтом, которым
 // пользуются эти страницы).
