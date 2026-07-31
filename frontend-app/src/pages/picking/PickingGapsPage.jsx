@@ -253,7 +253,7 @@ export default function PickingGapsPage() {
       <div>
         <h1 className="text-xl font-semibold">Пропуски в отборе</h1>
         <p className="text-sm text-muted-foreground">
-          Заказы «{SHIPMENT_ORDER_STATUS_LABELS.WAITING_FOR_PICKING}»/«{SHIPMENT_ORDER_STATUS_LABELS.PICKING}» с непобранными товарами — кто из сотрудников их вёл
+          Заказы «{SHIPMENT_ORDER_STATUS_LABELS.WAITING_FOR_PICKING}»/«{SHIPMENT_ORDER_STATUS_LABELS.PICKING}» с несобранными товарами — кто из сотрудников их вёл
         </p>
       </div>
 
