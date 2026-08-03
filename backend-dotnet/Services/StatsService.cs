@@ -656,20 +656,19 @@ public class StatsService
         if (!string.IsNullOrEmpty(dateStr) && !string.IsNullOrEmpty(shift))
         {
             var d = DateOnly.Parse(dateStr);
-            var todayStr = GetMoscowTodayStr();
-            var isToday = dateStr == todayStr;
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             if (shift == "day")
             {
                 idleShiftStartMs = new DateTimeOffset(d.Year, d.Month, d.Day, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                idleShiftEndMs = isToday ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : new DateTimeOffset(d.Year, d.Month, d.Day, 18, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                var shiftEndFullMs = new DateTimeOffset(d.Year, d.Month, d.Day, 18, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                idleShiftEndMs = Math.Min(nowMs, shiftEndFullMs);
             }
             else
             {
                 idleShiftStartMs = new DateTimeOffset(d.Year, d.Month, d.Day, 18, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
                 var nextDate = d.AddDays(1);
                 var shiftEndFullMs = new DateTimeOffset(nextDate.Year, nextDate.Month, nextDate.Day, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                var shiftEndDateStr = nextDate.ToString("yyyy-MM-dd");
-                idleShiftEndMs = shiftEndDateStr == todayStr ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : shiftEndFullMs;
+                idleShiftEndMs = Math.Min(nowMs, shiftEndFullMs);
             }
         }
         var idleThresholdMs = idleThresholdMsOpt is > 0 ? idleThresholdMsOpt.Value : IdleThresholdMsDefault;
