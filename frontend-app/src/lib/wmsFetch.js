@@ -130,6 +130,35 @@ export async function getPieceSelectionTasks(token, {
   })
 }
 
+// ─── Раскладка КДК (KdkPlacementPage.jsx) ───────────────────────────────────
+// Единственный раздел проекта, который ходит не в `wmsout-wwh` (веб-интерфейс
+// WMS), а в `wmsout-pdt` — API терминала сборщика (`pbl` = pick-by-line = КДК).
+// Все три эндпоинта — GET без тела, подтверждены реальными запросами из
+// DevTools (Copy as cURL, 2026-08-21). Служебные заголовки того curl
+// (sentry-trace/baggage/Cookie/Host/user-agent с UUID приложения ТСД) не
+// воспроизводим: Cookie/Host браузер ставит сам, user-agent подменить не
+// даёт, а трассировка Sentry — чужая. Первый ответ шлюза может быть 307 на
+// самого себя (ставит cookies spid/spsc) — fetch отрабатывает это прозрачно,
+// как и на уже работающих `wmsout-wwh` вызовах.
+
+const PBL_ZONES_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
+const PBL_TASK_BY_BARCODE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks/by-handling-unit-barcode'
+
+/** Список зон-ворот КДК с количеством стоящих на них ЕО. */
+export async function getPblZones(token) {
+  return wmsGet(PBL_ZONES_URL, token)
+}
+
+/** Детализация ворот: поставки (receipts) и ЕО, стоящие на этих воротах. */
+export async function getPblGate(token, gateId) {
+  return wmsGet(`${PBL_ZONES_URL}/gates/${encodeURIComponent(gateId)}`, token)
+}
+
+/** Задача раскладки по ШК ЕО — шаги (ячейки) и товар с плановым/принятым количеством. */
+export async function getPblTaskByBarcode(token, barcode) {
+  return wmsGet(`${PBL_TASK_BY_BARCODE_URL}/${encodeURIComponent(barcode)}`, token)
+}
+
 // «Пропуски в отборе» (PickingGapsPage.jsx) — список заказов на отгрузку
 // (склад «Хранение») и детали одного заказа с товарами. Тело POST-запроса
 // подтверждено реальным запросом из DevTools (Copy as cURL), поля кроме

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, TrendingUp, Users, ScanBarcode, Package, FileText,
-  ClipboardList, ListChecks, Boxes, Truck, PackageSearch, AlertTriangle, Settings,
+  ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
   ChevronLeft, ChevronRight, ChevronDown, UserCircle, LogOut, Combine,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
@@ -36,6 +36,7 @@ export const NAV_ITEMS = [
     key: 'picking', Icon: ClipboardList, label: 'Комплектация', page: null, module: 'picking',
     children: [
       { key: 'picking-piece', Icon: ListChecks, label: 'Штучный отбор', page: 'picking-piece', module: 'picking' },
+      { key: 'picking-kdk-layout', Icon: LayoutGrid, label: 'Раскладка КДК', page: 'picking-kdk-layout', module: 'picking' },
       { key: 'picking-kdk', Icon: Boxes, label: 'Зависшие задачи', page: 'picking-kdk', module: 'picking' },
       { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo', module: 'picking' },
       { key: 'picking-gaps', Icon: AlertTriangle, label: 'Пропуски в отборе', page: 'picking-gaps', module: 'picking' },

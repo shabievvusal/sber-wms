@@ -20,6 +20,7 @@ import ReceivePage from '@/pages/receive/ReceivePage'
 import TsdIssuePage from '@/pages/tsd/TsdIssuePage'
 import PieceSelectionPage from '@/pages/picking/PieceSelectionPage'
 import KdkLayoutPage from '@/pages/picking/KdkLayoutPage'
+import KdkPlacementPage from '@/pages/picking/KdkPlacementPage'
 import EoSearchPage from '@/pages/picking/EoSearchPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
 import ShiftPlanPage from '@/pages/shift-plan/ShiftPlanPage'
@@ -47,6 +48,7 @@ const PAGES = {
   tsd: TsdIssuePage,
   'picking-piece': PieceSelectionPage,
   'picking-kdk': KdkLayoutPage,
+  'picking-kdk-layout': KdkPlacementPage,
   'picking-eo': EoSearchPage,
   'picking-gaps': PickingGapsPage,
   shift_plan: ShiftPlanPage,
