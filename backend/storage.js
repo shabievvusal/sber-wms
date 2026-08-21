@@ -120,6 +120,12 @@ function toLightItem(item) {
     type: item.type || '',
     operationType: item.operationType || '',
     productName: product.name || '',
+    // GUID товара — сам по себе в статистике не используется (вес и все
+    // группировки идут по артикулу), но это единственный ключ, которым
+    // товар можно спросить в справочнике WMS (products/by-id отдаёт вес
+    // штуки). Копим его с текущего дня, чтобы потом закрывать дыры в
+    // весах без ручной выгрузки Excel — см. «Раскладка КДК».
+    productId: product.productId || '',
     nomenclatureCode: product.nomenclatureCode || '',
     barcodes: (product.barcodes || []).join(', '),
     productionDate: item.part?.productionDate || '',

@@ -19,6 +19,7 @@ const rkStorage = process.env.USE_PG === 'true'
   : require('./route-rk-storage');
 const emplPg = process.env.USE_PG === 'true' ? require('./empl-pg') : null;
 const tsdPg = process.env.USE_PG === 'true' ? require('./tsd-pg') : null;
+const wmsOpsPg = process.env.USE_PG === 'true' ? require('./wms-ops-pg') : null;
 const s3Storage = require('./s3');
 const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
@@ -4196,6 +4197,7 @@ async function startServer() {
     await rkStorage.init();
     await emplPg.init();
     await tsdPg.init();
+    await wmsOpsPg.init();
     await vsAuth.init();
     await productWeights.initPg();
     console.log('[pg] PostgreSQL готов');

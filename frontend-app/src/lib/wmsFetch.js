@@ -143,6 +143,7 @@ export async function getPieceSelectionTasks(token, {
 
 const PBL_ZONES_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
 const PBL_TASK_BY_BARCODE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks/by-handling-unit-barcode'
+const PDT_PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-pdt/inbound/products/by-id'
 
 /** Список зон-ворот КДК с количеством стоящих на них ЕО. */
 export async function getPblZones(token) {
@@ -157,6 +158,14 @@ export async function getPblGate(token, gateId) {
 /** Задача раскладки по ШК ЕО — шаги (ячейки) и товар с плановым/принятым количеством. */
 export async function getPblTaskByBarcode(token, barcode) {
   return wmsGet(`${PBL_TASK_BY_BARCODE_URL}/${encodeURIComponent(barcode)}`, token)
+}
+
+// Справочник товаров по списку productId — в задаче раскладки лежит только
+// UUID товара, а название и вес штуки (`weightInGrams`) берутся отсюда.
+// Единственный запрос раздела на другой хост (api.samokat.ru/wmsin-pdt, а не
+// api-p01/wmsout-pdt) и единственный POST — так его делает сам терминал.
+export async function getPdtProductsById(token, productIds) {
+  return samokatPost(token, PDT_PRODUCTS_BY_ID_URL, { productIds })
 }
 
 // «Пропуски в отборе» (PickingGapsPage.jsx) — список заказов на отгрузку

@@ -275,11 +275,16 @@ static LightItem ToLightItem(JsonElement item)
     var executorId = ru.ValueKind == JsonValueKind.Object && ru.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : "";
 
     string productName = "";
+    string productId = "";
     string nomenclatureCode = "";
     string barcodes = "";
     if (item.TryGetProperty("product", out var p) && p.ValueKind == JsonValueKind.Object)
     {
         if (p.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String) productName = n.GetString() ?? "";
+        // GUID товара — ключ для справочника WMS (products/by-id), см.
+        // toLightItem() в storage.js. В ответе поле называется productId
+        // (не id — у товара, в отличие от responsibleUser, ключ именной).
+        if (p.TryGetProperty("productId", out var pid) && pid.ValueKind == JsonValueKind.String) productId = pid.GetString() ?? "";
         if (p.TryGetProperty("nomenclatureCode", out var nc) && nc.ValueKind == JsonValueKind.String) nomenclatureCode = nc.GetString() ?? "";
         if (p.TryGetProperty("barcodes", out var bc) && bc.ValueKind == JsonValueKind.Array)
         {
@@ -315,6 +320,7 @@ static LightItem ToLightItem(JsonElement item)
         Type = GetString(item, "type"),
         OperationType = GetString(item, "operationType"),
         ProductName = productName,
+        ProductId = productId,
         NomenclatureCode = nomenclatureCode,
         Barcodes = barcodes,
         ProductionDate = item.TryGetProperty("part", out var part) && part.ValueKind == JsonValueKind.Object && part.TryGetProperty("productionDate", out var pd) && pd.ValueKind == JsonValueKind.String ? pd.GetString() : "",
@@ -359,6 +365,7 @@ record LightItem
     public string? Type { get; set; }
     public string? OperationType { get; set; }
     public string? ProductName { get; set; }
+    public string? ProductId { get; set; }
     public string? NomenclatureCode { get; set; }
     public string? Barcodes { get; set; }
     public string? ProductionDate { get; set; }
@@ -385,6 +392,7 @@ record LightItem
             Type = Get(el, "type"),
             OperationType = Get(el, "operationType"),
             ProductName = Get(el, "productName"),
+            ProductId = Get(el, "productId"),
             NomenclatureCode = Get(el, "nomenclatureCode"),
             Barcodes = Get(el, "barcodes"),
             ProductionDate = Get(el, "productionDate"),

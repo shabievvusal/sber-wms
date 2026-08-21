@@ -872,6 +872,10 @@ public class StatsService
             var type = GetStr(raw, "type") ?? "";
             var nomenclatureCode = product != null ? (GetStr(product.Value, "nomenclatureCode") ?? "") : "";
             var productName = product != null ? (GetStr(product.Value, "name") ?? "") : "";
+            // GUID товара — ключ для справочника products/by-id, см. toLightItem()
+            // в storage.js. В ответе поле называется productId (не id — у товара,
+            // в отличие от responsibleUser, ключ именной).
+            var productId = product != null ? (GetStr(product.Value, "productId") ?? "") : "";
             var targetAddr = GetObj(raw, "targetAddress");
             var sourceAddr = GetObj(raw, "sourceAddress");
             var cell = (targetAddr != null ? GetStr(targetAddr.Value, "cellAddress") : null)
@@ -901,6 +905,7 @@ public class StatsService
                 Type = type,
                 OperationType = operationType,
                 ProductName = productName,
+                ProductId = productId,
                 NomenclatureCode = nomenclatureCode,
                 Barcodes = barcodesArr,
                 ProductionDate = part != null ? (GetStr(part.Value, "productionDate") ?? "") : "",

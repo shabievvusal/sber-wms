@@ -42,6 +42,7 @@ public class AppDbContext : DbContext
         ops.Property(o => o.Type).HasColumnName("type");
         ops.Property(o => o.OperationType).HasColumnName("operation_type");
         ops.Property(o => o.ProductName).HasColumnName("product_name");
+        ops.Property(o => o.ProductId).HasColumnName("product_id");
         ops.Property(o => o.NomenclatureCode).HasColumnName("nomenclature_code");
         ops.Property(o => o.Barcodes).HasColumnName("barcodes");
         ops.Property(o => o.ProductionDate).HasColumnName("production_date");

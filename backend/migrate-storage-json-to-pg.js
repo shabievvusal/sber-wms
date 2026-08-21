@@ -34,6 +34,7 @@ async function createSchema() {
       id BIGSERIAL PRIMARY KEY,
       date DATE NOT NULL, hour SMALLINT NOT NULL, merge_key TEXT NOT NULL,
       item_id TEXT, type TEXT, operation_type TEXT, product_name TEXT,
+      product_id TEXT NOT NULL DEFAULT '',
       nomenclature_code TEXT, barcodes TEXT, production_date TEXT,
       best_before_date TEXT, source_barcode TEXT, cell TEXT, target_barcode TEXT,
       started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
@@ -143,6 +144,7 @@ function toLightItem(item) {
     type: item.type || '',
     operationType: item.operationType || '',
     productName: product.name || '',
+    productId: product.productId || '',
     nomenclatureCode: product.nomenclatureCode || '',
     barcodes: (product.barcodes || []).join(', '),
     productionDate: item.part?.productionDate || '',
@@ -192,7 +194,8 @@ async function migrateOpsFile(client, dateStr, hour, filePath) {
   const rows = list.map(item => ({
     date: dateStr, hour, merge_key: getMergeKeyFromLight(item),
     item_id: item.id || '', type: item.type || '', operation_type: item.operationType || '',
-    product_name: item.productName || '', nomenclature_code: item.nomenclatureCode || '',
+    product_name: item.productName || '', product_id: item.productId || '',
+    nomenclature_code: item.nomenclatureCode || '',
     barcodes: item.barcodes || '', production_date: item.productionDate || '',
     best_before_date: item.bestBeforeDate || '', source_barcode: item.sourceBarcode || '',
     cell: item.cell || '', target_barcode: item.targetBarcode || '',
@@ -202,7 +205,7 @@ async function migrateOpsFile(client, dateStr, hour, filePath) {
     quantity: num(item.quantity),
   }));
   await insertBatch(client, 'wms_ops',
-    ['date', 'hour', 'merge_key', 'item_id', 'type', 'operation_type', 'product_name', 'nomenclature_code', 'barcodes', 'production_date', 'best_before_date', 'source_barcode', 'cell', 'target_barcode', 'started_at', 'completed_at', 'executor', 'executor_id', 'src_old', 'src_new', 'tgt_old', 'tgt_new', 'quantity'],
+    ['date', 'hour', 'merge_key', 'item_id', 'type', 'operation_type', 'product_name', 'product_id', 'nomenclature_code', 'barcodes', 'production_date', 'best_before_date', 'source_barcode', 'cell', 'target_barcode', 'started_at', 'completed_at', 'executor', 'executor_id', 'src_old', 'src_new', 'tgt_old', 'tgt_new', 'quantity'],
     ['date', 'hour', 'merge_key'], rows);
   opsCount += rows.length;
 }
@@ -227,7 +230,8 @@ async function migrateLegacyShiftFile(client, filePath) {
       return {
         date: dateStr, hour, merge_key: getMergeKey(item),
         item_id: light.id, type: light.type, operation_type: light.operationType,
-        product_name: light.productName, nomenclature_code: light.nomenclatureCode,
+        product_name: light.productName, product_id: light.productId,
+        nomenclature_code: light.nomenclatureCode,
         barcodes: light.barcodes, production_date: light.productionDate,
         best_before_date: light.bestBeforeDate, source_barcode: light.sourceBarcode,
         cell: light.cell, target_barcode: light.targetBarcode,
@@ -238,7 +242,7 @@ async function migrateLegacyShiftFile(client, filePath) {
       };
     });
     await insertBatch(client, 'wms_ops',
-      ['date', 'hour', 'merge_key', 'item_id', 'type', 'operation_type', 'product_name', 'nomenclature_code', 'barcodes', 'production_date', 'best_before_date', 'source_barcode', 'cell', 'target_barcode', 'started_at', 'completed_at', 'executor', 'executor_id', 'src_old', 'src_new', 'tgt_old', 'tgt_new', 'quantity'],
+      ['date', 'hour', 'merge_key', 'item_id', 'type', 'operation_type', 'product_name', 'product_id', 'nomenclature_code', 'barcodes', 'production_date', 'best_before_date', 'source_barcode', 'cell', 'target_barcode', 'started_at', 'completed_at', 'executor', 'executor_id', 'src_old', 'src_new', 'tgt_old', 'tgt_new', 'quantity'],
       ['date', 'hour', 'merge_key'], rows);
     opsCount += rows.length;
   }

@@ -76,6 +76,9 @@ public class WmsOpEntity
     public string Type { get; set; } = "";
     public string OperationType { get; set; } = "";
     public string ProductName { get; set; } = "";
+    // GUID товара из ответа WMS — ключ для справочника products/by-id
+    // (вес штуки). В расчётах статистики не участвует, копится «на вырост».
+    public string ProductId { get; set; } = "";
     public string NomenclatureCode { get; set; } = "";
     public string Barcodes { get; set; } = "";
     public string ProductionDate { get; set; } = "";
