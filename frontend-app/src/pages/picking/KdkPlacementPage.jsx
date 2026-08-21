@@ -3,7 +3,6 @@ import { toast } from 'sonner'
 import { getStoredToken, getPblZones, getPblGate, getPblTaskByBarcode } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
@@ -29,7 +28,7 @@ async function mapLimit(items, limit, fn) {
 
 const unwrap = data => data?.value ?? data
 
-/** ЕО, стоящие на воротах: receipts[] → handlingUnits[], поставщик и номер поставки — с уровня receipt. */
+/** ЕО, стоящие на воротах: receipts[] → handlingUnits[], поставщик — с уровня receipt. */
 function gateUnits(gateData, zoneName) {
   const gate = unwrap(gateData) || {}
   const units = []
@@ -37,11 +36,8 @@ function gateUnits(gateData, zoneName) {
     for (const unit of receipt.handlingUnits || []) {
       units.push({
         barcode: unit.barcode,
-        cell: unit.cell?.name || '',
         supplier: receipt.supplier?.name || '',
-        inbound: receipt.inboundNumber || '',
         gateName: zoneName || gate.name || '',
-        gateCode: gate.name || '',
       })
     }
   }
@@ -52,41 +48,24 @@ function gateUnits(gateData, zoneName) {
  * Свод задачи раскладки по одной ЕО. Штуки и степы — разные числа: в одной
  * ячейке может лежать больше одной штуки (в разобранных 21.08 задачах —
  * 184 шт на 166 степов), поэтому обе колонки нужны.
+ *
+ * Наименования товара в задаче нет — только productId (UUID), справочника
+ * товаров у страницы пока нет, поэтому «Товар» — это количество разных
+ * товаров в задаче, а не название (решение от 2026-08-21: GUID в таблицу
+ * не выводим).
  */
 function taskSummary(taskData) {
   const task = unwrap(taskData) || {}
   const steps = task.steps || []
   let planned = 0
-  let accepted = 0
   const productIds = new Set()
   for (const step of steps) {
     for (const product of step.pieceProducts || []) {
       planned += Number(product.plannedQuantity) || 0
-      accepted += Number(product.acceptedQuantity) || 0
       if (product.productId) productIds.add(product.productId)
     }
   }
-  return {
-    taskId: task.taskId || null,
-    planned,
-    accepted,
-    steps: steps.length,
-    productIds: [...productIds],
-    readyToComplete: !!task.readyToComplete,
-  }
-}
-
-// Наименования товара в задаче раскладки нет — только productId (UUID), и в
-// детализации ворот его тоже нет. Пока справочник товаров не подключён,
-// показываем короткий префикс UUID (полный — в title), чтобы колонка не врала
-// прочерком там, где товар на самом деле известен системе.
-function productLabel(productIds) {
-  if (!productIds.length) return '—'
-  if (productIds.length === 1) return productIds[0].slice(0, 8)
-  const last = productIds.length % 10
-  const tens = productIds.length % 100
-  const word = tens >= 11 && tens <= 14 ? 'товаров' : last === 1 ? 'товар' : last >= 2 && last <= 4 ? 'товара' : 'товаров'
-  return `${productIds.length} ${word}`
+  return { planned, steps: steps.length, products: productIds.size }
 }
 
 export default function KdkPlacementPage() {
@@ -155,13 +134,13 @@ export default function KdkPlacementPage() {
       let doneUnits = 0
       const result = await mapLimit(units, BATCH, async unit => {
         let summary = null
-        let taskError = null
         try {
           summary = taskSummary(await getPblTaskByBarcode(token, unit.barcode))
-        } catch (err) {
+        } catch {
           // ЕО стоит на воротах, но задачи раскладки по ней нет (или она уже
-          // закрыта) — это нормальное состояние, строку показываем всё равно.
-          taskError = err.message
+          // закрыта) — это нормальное состояние, строку показываем всё равно
+          // с прочерками, а общее число таких ЕО — в сводке над таблицей.
+          summary = null
         } finally {
           doneUnits += 1
           setProgress(`Ворота: ${target.length} / ${target.length} · ЕО: ${doneUnits} / ${units.length}`)
@@ -170,11 +149,8 @@ export default function KdkPlacementPage() {
           key: unit.barcode,
           ...unit,
           planned: summary?.planned ?? null,
-          accepted: summary?.accepted ?? null,
           steps: summary?.steps ?? null,
-          productIds: summary?.productIds ?? [],
-          readyToComplete: summary?.readyToComplete ?? false,
-          taskError,
+          products: summary?.products ?? null,
         }
       })
       setRows(result)
@@ -191,7 +167,7 @@ export default function KdkPlacementPage() {
     const list = rows || []
     const q = search.trim().toLowerCase()
     if (!q) return list
-    return list.filter(row => `${row.barcode} ${row.supplier} ${row.inbound} ${row.gateName}`.toLowerCase().includes(q))
+    return list.filter(row => `${row.barcode} ${row.supplier} ${row.gateName}`.toLowerCase().includes(q))
   }, [rows, search])
 
   const sorted = useMemo(() => {
@@ -206,13 +182,21 @@ export default function KdkPlacementPage() {
   const totals = useMemo(() => sorted.reduce((acc, row) => ({
     planned: acc.planned + (row.planned || 0),
     steps: acc.steps + (row.steps || 0),
-  }), { planned: 0, steps: 0 }), [sorted])
+    noTask: acc.noTask + (row.steps === null ? 1 : 0),
+  }), { planned: 0, steps: 0, noTask: 0 }), [sorted])
+
+  // Колонки «Статус» нет (задача на воротах всегда в работе), поэтому ЕО без
+  // задачи считаем здесь — иначе они бы молча уехали в строки с прочерками.
+  const summaryLine = rows
+    ? `ЕО: ${fmtNum(sorted.length)} · ${fmtNum(totals.planned)} шт · ${fmtNum(totals.steps)} степов`
+      + (totals.noTask ? ` · без задачи: ${fmtNum(totals.noTask)}` : '')
+    : 'Данные не загружены'
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">Раскладка КДК</h1>
-        <p className="text-sm text-muted-foreground">Задачи раскладки по ЕО, стоящим на воротах: товар, штуки и степы</p>
+        <p className="text-sm text-muted-foreground">Задачи раскладки по ЕО, стоящим на воротах: штуки и степы</p>
       </div>
 
       {error && (
@@ -228,12 +212,12 @@ export default function KdkPlacementPage() {
             <option key={zone.gateId} value={zone.gateId}>{zone.name} ({fmtNum(zone.handlingUnitsCount)} ЕО)</option>
           ))}
         </select>
-        <Input className="w-56" placeholder="ЕО, поставщик, поставка" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input className="w-56" placeholder="ЕО, поставщик, ворота" value={search} onChange={e => setSearch(e.target.value)} />
         <Button onClick={load} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}
         </Button>
         <span className="ml-auto text-sm text-muted-foreground">
-          {loading && progress ? progress : rows ? `ЕО: ${fmtNum(sorted.length)} · ${fmtNum(totals.planned)} шт · ${fmtNum(totals.steps)} степов` : 'Данные не загружены'}
+          {loading && progress ? progress : summaryLine}
         </span>
       </div>
 
@@ -248,21 +232,14 @@ export default function KdkPlacementPage() {
                 <div key={row.key} className="space-y-1.5 p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-xs font-medium">{row.barcode}</span>
-                    <Badge variant={row.taskError ? 'secondary' : row.readyToComplete ? 'success' : 'info'}>
-                      {row.taskError ? 'Нет задачи' : row.readyToComplete ? 'Готова к закрытию' : 'В работе'}
-                    </Badge>
+                    <span className="text-xs text-muted-foreground">{row.gateName}</span>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                    <span>{row.gateName}</span>
+                    <span>Товар: <span className="font-medium text-foreground">{fmtNum(row.products)}</span></span>
                     <span>Штук: <span className="font-medium text-foreground">{fmtNum(row.planned)}</span></span>
                     <span>Степов: <span className="font-medium text-foreground">{fmtNum(row.steps)}</span></span>
-                    <span>Разложено: <span className="font-medium text-foreground">{fmtNum(row.accepted)}</span></span>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span title={row.productIds.join(', ')}>Товар: {productLabel(row.productIds)}</span>
-                    <span>Поставщик: {row.supplier || '—'}</span>
-                    <span>Поставка: {row.inbound || '—'}</span>
-                  </div>
+                  <div className="text-xs text-muted-foreground">Поставщик: {row.supplier || '—'}</div>
                 </div>
               ))}
               {!sorted.length && <div className="p-6 text-center text-sm text-muted-foreground">Нет данных</div>}
@@ -275,13 +252,10 @@ export default function KdkPlacementPage() {
                   <TableRow>
                     <SortableHead label="Ворота" sortKey="gate" sort={sort} onSort={toggleSort} />
                     <TableHead>ЕО</TableHead>
-                    <TableHead>Товар</TableHead>
+                    <SortableHead label="Товар" sortKey="products" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Штук" sortKey="planned" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Степов" sortKey="steps" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Разложено" sortKey="accepted" sort={sort} onSort={toggleSort} className="text-right" />
                     <TableHead>Поставщик</TableHead>
-                    <TableHead>Поставка</TableHead>
-                    <TableHead>Статус</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -289,21 +263,14 @@ export default function KdkPlacementPage() {
                     <TableRow key={row.key}>
                       <TableCell>{row.gateName}</TableCell>
                       <TableCell className="font-mono text-xs">{row.barcode}</TableCell>
-                      <TableCell title={row.productIds.join(', ')}>{productLabel(row.productIds)}</TableCell>
+                      <TableCell className="text-right">{fmtNum(row.products)}</TableCell>
                       <TableCell className="text-right">{fmtNum(row.planned)}</TableCell>
                       <TableCell className="text-right">{fmtNum(row.steps)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.accepted)}</TableCell>
                       <TableCell>{row.supplier || '—'}</TableCell>
-                      <TableCell>{row.inbound || '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant={row.taskError ? 'secondary' : row.readyToComplete ? 'success' : 'info'}>
-                          {row.taskError ? 'Нет задачи' : row.readyToComplete ? 'Готова к закрытию' : 'В работе'}
-                        </Badge>
-                      </TableCell>
                     </TableRow>
                   ))}
                   {!sorted.length && (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
