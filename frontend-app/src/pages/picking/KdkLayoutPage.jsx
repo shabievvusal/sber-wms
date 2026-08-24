@@ -16,22 +16,12 @@ const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text
 
 const BATCH = 5
 
-function assignmentsToMap(list) {
-  const map = {}
-  for (const rec of list || []) {
-    if (!rec.executorId) continue
-    if (!map[rec.executorId]) map[rec.executorId] = []
-    map[rec.executorId].push(rec)
-  }
-  return map
-}
-
 function localDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
 // Порт parseKdkRows/parsePieceRows оригинала — компанию тут не резолвим (в
-// отличие от оригинала, где это делается сразу по ФИО-фоллбэку): rowsWithTsd
+// отличие от оригинала, где это делается сразу по ФИО-фоллбэку): rowsEnriched
 // ниже уже резолвит company по executorId для строк из любого источника.
 //
 // Структура записи КДК подтверждена реальным ответом монитора (24.08.2026):
@@ -80,15 +70,18 @@ function parsePieceRows(items) {
 // давно не было ни одного пика. Есть настоящий WMS-токен → реальные
 // getLiveMonitorViaBrowser/getPieceSelectionTasks/fetchLastKdkCompletedForExecutor
 // (прямые браузерные вызовы в WMS); без токена — честная ошибка. Единственный
-// same-origin вызов оригинала (getTsdAssignments) — реальный `api.getTsdAssignments()`,
-// тот же, что и у TsdIssuePage (это не WMS-вызов, отдельная ось «токен/нет»).
+// same-origin вызов — `api.getEmployees()`, он же даёт компанию исполнителя.
+//
+// Выдача ТСД со страницы убрана (решение от 2026-08-24): не стало ни колонки
+// с номерами, ни статуса «сдал/не сдал», ни фильтра по нему — а вместе с ними
+// и запроса `api.getTsdAssignments()`, который их питал. Кому нужна выдача —
+// есть отдельный раздел «Выдача ТСД».
 //
 // Связка исполнитель→компания — по executorId, без FIO-fallback
 // (normalizeFio/getCompanyByFio оригинала не перенесены — тот же принцип,
 // что и в MonitorPage, решение от 2026-07-12: «fallback только по executorId»).
 export default function KdkLayoutPage() {
   const [rows, setRows] = useState([])
-  const [assignments, setAssignments] = useState({})
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -107,12 +100,8 @@ export default function KdkLayoutPage() {
     setError('')
     const token = getStoredToken()
     try {
-      const [{ employees: emplList }, { assignments: activeAssignments }] = await Promise.all([
-        api.getEmployees(),
-        api.getTsdAssignments(),
-      ])
+      const { employees: emplList } = await api.getEmployees()
       setEmployees((emplList || []).filter(e => e.executorId))
-      setAssignments(assignmentsToMap(activeAssignments))
 
       if (!token) {
         setRows([])
@@ -170,26 +159,24 @@ export default function KdkLayoutPage() {
     return map
   }, [employees])
 
-  const rowsWithTsd = useMemo(() => rows.map(row => {
-    const activeList = row.executorId ? assignments[row.executorId] || [] : []
+  const rowsEnriched = useMemo(() => rows.map(row => {
     const idleMs = row.lastActionAt ? Date.now() - new Date(row.lastActionAt).getTime() : null
     return {
       ...row,
       company: (row.executorId && companyByExecutorId.get(row.executorId)) || '—',
-      tsd: activeList.map(rec => rec.tsd).filter(Boolean).join(', '),
       idle: idleMs == null ? false : idleMs > IDLE_LIMIT_MS,
     }
-  }), [assignments, companyByExecutorId, rows])
+  }), [companyByExecutorId, rows])
 
-  const operations = useMemo(() => [...new Set(rowsWithTsd.map(r => r.operation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru')), [rowsWithTsd])
+  const operations = useMemo(() => [...new Set(rowsEnriched.map(r => r.operation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru')), [rowsEnriched])
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return rowsWithTsd
+    return rowsEnriched
       .filter(row => !operationFilter || row.operation === operationFilter)
       .filter(row => !idleFilter || (idleFilter === 'idle' ? row.idle : !row.idle))
-      .filter(row => !q || `${row.operation} ${row.company} ${row.executor} ${row.tsd} ${row.task}`.toLowerCase().includes(q))
-  }, [idleFilter, operationFilter, query, rowsWithTsd])
+      .filter(row => !q || `${row.operation} ${row.company} ${row.executor} ${row.task}`.toLowerCase().includes(q))
+  }, [idleFilter, operationFilter, query, rowsEnriched])
 
   const sorted = useMemo(() => {
     const direction = sort.dir === 'asc' ? 1 : -1
@@ -235,7 +222,7 @@ export default function KdkLayoutPage() {
           <option value="idle">Больше 5 минут</option>
           <option value="active">До 5 минут</option>
         </select>
-        <Input className="w-56" placeholder="Исполнитель, ТСД, ЕО" value={query} onChange={e => setQuery(e.target.value)} />
+        <Input className="w-56" placeholder="Исполнитель, ЕО" value={query} onChange={e => setQuery(e.target.value)} />
         <span className="ml-auto text-sm text-muted-foreground">{lastUpdated ? `Обновлено: ${formatTime(lastUpdated)}` : 'Данные не загружены'}</span>
       </div>
 
@@ -254,7 +241,6 @@ export default function KdkLayoutPage() {
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span>{row.operation}</span>
                     <span>{row.company}</span>
-                    <span>ТСД: {row.tsd || '—'}</span>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                     <span>Задача: <span className="text-foreground">{row.task || '—'}</span></span>
@@ -278,7 +264,6 @@ export default function KdkLayoutPage() {
                     <SortableHead label="Операция" sortKey="operation" sort={sort} onSort={toggleSort} />
                     <SortableHead label="Компания" sortKey="company" sort={sort} onSort={toggleSort} />
                     <SortableHead label="Исполнитель" sortKey="executor" sort={sort} onSort={toggleSort} />
-                    <TableHead>ТСД</TableHead>
                     <TableHead>Задача / ЕО</TableHead>
                     <SortableHead label="Остаток" sortKey="pieces" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Последнее действие" sortKey="lastActionAt" sort={sort} onSort={toggleSort} />
@@ -291,7 +276,6 @@ export default function KdkLayoutPage() {
                       <TableCell>{row.operation}</TableCell>
                       <TableCell>{row.company}</TableCell>
                       <TableCell title={row.executor}>{shortFio(row.executor)}</TableCell>
-                      <TableCell>{row.tsd || '—'}</TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
                       <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
@@ -299,7 +283,7 @@ export default function KdkLayoutPage() {
                     </TableRow>
                   ))}
                   {!sorted.length && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
