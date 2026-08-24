@@ -143,7 +143,13 @@ export async function getPieceSelectionTasks(token, {
 
 const PBL_ZONES_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
 const PBL_TASK_BY_BARCODE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks/by-handling-unit-barcode'
-const PDT_PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-pdt/inbound/products/by-id'
+// Терминал зовёт этот справочник по адресу wmsin-PDT, но оттуда браузером его
+// не достать: на wmsin-pdt шлюз отвечает на preflight 403 БЕЗ
+// access-control-allow-origin (проверено 2026-08-24 — для любого Origin, это
+// эндпоинт только для приложения ТСД). У веб-сервиса wmsin-WWH тот же путь
+// существует (preflight 200 с нашим Origin, тогда как несуществующий путь под
+// wmsin-wwh даёт 403) и CORS разрешает — берём его.
+const PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-wwh/inbound/products/by-id'
 
 /** Список зон-ворот КДК с количеством стоящих на них ЕО. */
 export async function getPblZones(token) {
@@ -162,10 +168,10 @@ export async function getPblTaskByBarcode(token, barcode) {
 
 // Справочник товаров по списку productId — в задаче раскладки лежит только
 // UUID товара, а название и вес штуки (`weightInGrams`) берутся отсюда.
-// Единственный запрос раздела на другой хост (api.samokat.ru/wmsin-pdt, а не
-// api-p01/wmsout-pdt) и единственный POST — так его делает сам терминал.
-export async function getPdtProductsById(token, productIds) {
-  return samokatPost(token, PDT_PRODUCTS_BY_ID_URL, { productIds })
+// Единственный запрос раздела на другой хост (api.samokat.ru, а не api-p01)
+// и единственный POST.
+export async function getProductsById(token, productIds) {
+  return samokatPost(token, PRODUCTS_BY_ID_URL, { productIds })
 }
 
 // «Пропуски в отборе» (PickingGapsPage.jsx) — список заказов на отгрузку

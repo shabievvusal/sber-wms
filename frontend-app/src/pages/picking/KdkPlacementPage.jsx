@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { getStoredToken, getPblZones, getPblGate, getPblTaskByBarcode, getPdtProductsById } from '@/lib/wmsFetch'
+import { getStoredToken, getPblZones, getPblGate, getPblTaskByBarcode, getProductsById } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
@@ -174,7 +174,7 @@ export default function KdkPlacementPage() {
         const chunk = productIds.slice(i, i + PRODUCT_CHUNK)
         setProgress(`${gatesDone} · Товары: ${i} / ${productIds.length}`)
         try {
-          const data = unwrap(await getPdtProductsById(token, chunk))
+          const data = unwrap(await getProductsById(token, chunk))
           for (const product of data?.products || []) catalog.set(product.productId, product)
         } catch (err) {
           toast.error('Справочник товаров: ' + err.message)
