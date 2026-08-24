@@ -68,6 +68,20 @@ export function selectedOrAll(selected, options, valueKey) {
   return selected ? [selected] : options.map(option => option[valueKey])
 }
 
+/**
+ * Обход списка запросами по `limit` штук за раз. Страницы раздела делают по
+ * запросу на каждую ЕО (их на складе полторы сотни), а Promise.all по всему
+ * списку сразу — это залп в WMS; здесь тот же размер пачки, что у
+ * fetchRkFromWms при загрузке деталей маршрутов.
+ */
+export async function mapLimit(items, limit, fn) {
+  const out = []
+  for (let i = 0; i < items.length; i += limit) {
+    out.push(...await Promise.all(items.slice(i, i + limit).map(fn)))
+  }
+  return out
+}
+
 // Границы дня в МСК (+03:00) для WMS-запросов (dateFrom/dateTo) — реальные
 // браузерные вызовы в api.samokat.ru используют именно этот формат.
 export function dateToApiFrom(date) {

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import * as api from '@/lib/api'
-import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor } from '@/lib/wmsFetch'
+import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor, getPblTaskByBarcode } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -10,10 +10,19 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { IDLE_LIMIT_MS, ZONE_OPTIONS, TEMP_OPTIONS } from './constants'
-import { fmtAgo, fmtNum, formatTime, shortFio, userName, dateToApiFrom, dateToApiTo } from './format'
+import { fmtAgo, fmtNum, formatTime, shortFio, userName, dateToApiFrom, dateToApiTo, mapLimit } from './format'
+import { summarizePblTask } from './pblTask'
 import { RefreshCw } from 'lucide-react'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
+
+const BATCH = 5
+
+/** «40 / 166» — сколько степов осталось из скольких всего. */
+function stepsLabel(row) {
+  if (row.stepsTotal == null) return '—'
+  return `${fmtNum(row.stepsLeft)} / ${fmtNum(row.stepsTotal)}`
+}
 
 function assignmentsToMap(list) {
   const map = {}
@@ -29,36 +38,35 @@ function localDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-function getByPath(obj, path) {
-  return path.split('.').reduce((cur, key) => cur?.[key], obj)
-}
-
-function firstValue(obj, paths) {
-  for (const path of paths) {
-    const value = getByPath(obj, path)
-    if (value !== undefined && value !== null && value !== '') return value
-  }
-  return null
-}
-
 // Порт parseKdkRows/parsePieceRows оригинала — компанию тут не резолвим (в
 // отличие от оригинала, где это делается сразу по ФИО-фоллбэку): rowsWithTsd
 // ниже уже резолвит company по executorId для строк из любого источника.
+//
+// Структура записи КДК подтверждена реальным ответом монитора (24.08.2026):
+// это ровно четыре поля — `id`, `handlingUnitBarcode`, `startedAt`, `user`.
+// Раньше здесь перебирались десять возможных имён полей (taskNumber/taskId/
+// itemsLeft/quantity/…) — НИ ОДНОГО из них в ответе нет, перебор всегда
+// доходил до `handlingUnitBarcode` и отдавал остаток `null`. Убрано: гадание
+// маскировало то, что остаток штук приходит вообще из другого запроса
+// (fetchLastKdkCompletedForExecutor ниже).
 function parseKdkRows(data) {
   const value = data?.value || data || {}
   const entries = value.pickByLineHandlingUnitsInProgress || []
   return entries.map((entry, index) => {
-    const user = entry.user || entry.responsibleUser || entry.executor || {}
-    const executor = userName(user) !== '—' ? userName(user) : (entry.executorName || entry.userName || '—')
-    const executorId = user.id || entry.executorId || entry.userId || ''
-    const task = firstValue(entry, [
-      'taskNumber', 'taskId', 'selectionTaskNumber', 'handlingUnitBarcode',
-      'targetHandlingUnitBarcode', 'sourceHandlingUnitBarcode', 'id',
-    ]) || `КДК-${index + 1}`
-    const pieces = firstValue(entry, [
-      'itemsLeft', 'piecesLeft', 'quantityLeft', 'restQuantity', 'productsQuantity', 'itemsQuantity', 'quantity',
-    ])
-    return { key: `kdk-${executorId || executor}-${task}-${index}`, operation: 'КДК', executor, executorId, task, pieces, lastActionAt: null }
+    const user = entry.user || {}
+    return {
+      key: `kdk-${entry.id || index}`,
+      operation: 'КДК',
+      executor: userName(user),
+      executorId: user.id || '',
+      task: entry.handlingUnitBarcode || '—',
+      barcode: entry.handlingUnitBarcode || '',
+      pieces: null,
+      lastActionAt: null,
+      stepsTotal: null,
+      stepsDone: null,
+      stepsLeft: null,
+    }
   })
 }
 
@@ -67,7 +75,20 @@ function parsePieceRows(items) {
     const executor = userName(row.responsibleUser)
     const executorId = row.responsibleUser?.id || ''
     const task = row.targetHandlingUnitBarcode || row.id || `ШО-${index + 1}`
-    return { key: `piece-${row.id || task}-${index}`, operation: 'Штучный отбор', executor, executorId, task, pieces: null, lastActionAt: row.updatedAt || row.createdAt || null }
+    return {
+      key: `piece-${row.id || task}-${index}`,
+      operation: 'Штучный отбор',
+      executor,
+      executorId,
+      task,
+      barcode: '',
+      pieces: null,
+      lastActionAt: row.updatedAt || row.createdAt || null,
+      // Степы есть только у КДК: у штучного отбора нет задачи раскладки.
+      stepsTotal: null,
+      stepsDone: null,
+      stepsLeft: null,
+    }
   })
 }
 
@@ -132,18 +153,28 @@ export default function KdkLayoutPage() {
           pageSize: 500,
         }),
       ])
-      const kdkBaseRows = parseKdkRows(live)
-      const kdkRows = await Promise.all(kdkBaseRows.map(async row => {
-        if (!row.executorId) return row
-        try {
-          const res = await fetchLastKdkCompletedForExecutor(token, row.executorId)
-          return {
-            ...row,
-            pieces: res.remainingPieces ?? row.pieces,
-            lastActionAt: res.maxCompletedAt ? new Date(res.maxCompletedAt).toISOString() : null,
-          }
-        } catch { return row }
-      }))
+      // На каждую строку КДК — два запроса: остаток штук на паллете (по
+      // исполнителю) и сама задача раскладки (по ШК ЕО, оттуда степы).
+      // Пачками, а не Promise.all по всему списку: на смене это под три
+      // десятка строк, то есть полсотни одновременных запросов в WMS.
+      const kdkRows = await mapLimit(parseKdkRows(live), BATCH, async row => {
+        const [lastPick, task] = await Promise.all([
+          row.executorId
+            ? fetchLastKdkCompletedForExecutor(token, row.executorId).catch(() => null)
+            : null,
+          row.barcode
+            ? getPblTaskByBarcode(token, row.barcode).then(summarizePblTask).catch(() => null)
+            : null,
+        ])
+        return {
+          ...row,
+          pieces: lastPick?.remainingPieces ?? row.pieces,
+          lastActionAt: lastPick?.maxCompletedAt ? new Date(lastPick.maxCompletedAt).toISOString() : null,
+          stepsTotal: task?.stepsTotal ?? null,
+          stepsDone: task?.stepsDone ?? null,
+          stepsLeft: task?.stepsLeft ?? null,
+        }
+      })
       const pieceItems = (piece?.value ?? piece)?.items ?? []
       setRows([...kdkRows, ...parsePieceRows(pieceItems)])
       setLastUpdated(new Date().toISOString())
@@ -194,6 +225,8 @@ export default function KdkLayoutPage() {
         const aValue = Number.isFinite(Number(a.pieces)) ? Number(a.pieces) : -1
         const bValue = Number.isFinite(Number(b.pieces)) ? Number(b.pieces) : -1
         diff = aValue - bValue
+      } else if (sort.key === 'stepsLeft') {
+        diff = (a.stepsLeft ?? -1) - (b.stepsLeft ?? -1)
       } else if (sort.key === 'lastActionAt') {
         diff = (a.lastActionAt ? new Date(a.lastActionAt).getTime() : 0) - (b.lastActionAt ? new Date(b.lastActionAt).getTime() : 0)
       }
@@ -257,6 +290,7 @@ export default function KdkLayoutPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                     <span>Задача: <span className="text-foreground">{row.task || '—'}</span></span>
                     <span>Остаток: <span className="text-foreground">{row.pieces == null ? '—' : fmtNum(row.pieces)}</span></span>
+                    <span>Степов: <span className="text-foreground">{stepsLabel(row)}</span></span>
                   </div>
                   {row.lastActionAt && (
                     <div className={cn('text-xs', row.idle ? 'font-semibold text-warning-foreground' : 'text-muted-foreground')}>
@@ -280,6 +314,7 @@ export default function KdkLayoutPage() {
                     <TableHead>Статус ТСД</TableHead>
                     <TableHead>Задача / ЕО</TableHead>
                     <SortableHead label="Остаток" sortKey="pieces" sort={sort} onSort={toggleSort} className="text-right" />
+                    <SortableHead label="Осталось степов" sortKey="stepsLeft" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Последнее действие" sortKey="lastActionAt" sort={sort} onSort={toggleSort} />
                     <TableHead>Простой</TableHead>
                   </TableRow>
@@ -294,12 +329,15 @@ export default function KdkLayoutPage() {
                       <TableCell><Badge variant={row.tsd ? 'warning' : 'success'}>{row.tsdStatus}</Badge></TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
                       <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
+                      <TableCell className="text-right" title={row.stepsTotal == null ? '' : `Разложено ${fmtNum(row.stepsDone)} из ${fmtNum(row.stepsTotal)}`}>
+                        {stepsLabel(row)}
+                      </TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
                     </TableRow>
                   ))}
                   {!sorted.length && (
-                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

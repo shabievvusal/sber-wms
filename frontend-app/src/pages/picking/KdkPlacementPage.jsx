@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
-import { fmtNum, fmtKg } from './format'
+import { fmtNum, fmtKg, mapLimit } from './format'
+import { unwrapValue, summarizePblTask } from './pblTask'
 import { RefreshCw } from 'lucide-react'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
@@ -24,19 +25,9 @@ const BATCH = 5
 // всю выборку сразу.
 const PRODUCT_CHUNK = 25
 
-async function mapLimit(items, limit, fn) {
-  const out = []
-  for (let i = 0; i < items.length; i += limit) {
-    out.push(...await Promise.all(items.slice(i, i + limit).map(fn)))
-  }
-  return out
-}
-
-const unwrap = data => data?.value ?? data
-
 /** ЕО, стоящие на воротах: receipts[] → handlingUnits[], поставщик — с уровня receipt. */
 function gateUnits(gateData, zoneName) {
-  const gate = unwrap(gateData) || {}
+  const gate = unwrapValue(gateData) || {}
   const units = []
   for (const receipt of gate.receipts || []) {
     for (const unit of receipt.handlingUnits || []) {
@@ -48,27 +39,6 @@ function gateUnits(gateData, zoneName) {
     }
   }
   return units
-}
-
-/**
- * Свод задачи раскладки по одной ЕО. Штуки и степы — разные числа: в одной
- * ячейке может лежать больше одной штуки (в разобранных 21.08 задачах —
- * 184 шт на 166 степов), поэтому обе колонки нужны. Количество копится в
- * разрезе productId — из него потом считается вес по справочнику товаров.
- */
-function taskSummary(taskData) {
-  const task = unwrap(taskData) || {}
-  const steps = task.steps || []
-  let planned = 0
-  const qtyByProduct = new Map()
-  for (const step of steps) {
-    for (const product of step.pieceProducts || []) {
-      const qty = Number(product.plannedQuantity) || 0
-      planned += qty
-      if (product.productId) qtyByProduct.set(product.productId, (qtyByProduct.get(product.productId) || 0) + qty)
-    }
-  }
-  return { planned, steps: steps.length, qtyByProduct: [...qtyByProduct] }
 }
 
 /** Название товара в строке: одно — как есть, несколько — первое и счётчик остальных (полный список в подсказке). */
@@ -102,7 +72,7 @@ export default function KdkPlacementPage() {
       return
     }
     getPblZones(token)
-      .then(data => setZones(unwrap(data)?.zones || []))
+      .then(data => setZones(unwrapValue(data)?.zones || []))
       .catch(err => setError('Не удалось загрузить ворота: ' + err.message))
   }, [])
 
@@ -117,7 +87,7 @@ export default function KdkPlacementPage() {
     setError('')
     setProgress('')
     try {
-      const fresh = unwrap(await getPblZones(token))?.zones || []
+      const fresh = unwrapValue(await getPblZones(token))?.zones || []
       setZones(fresh)
       const target = gateId ? fresh.filter(z => z.gateId === gateId) : fresh
       if (!target.length) {
@@ -146,7 +116,7 @@ export default function KdkPlacementPage() {
       const base = await mapLimit(units, BATCH, async unit => {
         let summary = null
         try {
-          summary = taskSummary(await getPblTaskByBarcode(token, unit.barcode))
+          summary = summarizePblTask(await getPblTaskByBarcode(token, unit.barcode))
         } catch {
           // ЕО стоит на воротах, но задачи раскладки по ней нет (или она уже
           // закрыта) — это нормальное состояние, строку показываем всё равно
@@ -174,7 +144,7 @@ export default function KdkPlacementPage() {
         const chunk = productIds.slice(i, i + PRODUCT_CHUNK)
         setProgress(`${gatesDone} · Товары: ${i} / ${productIds.length}`)
         try {
-          const data = unwrap(await getProductsById(token, chunk))
+          const data = unwrapValue(await getProductsById(token, chunk))
           for (const product of data?.products || []) catalog.set(product.productId, product)
         } catch (err) {
           toast.error('Справочник товаров: ' + err.message)
