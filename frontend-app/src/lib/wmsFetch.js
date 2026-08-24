@@ -142,7 +142,8 @@ export async function getPieceSelectionTasks(token, {
 // как и на уже работающих `wmsout-wwh` вызовах.
 
 const PBL_ZONES_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
-const PBL_TASK_BY_BARCODE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks/by-handling-unit-barcode'
+const PBL_TASKS_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks'
+const PBL_TASK_BY_BARCODE_URL = `${PBL_TASKS_URL}/by-handling-unit-barcode`
 const PRODUCTS_BY_ID_PROXY_URL = '/api/wms/products-by-id'
 
 /** Список зон-ворот КДК с количеством стоящих на них ЕО. */
@@ -155,9 +156,25 @@ export async function getPblGate(token, gateId) {
   return wmsGet(`${PBL_ZONES_URL}/gates/${encodeURIComponent(gateId)}`, token)
 }
 
-/** Задача раскладки по ШК ЕО — шаги (ячейки) и товар с плановым/принятым количеством. */
+/**
+ * Задача раскладки по ШК ЕО — шаги (ячейки) и товар с плановым/принятым
+ * количеством. Отдаёт задачу, только пока её никто не взял: на взятую в
+ * работу отвечает PBL_WRONG_TASK_STATUS (проверено 24.08.2026).
+ */
 export async function getPblTaskByBarcode(token, barcode) {
   return wmsGet(`${PBL_TASK_BY_BARCODE_URL}/${encodeURIComponent(barcode)}`, token)
+}
+
+/**
+ * Задача раскладки по её id — ПРОВЕРЯЕМАЯ ДОГАДКА, а не подтверждённый
+ * эндпоинт: точного адреса для задачи В РАБОТЕ мы не видели, а по ШК такая
+ * задача не отдаётся. Предположение — что `id` записи из монитора
+ * (activity-monitor/.../handling-units-in-progress) и есть id задачи.
+ * Если догадка неверна, вызов просто вернёт ошибку, а «Зависшие задачи»
+ * покажут прочерк с текстом ошибки в подсказке.
+ */
+export async function getPblTaskById(token, taskId) {
+  return wmsGet(`${PBL_TASKS_URL}/${encodeURIComponent(taskId)}`, token)
 }
 
 // Справочник товаров по списку productId — в задаче раскладки лежит только

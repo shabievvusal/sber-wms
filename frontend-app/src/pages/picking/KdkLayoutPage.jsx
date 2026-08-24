@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import * as api from '@/lib/api'
-import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor, getPblTaskByBarcode } from '@/lib/wmsFetch'
+import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor, getPblTaskById } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -18,10 +18,17 @@ const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text
 
 const BATCH = 5
 
-/** «40 / 166» — сколько степов осталось из скольких всего. */
+/** «126 / 166» — осталось степов из скольких всего. */
 function stepsLabel(row) {
   if (row.stepsTotal == null) return '—'
   return `${fmtNum(row.stepsLeft)} / ${fmtNum(row.stepsTotal)}`
+}
+
+/** Подсказка к ячейке степов: разбор задачи или причина, по которой его нет. */
+function stepsTitle(row) {
+  if (row.stepsTotal != null) return `Разложено ${fmtNum(row.stepsDone)} из ${fmtNum(row.stepsTotal)}`
+  if (row.stepsError) return `Задача не получена: ${row.stepsError}`
+  return ''
 }
 
 function assignmentsToMap(list) {
@@ -60,12 +67,13 @@ function parseKdkRows(data) {
       executor: userName(user),
       executorId: user.id || '',
       task: entry.handlingUnitBarcode || '—',
-      barcode: entry.handlingUnitBarcode || '',
+      taskId: entry.id || '',
       pieces: null,
       lastActionAt: null,
       stepsTotal: null,
       stepsDone: null,
       stepsLeft: null,
+      stepsError: '',
     }
   })
 }
@@ -81,13 +89,14 @@ function parsePieceRows(items) {
       executor,
       executorId,
       task,
-      barcode: '',
+      taskId: '',
       pieces: null,
       lastActionAt: row.updatedAt || row.createdAt || null,
       // Степы есть только у КДК: у штучного отбора нет задачи раскладки.
       stepsTotal: null,
       stepsDone: null,
       stepsLeft: null,
+      stepsError: '',
     }
   })
 }
@@ -153,17 +162,22 @@ export default function KdkLayoutPage() {
           pageSize: 500,
         }),
       ])
-      // На каждую строку КДК — два запроса: остаток штук на паллете (по
-      // исполнителю) и сама задача раскладки (по ШК ЕО, оттуда степы).
-      // Пачками, а не Promise.all по всему списку: на смене это под три
-      // десятка строк, то есть полсотни одновременных запросов в WMS.
+      // На строку КДК — два запроса: остаток штук на паллете (по исполнителю)
+      // и сама задача раскладки, откуда берутся степы.
+      //
+      // Задачу тут приходится просить ПО ID, а не по ШК ЕО: по ШК WMS отдаёт
+      // только нетронутые задачи, а на взятую в работу отвечает
+      // PBL_WRONG_TASK_STATUS (проверено 24.08.2026) — здесь же все строки в
+      // работе по определению. Что id записи монитора == id задачи — пока
+      // догадка (см. getPblTaskById); если она неверна, колонка «Осталось
+      // степов» покажет прочерк, а причину — подсказкой при наведении.
       const kdkRows = await mapLimit(parseKdkRows(live), BATCH, async row => {
         const [lastPick, task] = await Promise.all([
           row.executorId
             ? fetchLastKdkCompletedForExecutor(token, row.executorId).catch(() => null)
             : null,
-          row.barcode
-            ? getPblTaskByBarcode(token, row.barcode).then(summarizePblTask).catch(() => null)
+          row.taskId
+            ? getPblTaskById(token, row.taskId).then(summarizePblTask).catch(err => ({ error: err.message }))
             : null,
         ])
         return {
@@ -173,6 +187,7 @@ export default function KdkLayoutPage() {
           stepsTotal: task?.stepsTotal ?? null,
           stepsDone: task?.stepsDone ?? null,
           stepsLeft: task?.stepsLeft ?? null,
+          stepsError: task?.error || '',
         }
       })
       const pieceItems = (piece?.value ?? piece)?.items ?? []
@@ -290,7 +305,7 @@ export default function KdkLayoutPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                     <span>Задача: <span className="text-foreground">{row.task || '—'}</span></span>
                     <span>Остаток: <span className="text-foreground">{row.pieces == null ? '—' : fmtNum(row.pieces)}</span></span>
-                    <span>Степов: <span className="text-foreground">{stepsLabel(row)}</span></span>
+                    <span title={stepsTitle(row)}>Степов: <span className="text-foreground">{stepsLabel(row)}</span></span>
                   </div>
                   {row.lastActionAt && (
                     <div className={cn('text-xs', row.idle ? 'font-semibold text-warning-foreground' : 'text-muted-foreground')}>
@@ -329,9 +344,7 @@ export default function KdkLayoutPage() {
                       <TableCell><Badge variant={row.tsd ? 'warning' : 'success'}>{row.tsdStatus}</Badge></TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
                       <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
-                      <TableCell className="text-right" title={row.stepsTotal == null ? '' : `Разложено ${fmtNum(row.stepsDone)} из ${fmtNum(row.stepsTotal)}`}>
-                        {stepsLabel(row)}
-                      </TableCell>
+                      <TableCell className="text-right" title={stepsTitle(row)}>{stepsLabel(row)}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
                     </TableRow>
