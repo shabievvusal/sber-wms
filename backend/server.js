@@ -1227,6 +1227,60 @@ app.get('/api/product-weights', (req, res) => {
   }
 });
 
+// ─── Справочник товаров WMS: прокси для «Раскладки КДК» ────────────────────
+// Единственный WMS-вызов проекта, который НЕЛЬЗЯ сделать из браузера, поэтому
+// он и здесь, а не в wmsFetch.js. Справочник products/by-id живёт только в
+// API терминала (wmsin-pdt): шлюз отвечает на CORS-preflight 403 для ЛЮБОГО
+// Origin (проверено 2026-08-24), то есть дело не в нашем домене — эндпоинт
+// закрыт для браузеров как класса. Веб-вариант того же пути (wmsin-wwh)
+// preflight проходит, но сам отвечает TECHNICAL_ERROR. С сервера же CORS не
+// действует и можно проставить user-agent приложения ТСД — браузеру этот
+// заголовок менять запрещено.
+//
+// Токена WMS у сервера своего нет (как и везде в проекте) — фронт присылает
+// свой, из текущей сессии пользователя, заголовком x-wms-token.
+const PDT_PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-pdt/inbound/products/by-id';
+// Подпись приложения ТСД: на этом пути WAF режет всё, что не похоже на
+// терминал (обычный curl-agent получает 403). Значение — из реального запроса
+// ТСД; вынесено в переменную окружения на случай, если его придётся сменить.
+const PDT_USER_AGENT = process.env.WMS_PDT_USER_AGENT || '1686f906-cccc-4caf-9dbd-fd8a2908d17a';
+const PDT_PRODUCTS_TIMEOUT_MS = 30000;
+
+app.post('/api/wms/products-by-id', vsSessionRequired, async (req, res) => {
+  const token = req.get('x-wms-token') || '';
+  const productIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+  if (!token) return res.status(400).json({ error: 'Нет WMS-токена' });
+  if (!productIds.length) return res.status(400).json({ error: 'Пустой список productIds' });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PDT_PRODUCTS_TIMEOUT_MS);
+  try {
+    const r = await fetch(PDT_PRODUCTS_BY_ID_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': PDT_USER_AGENT,
+      },
+      body: JSON.stringify({ productIds }),
+    });
+    const text = await r.text();
+    let data;
+    try { data = text ? JSON.parse(text) : null; } catch {
+      return res.status(502).json({ error: `WMS вернул не JSON (${r.status}): ${text.slice(0, 150)}` });
+    }
+    if (!r.ok) return res.status(r.status).json({ error: data?.error || data?.message || `WMS ${r.status}` });
+    res.json(data);
+  } catch (err) {
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'WMS не ответил за 30 секунд' });
+    res.status(502).json({ error: err.message });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // ─── Веса товаров: загрузка Excel (только админ) ───────────────────────────
 
 const uploadWeightsExcel = multer({

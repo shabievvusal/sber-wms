@@ -143,13 +143,7 @@ export async function getPieceSelectionTasks(token, {
 
 const PBL_ZONES_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
 const PBL_TASK_BY_BARCODE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/tasks/by-handling-unit-barcode'
-// Терминал зовёт этот справочник по адресу wmsin-PDT, но оттуда браузером его
-// не достать: на wmsin-pdt шлюз отвечает на preflight 403 БЕЗ
-// access-control-allow-origin (проверено 2026-08-24 — для любого Origin, это
-// эндпоинт только для приложения ТСД). У веб-сервиса wmsin-WWH тот же путь
-// существует (preflight 200 с нашим Origin, тогда как несуществующий путь под
-// wmsin-wwh даёт 403) и CORS разрешает — берём его.
-const PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-wwh/inbound/products/by-id'
+const PRODUCTS_BY_ID_PROXY_URL = '/api/wms/products-by-id'
 
 /** Список зон-ворот КДК с количеством стоящих на них ЕО. */
 export async function getPblZones(token) {
@@ -168,10 +162,27 @@ export async function getPblTaskByBarcode(token, barcode) {
 
 // Справочник товаров по списку productId — в задаче раскладки лежит только
 // UUID товара, а название и вес штуки (`weightInGrams`) берутся отсюда.
-// Единственный запрос раздела на другой хост (api.samokat.ru, а не api-p01)
-// и единственный POST.
+//
+// ЕДИНСТВЕННЫЙ WMS-вызов проекта, который идёт НЕ напрямую из браузера:
+// эндпоинт живёт только в API терминала (wmsin-pdt) и отвечает на
+// CORS-preflight 403 для любого Origin, а веб-вариант того же пути —
+// TECHNICAL_ERROR. Поэтому ходим через свой бэкенд (POST /api/wms/products-by-id,
+// см. server.js), туда же передаём WMS-токен текущей сессии — сервер своего
+// не имеет. Ответ отдаётся как есть, в том же виде `{ value: { products } }`.
 export async function getProductsById(token, productIds) {
-  return samokatPost(token, PRODUCTS_BY_ID_URL, { productIds })
+  const r = await fetch(PRODUCTS_BY_ID_PROXY_URL, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-WMS-Token': token },
+    body: JSON.stringify({ productIds }),
+  })
+  const text = await r.text()
+  let data
+  try { data = text ? JSON.parse(text) : null } catch {
+    throw new Error(`Сервер вернул не JSON (${r.status}): ${text.slice(0, 150)}`)
+  }
+  if (!r.ok) throw new Error(data?.error || r.statusText || `HTTP ${r.status}`)
+  return data
 }
 
 // «Пропуски в отборе» (PickingGapsPage.jsx) — список заказов на отгрузку
