@@ -2,34 +2,19 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import * as api from '@/lib/api'
-import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor, getPblTaskById } from '@/lib/wmsFetch'
+import { getStoredToken, getLiveMonitorViaBrowser, getPieceSelectionTasks, fetchLastKdkCompletedForExecutor } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { IDLE_LIMIT_MS, ZONE_OPTIONS, TEMP_OPTIONS } from './constants'
 import { fmtAgo, fmtNum, formatTime, shortFio, userName, dateToApiFrom, dateToApiTo, mapLimit } from './format'
-import { summarizePblTask } from './pblTask'
 import { RefreshCw } from 'lucide-react'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
 const BATCH = 5
-
-/** «126 / 166» — осталось степов из скольких всего. */
-function stepsLabel(row) {
-  if (row.stepsTotal == null) return '—'
-  return `${fmtNum(row.stepsLeft)} / ${fmtNum(row.stepsTotal)}`
-}
-
-/** Подсказка к ячейке степов: разбор задачи или причина, по которой его нет. */
-function stepsTitle(row) {
-  if (row.stepsTotal != null) return `Разложено ${fmtNum(row.stepsDone)} из ${fmtNum(row.stepsTotal)}`
-  if (row.stepsError) return `Задача не получена: ${row.stepsError}`
-  return ''
-}
 
 function assignmentsToMap(list) {
   const map = {}
@@ -67,13 +52,8 @@ function parseKdkRows(data) {
       executor: userName(user),
       executorId: user.id || '',
       task: entry.handlingUnitBarcode || '—',
-      taskId: entry.id || '',
       pieces: null,
       lastActionAt: null,
-      stepsTotal: null,
-      stepsDone: null,
-      stepsLeft: null,
-      stepsError: '',
     }
   })
 }
@@ -89,14 +69,8 @@ function parsePieceRows(items) {
       executor,
       executorId,
       task,
-      taskId: '',
       pieces: null,
       lastActionAt: row.updatedAt || row.createdAt || null,
-      // Степы есть только у КДК: у штучного отбора нет задачи раскладки.
-      stepsTotal: null,
-      stepsDone: null,
-      stepsLeft: null,
-      stepsError: '',
     }
   })
 }
@@ -121,7 +95,6 @@ export default function KdkLayoutPage() {
   const [lastUpdated, setLastUpdated] = useState('')
   const [sort, setSort] = useState({ key: 'lastActionAt', dir: 'asc' })
   const [operationFilter, setOperationFilter] = useState('')
-  const [tsdStatusFilter, setTsdStatusFilter] = useState('')
   const [idleFilter, setIdleFilter] = useState('')
   const [query, setQuery] = useState('')
 
@@ -162,33 +135,24 @@ export default function KdkLayoutPage() {
           pageSize: 500,
         }),
       ])
-      // На строку КДК — два запроса: остаток штук на паллете (по исполнителю)
-      // и сама задача раскладки, откуда берутся степы.
+      // Остаток штук на паллете — по последнему завершённому пику исполнителя.
       //
-      // Задачу тут приходится просить ПО ID, а не по ШК ЕО: по ШК WMS отдаёт
-      // только нетронутые задачи, а на взятую в работу отвечает
-      // PBL_WRONG_TASK_STATUS (проверено 24.08.2026) — здесь же все строки в
-      // работе по определению. Что id записи монитора == id задачи — пока
-      // догадка (см. getPblTaskById); если она неверна, колонка «Осталось
-      // степов» покажет прочерк, а причину — подсказкой при наведении.
+      // Остатка СТЕПОВ здесь нет, и это не упущение: задачу раскладки, уже
+      // взятую в работу, WMS не отдаёт ни одним известным способом (проверено
+      // 24.08.2026) — по ШК ЕО отвечает PBL_WRONG_TASK_STATUS, а по id записи
+      // монитора (pbl/tasks/{id}) — NOT_FOUND, то есть этот id задачей не
+      // является. Прежде чем пробовать снова, нужен реальный запрос с самого
+      // ТСД в момент работы, а не очередная догадка об адресе.
       const kdkRows = await mapLimit(parseKdkRows(live), BATCH, async row => {
-        const [lastPick, task] = await Promise.all([
-          row.executorId
-            ? fetchLastKdkCompletedForExecutor(token, row.executorId).catch(() => null)
-            : null,
-          row.taskId
-            ? getPblTaskById(token, row.taskId).then(summarizePblTask).catch(err => ({ error: err.message }))
-            : null,
-        ])
-        return {
-          ...row,
-          pieces: lastPick?.remainingPieces ?? row.pieces,
-          lastActionAt: lastPick?.maxCompletedAt ? new Date(lastPick.maxCompletedAt).toISOString() : null,
-          stepsTotal: task?.stepsTotal ?? null,
-          stepsDone: task?.stepsDone ?? null,
-          stepsLeft: task?.stepsLeft ?? null,
-          stepsError: task?.error || '',
-        }
+        if (!row.executorId) return row
+        try {
+          const res = await fetchLastKdkCompletedForExecutor(token, row.executorId)
+          return {
+            ...row,
+            pieces: res.remainingPieces ?? row.pieces,
+            lastActionAt: res.maxCompletedAt ? new Date(res.maxCompletedAt).toISOString() : null,
+          }
+        } catch { return row }
       })
       const pieceItems = (piece?.value ?? piece)?.items ?? []
       setRows([...kdkRows, ...parsePieceRows(pieceItems)])
@@ -213,7 +177,6 @@ export default function KdkLayoutPage() {
       ...row,
       company: (row.executorId && companyByExecutorId.get(row.executorId)) || '—',
       tsd: activeList.map(rec => rec.tsd).filter(Boolean).join(', '),
-      tsdStatus: activeList.length ? 'Не сдал' : 'Сдал',
       idle: idleMs == null ? false : idleMs > IDLE_LIMIT_MS,
     }
   }), [assignments, companyByExecutorId, rows])
@@ -224,10 +187,9 @@ export default function KdkLayoutPage() {
     const q = query.trim().toLowerCase()
     return rowsWithTsd
       .filter(row => !operationFilter || row.operation === operationFilter)
-      .filter(row => !tsdStatusFilter || row.tsdStatus === tsdStatusFilter)
       .filter(row => !idleFilter || (idleFilter === 'idle' ? row.idle : !row.idle))
       .filter(row => !q || `${row.operation} ${row.company} ${row.executor} ${row.tsd} ${row.task}`.toLowerCase().includes(q))
-  }, [idleFilter, operationFilter, query, rowsWithTsd, tsdStatusFilter])
+  }, [idleFilter, operationFilter, query, rowsWithTsd])
 
   const sorted = useMemo(() => {
     const direction = sort.dir === 'asc' ? 1 : -1
@@ -240,8 +202,6 @@ export default function KdkLayoutPage() {
         const aValue = Number.isFinite(Number(a.pieces)) ? Number(a.pieces) : -1
         const bValue = Number.isFinite(Number(b.pieces)) ? Number(b.pieces) : -1
         diff = aValue - bValue
-      } else if (sort.key === 'stepsLeft') {
-        diff = (a.stepsLeft ?? -1) - (b.stepsLeft ?? -1)
       } else if (sort.key === 'lastActionAt') {
         diff = (a.lastActionAt ? new Date(a.lastActionAt).getTime() : 0) - (b.lastActionAt ? new Date(b.lastActionAt).getTime() : 0)
       }
@@ -270,11 +230,6 @@ export default function KdkLayoutPage() {
           <option value="">Все операции</option>
           {operations.map(v => <option key={v} value={v}>{v}</option>)}
         </select>
-        <select className={selectClass} value={tsdStatusFilter} onChange={e => setTsdStatusFilter(e.target.value)}>
-          <option value="">Все статусы ТСД</option>
-          <option value="Не сдал">Не сдал</option>
-          <option value="Сдал">Сдал</option>
-        </select>
         <select className={selectClass} value={idleFilter} onChange={e => setIdleFilter(e.target.value)}>
           <option value="">Весь простой</option>
           <option value="idle">Больше 5 минут</option>
@@ -295,7 +250,6 @@ export default function KdkLayoutPage() {
                 <div key={row.key} className={cn('space-y-1.5 p-3 text-sm', row.idle && 'bg-warning/10')}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium" title={row.executor}>{shortFio(row.executor)}</span>
-                    <Badge variant={row.tsd ? 'warning' : 'success'}>{row.tsdStatus}</Badge>
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span>{row.operation}</span>
@@ -305,7 +259,6 @@ export default function KdkLayoutPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                     <span>Задача: <span className="text-foreground">{row.task || '—'}</span></span>
                     <span>Остаток: <span className="text-foreground">{row.pieces == null ? '—' : fmtNum(row.pieces)}</span></span>
-                    <span title={stepsTitle(row)}>Степов: <span className="text-foreground">{stepsLabel(row)}</span></span>
                   </div>
                   {row.lastActionAt && (
                     <div className={cn('text-xs', row.idle ? 'font-semibold text-warning-foreground' : 'text-muted-foreground')}>
@@ -326,10 +279,8 @@ export default function KdkLayoutPage() {
                     <SortableHead label="Компания" sortKey="company" sort={sort} onSort={toggleSort} />
                     <SortableHead label="Исполнитель" sortKey="executor" sort={sort} onSort={toggleSort} />
                     <TableHead>ТСД</TableHead>
-                    <TableHead>Статус ТСД</TableHead>
                     <TableHead>Задача / ЕО</TableHead>
                     <SortableHead label="Остаток" sortKey="pieces" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Осталось степов" sortKey="stepsLeft" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Последнее действие" sortKey="lastActionAt" sort={sort} onSort={toggleSort} />
                     <TableHead>Простой</TableHead>
                   </TableRow>
@@ -341,16 +292,14 @@ export default function KdkLayoutPage() {
                       <TableCell>{row.company}</TableCell>
                       <TableCell title={row.executor}>{shortFio(row.executor)}</TableCell>
                       <TableCell>{row.tsd || '—'}</TableCell>
-                      <TableCell><Badge variant={row.tsd ? 'warning' : 'success'}>{row.tsdStatus}</Badge></TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
                       <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
-                      <TableCell className="text-right" title={stepsTitle(row)}>{stepsLabel(row)}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
                     </TableRow>
                   ))}
                   {!sorted.length && (
-                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">Нет задач</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

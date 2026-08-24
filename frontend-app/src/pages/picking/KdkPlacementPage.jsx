@@ -56,10 +56,6 @@ export default function KdkPlacementPage() {
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  // По умолчанию — только ЕО, которые ещё никто не взял: страница про то,
-  // сколько работы стоит на воротах. Взятые в работу цифр всё равно не имеют
-  // (WMS перестаёт отдавать по ним задачу), но знать, что они там есть, нужно.
-  const [stateFilter, setStateFilter] = useState('free')
   const [sort, setSort] = useState({ key: '', dir: 'desc' })
 
   const toggleSort = key => setSort(prev => prev.key === key
@@ -119,15 +115,14 @@ export default function KdkPlacementPage() {
       let doneUnits = 0
       const base = await mapLimit(units, BATCH, async unit => {
         let summary = null
-        let state = 'free'
         try {
           summary = summarizePblTask(await getPblTaskByBarcode(token, unit.barcode))
-        } catch (err) {
-          // Эндпоинт отдаёт задачу, только пока её никто не взял: на взятую
-          // в работу он отвечает PBL_WRONG_TASK_STATUS (проверено 24.08.2026).
-          // Это ровно то, что нужно странице — ЕО, которую уже раскладывают,
-          // отличается от той, по которой задачи нет вовсе.
-          state = /PBL_WRONG_TASK_STATUS/.test(err.message) ? 'in_work' : 'no_task'
+        } catch {
+          // Задачи по этой ЕО нет: либо её ещё не создали, либо она уже взята
+          // в работу — тогда WMS отвечает PBL_WRONG_TASK_STATUS и цифр не
+          // отдаёт. Строку показываем всё равно, с прочерками, а общее число
+          // таких ЕО — в сводке над таблицей.
+          summary = null
         } finally {
           doneUnits += 1
           setProgress(`${gatesDone} · ЕО: ${doneUnits} / ${units.length}`)
@@ -135,7 +130,6 @@ export default function KdkPlacementPage() {
         return {
           key: unit.barcode,
           ...unit,
-          state,
           planned: summary?.planned ?? null,
           steps: summary?.stepsTotal ?? null,
           qtyByProduct: summary?.qtyByProduct ?? [],
@@ -182,11 +176,11 @@ export default function KdkPlacementPage() {
   }
 
   const filtered = useMemo(() => {
+    const list = rows || []
     const q = search.trim().toLowerCase()
-    return (rows || [])
-      .filter(row => !stateFilter || row.state === stateFilter)
-      .filter(row => !q || `${row.barcode} ${row.supplier} ${row.gateName} ${row.names.join(' ')}`.toLowerCase().includes(q))
-  }, [rows, search, stateFilter])
+    if (!q) return list
+    return list.filter(row => `${row.barcode} ${row.supplier} ${row.gateName} ${row.names.join(' ')}`.toLowerCase().includes(q))
+  }, [rows, search])
 
   const sorted = useMemo(() => {
     if (!sort.key) return filtered
@@ -202,19 +196,14 @@ export default function KdkPlacementPage() {
     planned: acc.planned + (row.planned || 0),
     steps: acc.steps + (row.steps || 0),
     grams: acc.grams + (row.grams || 0),
-  }), { planned: 0, steps: 0, grams: 0 }), [sorted])
+    noTask: acc.noTask + (row.steps === null ? 1 : 0),
+  }), { planned: 0, steps: 0, grams: 0, noTask: 0 }), [sorted])
 
-  // Сколько ЕО отсеял фильтр состояния — считаем по всем строкам, а не по
-  // отфильтрованным, иначе при выбранных «свободных» счётчик взятых обнулится.
-  const stateCounts = useMemo(() => (rows || []).reduce((acc, row) => {
-    acc[row.state] = (acc[row.state] || 0) + 1
-    return acc
-  }, {}), [rows])
-
+  // Колонки «Статус» нет (задача на воротах всегда в работе), поэтому ЕО без
+  // задачи считаем здесь — иначе они бы молча уехали в строки с прочерками.
   const summaryLine = rows
     ? `ЕО: ${fmtNum(sorted.length)} · ${fmtNum(totals.planned)} шт · ${fmtKg(totals.grams)} · ${fmtNum(totals.steps)} степов`
-      + (stateCounts.in_work ? ` · в работе: ${fmtNum(stateCounts.in_work)}` : '')
-      + (stateCounts.no_task ? ` · без задачи: ${fmtNum(stateCounts.no_task)}` : '')
+      + (totals.noTask ? ` · без задачи: ${fmtNum(totals.noTask)}` : '')
     : 'Данные не загружены'
 
   return (
@@ -236,12 +225,6 @@ export default function KdkPlacementPage() {
           {zones.map(zone => (
             <option key={zone.gateId} value={zone.gateId}>{zone.name} ({fmtNum(zone.handlingUnitsCount)} ЕО)</option>
           ))}
-        </select>
-        <select className={selectClass} value={stateFilter} onChange={e => setStateFilter(e.target.value)}>
-          <option value="free">Не взятые в работу</option>
-          <option value="in_work">В работе</option>
-          <option value="no_task">Без задачи</option>
-          <option value="">Все ЕО</option>
         </select>
         <Input className="w-56" placeholder="ЕО, товар, поставщик" value={search} onChange={e => setSearch(e.target.value)} />
         <Button onClick={load} disabled={loading}>

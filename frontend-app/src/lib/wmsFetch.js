@@ -165,17 +165,13 @@ export async function getPblTaskByBarcode(token, barcode) {
   return wmsGet(`${PBL_TASK_BY_BARCODE_URL}/${encodeURIComponent(barcode)}`, token)
 }
 
-/**
- * Задача раскладки по её id — ПРОВЕРЯЕМАЯ ДОГАДКА, а не подтверждённый
- * эндпоинт: точного адреса для задачи В РАБОТЕ мы не видели, а по ШК такая
- * задача не отдаётся. Предположение — что `id` записи из монитора
- * (activity-monitor/.../handling-units-in-progress) и есть id задачи.
- * Если догадка неверна, вызов просто вернёт ошибку, а «Зависшие задачи»
- * покажут прочерк с текстом ошибки в подсказке.
- */
-export async function getPblTaskById(token, taskId) {
-  return wmsGet(`${PBL_TASKS_URL}/${encodeURIComponent(taskId)}`, token)
-}
+// Задачи, УЖЕ ВЗЯТОЙ В РАБОТУ, получить пока нечем — обе проверенные
+// 24.08.2026 попытки отвергнуты самим WMS:
+//   • по ШК ЕО (getPblTaskByBarcode)   → PBL_WRONG_TASK_STATUS
+//   • по id записи монитора, /pbl/tasks/{id} → NOT_FOUND (сервис путь понял,
+//     значит id записи «handling unit in progress» — не id задачи)
+// Из-за этого в «Зависших задачах» нет остатка степов. Следующий шаг — снять
+// реальный запрос с ТСД в момент раскладки, а не подбирать адрес.
 
 // Справочник товаров по списку productId — в задаче раскладки лежит только
 // UUID товара, а название и вес штуки (`weightInGrams`) берутся отсюда.
