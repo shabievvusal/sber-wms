@@ -108,7 +108,7 @@ export function AutoFetchCard({ isAdmin }) {
         <Switch checked={enabled} onCheckedChange={handleToggle} />
       </SettingRow>
       <SettingRow
-        label="Списки ЕО (приёмка)"
+        label="Списки ЕО"
         desc={hasWmsToken
           ? `Обновляются сами каждые ${EO_MINUTES} мин, пока включено автообновление — ${fmtLastRun(eoLastRun)}`
           : 'Нужна активная WMS-сессия на этом устройстве — обновлять может только браузер с WMS-токеном'}
