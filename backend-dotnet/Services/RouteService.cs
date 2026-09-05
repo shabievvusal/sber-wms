@@ -828,12 +828,25 @@ public class RouteService
 
     // ─── Поиск (страница кладовщика) ────────────────────────────────────────
 
-    public async Task<List<RouteResponse>> SearchRoutesAsync(string? q, string? mode)
+    // `days` — необязательное окно по дате (N последних календарных дней,
+    // включая сегодня). Нужно «Списку ЕО»: у него, в отличие от отгрузки и
+    // приёмки, нет `mode`, который сам собой оставляет только незакрытые
+    // маршруты, поэтому без окна список отдавал ВСЕ маршруты за всю историю
+    // (пользователь 2026-09-06: «много маршрутов с других дат»). Окно
+    // применяется только к списку по умолчанию — при текстовом поиске
+    // фронтенд его не шлёт, чтобы старый маршрут всё ещё можно было найти.
+    public async Task<List<RouteResponse>> SearchRoutesAsync(string? q, string? mode, int? days = null)
     {
         var routes = (await _db.Routes.AsNoTracking().ToListAsync()).OrderByDescending(r => r.Date).ToList();
         IEnumerable<RouteEntity> filtered = routes;
         if (mode == "unshipped") filtered = filtered.Where(IsPartialShipment);
         else if (mode == "pending") filtered = filtered.Where(r => !IsPartialShipment(r) && IsPartialReceiving(r));
+
+        if (days is > 0)
+        {
+            var from = DateOnly.FromDateTime(DateTime.Now).AddDays(-(days.Value - 1));
+            filtered = filtered.Where(r => r.Date != null && r.Date >= from);
+        }
 
         var ql = (q ?? "").Trim().ToLowerInvariant();
         if (!string.IsNullOrEmpty(ql))

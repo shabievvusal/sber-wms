@@ -763,13 +763,23 @@ function getPhotoPath(filename) {
 
 // ─── Поиск маршрутов (для страницы кладовщика) ────────────────────────────────
 
-async function searchRoutes({ q, mode } = {}) {
+// `days` — необязательное окно по дате (N последних календарных дней), см.
+// комментарий в backend-dotnet/Services/RouteService.cs: без него «Список ЕО»
+// (у него нет mode) отдавал все маршруты за всю историю.
+async function searchRoutes({ q, mode, days } = {}) {
   const { rows } = await pool.query('SELECT * FROM routes ORDER BY date DESC NULLS LAST');
   const ql = String(q || '').trim().toLowerCase();
   let routes = rows.map(rowToRoute);
 
   if (mode === 'unshipped') routes = routes.filter(r => isPartialShipment(r));
   else if (mode === 'pending') routes = routes.filter(r => !isPartialShipment(r) && isPartialReceiving(r));
+
+  if (days > 0) {
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+    routes = routes.filter(r => r.date && r.date >= fromStr);
+  }
 
   if (ql) {
     routes = routes.filter(r =>

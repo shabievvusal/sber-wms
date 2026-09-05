@@ -86,12 +86,12 @@ public static class RouteEndpoints
             }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        // GET /api/rk/routes-search?q=&mode=unshipped|pending — публичный (страница кладовщика)
-        app.MapGet("/api/rk/routes-search", async (string? q, string? mode, RouteService svc) =>
+        // GET /api/rk/routes-search?q=&mode=unshipped|pending&days= — публичный (страница кладовщика)
+        app.MapGet("/api/rk/routes-search", async (string? q, string? mode, int? days, RouteService svc) =>
         {
             try
             {
-                return Results.Json(await svc.SearchRoutesAsync(q, mode));
+                return Results.Json(await svc.SearchRoutesAsync(q, mode, days));
             }
             catch (Exception err)
             {

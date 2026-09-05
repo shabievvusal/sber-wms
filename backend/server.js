@@ -4114,12 +4114,23 @@ app.get('/api/rk/drivers/:name/routes/unshipped', async (req, res) => {
   }
 });
 
-// GET /api/rk/routes-search?q=&mode=unshipped|pending — поиск маршрутов для страницы кладовщика
+// GET /api/rk/routes-search?q=&mode=unshipped|pending&days= — поиск маршрутов
+// для страницы кладовщика. `days` — окно в N последних календарных дней,
+// см. комментарий в backend-dotnet/Services/RouteService.cs (в проде этот путь
+// обслуживает dotnet): без него «Список ЕО», у которого нет mode, отдавал все
+// маршруты за всю историю.
 app.get('/api/rk/routes-search', async (req, res) => {
   try {
     const { q, mode } = req.query;
     const status = mode === 'unshipped' ? 'unshipped' : mode === 'pending' ? 'pending' : undefined;
-    res.json(await rkStorage.getRoutes({ q, status }));
+    const days = Number(req.query.days) || 0;
+    let dateFrom;
+    if (days > 0) {
+      const from = new Date();
+      from.setDate(from.getDate() - (days - 1));
+      dateFrom = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+    }
+    res.json(await rkStorage.getRoutes({ q, status, dateFrom }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

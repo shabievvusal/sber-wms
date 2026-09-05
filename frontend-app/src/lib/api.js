@@ -141,10 +141,15 @@ export async function deleteRkRoutesByDateRange(dateFrom, dateTo) {
 // редактирование администратором из ShipmentsPage — это два разных реальных
 // роута на бэкенде, см. PLAN.md).
 
-export async function searchRkRoutes({ mode, q } = {}) {
+// `days` — окно в N последних календарных дней (сегодня + предыдущие).
+// Шлёт только «Список ЕО» и только для списка по умолчанию: у него нет
+// `mode`, который у отгрузки/приёмки сам собой оставляет незакрытые
+// маршруты, поэтому без окна отдавались ВСЕ маршруты за всю историю.
+export async function searchRkRoutes({ mode, q, days } = {}) {
   const params = new URLSearchParams()
   if (mode) params.set('mode', mode)
   if (q) params.set('q', q)
+  if (days) params.set('days', days)
   return req(`/api/rk/routes-search?${params}`)
 }
 

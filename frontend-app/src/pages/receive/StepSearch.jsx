@@ -8,6 +8,15 @@ import { fmtDate } from './format'
 
 const MODE_BY_OP = { ship: 'unshipped', receive: 'pending', eo_list: '' }
 
+// «Список ЕО» — единственный режим без `mode`: у отгрузки и приёмки список
+// сам собой сужается до незакрытых маршрутов, а здесь фильтра нет вообще, и
+// раньше отдавались ВСЕ маршруты за всю историю (пользователь 2026-09-06:
+// «много маршрутов с других дат»). Окно — те же сегодня + вчера, что
+// обновляет фон (lib/eoAutoRefresh.jsx), то есть в списке ровно те маршруты,
+// у которых ЕО актуальные. При текстовом поиске окно снимается — старый
+// маршрут по-прежнему находится по номеру/водителю/адресу.
+const EO_LIST_DAYS = 2
+
 export function StepSearch({ opType, onSelect }) {
   const [query, setQuery] = useState('')
   const [routes, setRoutes] = useState(null)
@@ -16,8 +25,9 @@ export function StepSearch({ opType, onSelect }) {
 
   const doSearch = useCallback(async q => {
     const mode = MODE_BY_OP[opType] || ''
+    const days = opType === 'eo_list' && !q ? EO_LIST_DAYS : undefined
     try {
-      const list = await api.searchRkRoutes({ mode, q })
+      const list = await api.searchRkRoutes({ mode, q, days })
       setRoutes(list)
       setError('')
     } catch (err) {
@@ -47,6 +57,9 @@ export function StepSearch({ opType, onSelect }) {
         {error && <div className="text-sm text-destructive">{error}</div>}
         {routes !== null && !error && routes.length === 0 && (
           <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">Маршруты не найдены</div>
+        )}
+        {opType === 'eo_list' && !query.trim() && routes !== null && !error && (
+          <div className="text-xs text-muted-foreground">Показаны маршруты за сегодня и вчера — остальные найдутся через поиск</div>
         )}
         {routes && routes.map((r, i) => {
           const cfz = r.cfzAddresses || []
