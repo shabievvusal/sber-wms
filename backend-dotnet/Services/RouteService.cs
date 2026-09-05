@@ -13,6 +13,19 @@ public class EoStoreResult
     public string? Address { get; set; }
     public List<Eo> Eos { get; set; } = new();
     public List<Eo> RemovedEos { get; set; } = new();
+    public string? EosUpdatedAt { get; set; }
+}
+
+// Строка списка «что обновлять фоном» — только метаданные, без самих ЕО:
+// его раз в 5 минут опрашивает устройство с включённым автообновлением, а
+// таскать ради этого все cfzAddresses с ЕО (routes-search) незачем.
+public class EoRefreshTarget
+{
+    public string RouteId { get; set; } = "";
+    public string? RouteNumber { get; set; }
+    public string? Date { get; set; }
+    public string? EosUpdatedAt { get; set; }
+    public int CfzCount { get; set; }
 }
 
 public class EoUpdateResult
@@ -732,7 +745,7 @@ public class RouteService
         foreach (var cfz in route.CfzAddresses)
         {
             if (string.IsNullOrEmpty(cfz.StoreId)) continue;
-            result[cfz.StoreId] = new EoStoreResult { Address = cfz.Address, Eos = cfz.Eos, RemovedEos = cfz.RemovedEos };
+            result[cfz.StoreId] = new EoStoreResult { Address = cfz.Address, Eos = cfz.Eos, RemovedEos = cfz.RemovedEos, EosUpdatedAt = cfz.EosUpdatedAt };
         }
         return result;
     }
@@ -778,6 +791,7 @@ public class RouteService
 
                 cfz.Eos = newEos;
                 cfz.RemovedEos = allRemoved;
+                cfz.EosUpdatedAt = DateTime.UtcNow.ToString("o");
                 results[storeId] = new EoUpdateResult { Current = newEos, Removed = allRemoved };
             }
         }
@@ -786,6 +800,30 @@ public class RouteService
         route.CfzAddresses = new List<CfzAddress>(cfzAddresses);
         await _db.SaveChangesAsync();
         return results;
+    }
+
+    // Маршруты, чьи ЕО имеет смысл обновлять фоном: за последние `days`
+    // календарных дней (сегодня + предыдущие), у которых вообще есть ЦФЗ с
+    // storeId — только по ним WMS отдаёт handlingUnits.
+    public async Task<List<EoRefreshTarget>> GetEoRefreshTargetsAsync(int days)
+    {
+        var from = DateOnly.FromDateTime(DateTime.Now).AddDays(-Math.Max(0, days - 1));
+        var routes = await _db.Routes.AsNoTracking().Where(r => r.Date != null && r.Date >= from).ToListAsync();
+        return routes
+            .Where(r => r.CfzAddresses.Any(c => !string.IsNullOrEmpty(c.StoreId)))
+            // Полностью принятый маршрут закрыт — его список ЕО больше не
+            // меняется, и дёргать по нему WMS каждые 5 минут незачем.
+            .Where(IsPartialReceiving)
+            .OrderByDescending(r => r.Date)
+            .Select(r => new EoRefreshTarget
+            {
+                RouteId = r.RouteId,
+                RouteNumber = r.RouteNumber,
+                Date = r.Date?.ToString("yyyy-MM-dd"),
+                CfzCount = r.CfzAddresses.Count(c => !string.IsNullOrEmpty(c.StoreId)),
+                EosUpdatedAt = r.CfzAddresses.Select(c => c.EosUpdatedAt).Where(x => !string.IsNullOrEmpty(x)).OrderByDescending(x => x).FirstOrDefault(),
+            })
+            .ToList();
     }
 
     // ─── Поиск (страница кладовщика) ────────────────────────────────────────

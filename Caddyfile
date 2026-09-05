@@ -1,10 +1,9 @@
 # Trek 2. Фаза 0 — passthrough на node + /api/dotnet-status (проверочный).
 # Фаза 1 — /api/rk/* и /rk-photos/* переехали на dotnet (route-rk-pg.js
-# перенесён целиком), кроме ОДНОГО исключения: /eos/request-refresh трогает
-# не Postgres, а собственное in-memory состояние server.js (eoRefreshQueue,
-# отдаётся через отдельный /api/status) — не относится к домену route-rk-pg.js,
-# остаётся на node. Порядок важен: более специфичный путь (request-refresh)
-# должен матчиться РАНЬШЕ общего /api/rk/*.
+# перенесён целиком). Исключение /eos/request-refresh (in-memory очередь
+# eoRefreshQueue на node) больше не нужно: ручной запрос обновления ЕО убран
+# 2026-09-06 — списки обновляются фоном сами, — так что теперь на dotnet
+# уходит ВЕСЬ /api/rk/*.
 # Фаза 2 — tsd-pg.js целиком и часть empl-pg.js (чистый CRUD над employees)
 # переехали на dotnet. GET /api/empl/find-unregistered, POST /api/empl/
 # enrich-names и /api/empl/upgrade-fio-ids остаются на node — они читают
@@ -43,9 +42,6 @@
 :3009 {
 	handle /api/dotnet-status* {
 		reverse_proxy dotnet:5080
-	}
-	handle /api/rk/routes/*/eos/request-refresh {
-		reverse_proxy node:3009
 	}
 	handle /api/rk/* {
 		reverse_proxy dotnet:5080

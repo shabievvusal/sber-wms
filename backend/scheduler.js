@@ -4,9 +4,25 @@ const fs = require('fs');
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const DATA_DIR = path.join(__dirname, 'data');
 
+const LAST_RUN_PATH = path.join(DATA_DIR, 'last-run.json');
+
 let intervalId = null;
-let lastRun = null;
 let fetchHandler = null;
+
+// Время последней реальной выгрузки. Хранится на диске, а не только в
+// памяти: это то самое «Обновлено: HH:MM» в тулбаре статистики, и после
+// перезапуска контейнера оно показывало «—», хотя данные за смену давно
+// собраны (пользователь 2026-09-06: «неправильно указывается время
+// последнего обновления»).
+let lastRun = (() => {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LAST_RUN_PATH, 'utf8'));
+    const d = raw && raw.lastRun ? new Date(raw.lastRun) : null;
+    return d && !isNaN(d) ? d : null;
+  } catch {
+    return null;
+  }
+})();
 
 function loadConfig() {
   try {
@@ -36,7 +52,7 @@ function start() {
   const minutes = Math.max(1, parseInt(config.intervalMinutes, 10) || 60);
   ensureDataDir();
   intervalId = setInterval(async () => {
-    lastRun = new Date();
+    setLastRun(new Date());
     if (fetchHandler) await fetchHandler();
   }, minutes * 60 * 1000);
   return { ok: true, message: `Автоопрос каждые ${minutes} мин` };
@@ -60,6 +76,10 @@ function getLastRun() {
 
 function setLastRun(date) {
   lastRun = date || new Date();
+  try {
+    ensureDataDir();
+    fs.writeFileSync(LAST_RUN_PATH, JSON.stringify({ lastRun: lastRun.toISOString() }), 'utf8');
+  } catch { /* не критично — время просто не переживёт перезапуск */ }
 }
 
 module.exports = {

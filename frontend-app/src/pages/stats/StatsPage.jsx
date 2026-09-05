@@ -64,8 +64,13 @@ export default function StatsPage() {
   const [dateStr, setDateStr] = useState(initialShiftInfo.dateStr)
   const [shift, setShift] = useState(initialShiftInfo.shift)
   const [operation, setOperation] = useState('selection')
-  const [fetchHourFrom, setFetchHourFrom] = useState('9')
-  const [fetchHourTo, setFetchHourTo] = useState('21')
+  // Часы выгрузки следуют за выбранной сменой: день 9→21, ночь 21→9
+  // (пользователь 2026-09-06: «для ночной смены выгрузка с 21:00 до 9:00, а
+  // то стоит как у дневной»). В оригинале это делал эффект в AppContext.jsx,
+  // при переносе он потерялся — здесь всегда стояли дневные 9→21, даже когда
+  // страница открывалась ночью, уже с выбранной ночной сменой.
+  const [fetchHourFrom, setFetchHourFrom] = useState(initialShiftInfo.shift === 'night' ? '21' : '9')
+  const [fetchHourTo, setFetchHourTo] = useState(initialShiftInfo.shift === 'night' ? '9' : '21')
 
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -118,7 +123,26 @@ export default function StatsPage() {
   }, [dateStr, shift, operation, idleThresholdMinutes])
 
   useEffect(() => { loadSummary() }, [dateStr, shift, operation]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadStatus() }, [loadStatus])
+
+  // Часы выгрузки — под выбранную смену (см. комментарий у useState выше).
+  // Ручную правку часов не затирает: срабатывает только на смену shift.
+  const shiftHoursSyncedRef = useRef(shift)
+  useEffect(() => {
+    if (shiftHoursSyncedRef.current === shift) return
+    shiftHoursSyncedRef.current = shift
+    setFetchHourFrom(shift === 'night' ? '21' : '9')
+    setFetchHourTo(shift === 'night' ? '9' : '21')
+  }, [shift])
+
+  // «Обновлено» должно быть свежим и у того, кто данные не собирает: время
+  // приезжает с бэкенда (status.lastRun), а его обновляет ДРУГОЕ устройство.
+  // Без периодического перечитывания оно застывало на момент открытия
+  // страницы до перезагрузки.
+  useEffect(() => {
+    loadStatus()
+    const t = setInterval(loadStatus, 60_000)
+    return () => clearInterval(t)
+  }, [loadStatus])
 
   // Полный список компаний из реестра сотрудников (Настройки → Сотрудники),
   // не только те, что встретились в статистике за просматриваемый день/смену
@@ -208,16 +232,22 @@ export default function StatsPage() {
       } else {
         throw new Error('Нет WMS-токена для автообновления')
       }
+      await loadSummary({ silent: true })
+      loadStatus()
     } catch (err) {
       if (!silent) {
         setError(err.message || 'Не удалось обновить данные')
         toast.error('Ошибка обновления: ' + (err.message || 'WMS недоступен'))
       }
       throw err
+    } finally {
+      // Именно finally: раньше `setFetching(false)` стоял после catch, который
+      // пробрасывает ошибку дальше — то есть при любой неудачной выгрузке до
+      // него не доходило, и кнопки «Обновить данные»/«Перепроверить»
+      // оставались навсегда заблокированными (`disabled={fetching}`), пока
+      // страницу не перезагрузят (пользователь 2026-09-06).
+      if (!silent) setFetching(false)
     }
-    await loadSummary({ silent: true })
-    loadStatus()
-    if (!silent) setFetching(false)
   }, [dateStr, shift, fetchHourFrom, fetchHourTo, loadSummary, loadStatus])
 
   const handleFetch = () => runFetch({ silent: false }).catch(() => {})

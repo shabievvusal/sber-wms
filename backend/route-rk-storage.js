@@ -656,9 +656,38 @@ function getRouteEos(routeId) {
   if (!route) return null;
   const result = {};
   for (const cfz of (route.cfzAddresses || [])) {
-    result[cfz.storeId] = { address: cfz.address, eos: cfz.eos || [], removedEos: cfz.removedEos || [] };
+    result[cfz.storeId] = { address: cfz.address, eos: cfz.eos || [], removedEos: cfz.removedEos || [], eosUpdatedAt: cfz.eosUpdatedAt || null };
   }
   return result;
+}
+
+/**
+ * Маршруты, чьи ЕО имеет смысл обновлять фоном (устройство с включённым
+ * автообновлением): последние `days` календарных дней, только с ЦФЗ,
+ * у которых есть storeId — по остальным WMS всё равно не отдаёт ЕО.
+ */
+function getEoRefreshTargets({ days = 2 } = {}) {
+  const from = new Date();
+  from.setDate(from.getDate() - Math.max(0, days - 1));
+  // Локальная дата, а не toISOString() — иначе ночью окно уезжает на сутки.
+  const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+  return Object.values(load())
+    .filter(r => r.date && r.date >= fromStr)
+    // Полностью принятый маршрут закрыт — его ЕО больше не меняются.
+    .filter(isPartialReceiving)
+    .map(r => {
+      const cfz = (r.cfzAddresses || []).filter(c => c.storeId);
+      const updated = cfz.map(c => c.eosUpdatedAt).filter(Boolean).sort();
+      return {
+        routeId: r.routeId,
+        routeNumber: r.routeNumber,
+        date: r.date,
+        cfzCount: cfz.length,
+        eosUpdatedAt: updated.length ? updated[updated.length - 1] : null,
+      };
+    })
+    .filter(r => r.cfzCount > 0)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 /**
@@ -683,6 +712,7 @@ function updateStoreEos(routeId, storeId, newEos) {
 
   cfz.eos = newEos;
   cfz.removedEos = allRemoved;
+  cfz.eosUpdatedAt = new Date().toISOString();
   save(data);
   return { current: newEos, removed: allRemoved };
 }
@@ -721,6 +751,7 @@ function updateRouteEosBatch(routeId, stores) {
 
     cfz.eos = newEos;
     cfz.removedEos = allRemoved;
+    cfz.eosUpdatedAt = new Date().toISOString();
     results[storeId] = { current: newEos, removed: allRemoved };
   }
 
@@ -750,5 +781,5 @@ module.exports = {
   getDriversUnshipped, getRoutesByDriverUnshipped,
   savePhoto, getPhotoPath, PHOTO_DIR,
   deleteRoutesByIds, deleteRoutesByDateRange, getReportData, getAddresses,
-  getRouteEos, updateStoreEos, updateRouteEosBatch,
+  getRouteEos, updateStoreEos, updateRouteEosBatch, getEoRefreshTargets,
 };

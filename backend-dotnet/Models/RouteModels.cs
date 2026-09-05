@@ -28,6 +28,12 @@ public class CfzAddress
     public string? StoreId { get; set; }
     public List<Eo> Eos { get; set; } = new();
     public List<Eo> RemovedEos { get; set; } = new();
+
+    // Когда список ЕО этого ЦФЗ последний раз реально обновлялся из WMS.
+    // Кладовщику это единственный способ понять свежесть данных: своего
+    // WMS-токена у него нет, список ему обновляет фоном корп. устройство с
+    // включённым автообновлением (см. eoAutoRefresh.jsx во фронтенде).
+    public string? EosUpdatedAt { get; set; }
 }
 
 public class Item

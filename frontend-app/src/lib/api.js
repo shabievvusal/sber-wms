@@ -153,6 +153,10 @@ export async function getDriverRokhlyaDebt(name) {
   return req(`/api/rk/driver-rokhlya-debt?${params}`)
 }
 
+export async function getRkRoute(routeId) {
+  return req(`/api/rk/routes/${encodeURIComponent(routeId)}`)
+}
+
 export async function getRouteEos(routeId) {
   return req(`/api/rk/routes/${encodeURIComponent(routeId)}/eos`)
 }
@@ -182,13 +186,19 @@ export async function uploadRkPhotos(files) {
   return data
 }
 
-export async function requestEoRefresh(routeId) {
-  return req(`/api/rk/routes/${encodeURIComponent(routeId)}/eos/request-refresh`, { method: 'POST' })
+// Маршруты, чьи ЕО имеет смысл обновить фоном (последние `days` дней) —
+// только метаданные, без самих ЕО. Дёргает устройство с включённым
+// автообновлением (eoAutoRefresh.jsx), а не экран кладовщика.
+export async function getEoRefreshTargets(days) {
+  const params = new URLSearchParams()
+  if (days) params.set('days', days)
+  return req(`/api/rk/eo-refresh-targets?${params}`)
 }
 
-// Реальное сохранение ЕО, уже полученных браузером напрямую из WMS
-// (fetchRouteFromWMS в wmsFetch.js) — в отличие от requestEoRefresh выше
-// (постановка в очередь для устройства без токена), тут данные уже на руках.
+// Сохранение ЕО, полученных браузером напрямую из WMS (fetchRouteFromWMS в
+// wmsFetch.js) — единственный путь их обновления. Ручной запрос «сходи в WMS
+// за меня» (requestEoRefresh + очередь на бэкенде) убран 2026-09-06: списки
+// обновляет фоном устройство с автообновлением (lib/eoAutoRefresh.jsx).
 export async function saveRouteEosRefresh(routeId, wmsData) {
   return req(`/api/rk/routes/${encodeURIComponent(routeId)}/eos/refresh`, {
     method: 'POST',

@@ -185,7 +185,6 @@ async function doFetch() {
 scheduler.setFetchHandler(doFetch);
 
 let fetchRequested = false;
-let eoRefreshQueue = []; // routeId[] — очередь запросов на обновление ЕО
 
 // API-маршруты регистрируем до статики, чтобы POST /api/empl и др. не отдавали index.html
 app.get('/api/status', (req, res) => {
@@ -196,7 +195,6 @@ app.get('/api/status', (req, res) => {
       tokenRefresherRunning: false,
       lastRun: scheduler.getLastRun(),
       fetchRequested,
-      eoRefreshQueue,
       config: {
         ...config,
         token: config.token ? '***' : '',
@@ -950,6 +948,13 @@ app.post('/api/save-fetched-data', async (req, res) => {
 
     const shiftKeys = Object.keys(mergeResult.byShift || {});
     const savedTo = shiftKeys.length ? shiftKeys.join(', ') : 'hourly';
+
+    // «Обновлено» в статистике = время последней РЕАЛЬНОЙ выгрузки, поэтому
+    // отмечаем его здесь, где данные сохраняются, а не только в
+    // /api/vs/mark-updated — тот зовёт лишь устройство с автообновлением,
+    // из-за чего после ручной кнопки «Обновить данные» показанное время не
+    // менялось вообще (пользователь 2026-09-06).
+    scheduler.setLastRun(new Date());
 
     // Обновляем список неучтённых товаров в фоне после сохранения новых данных.
     startMissingWeightRebuild('save-fetched-data');
@@ -2054,12 +2059,11 @@ app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired,
   }
 });
 
-// Кладовщик (без WMS токена) запрашивает обновление ЕО — корп. устройство обработает
-app.post('/api/rk/routes/:routeId/eos/request-refresh', (req, res) => {
-  const routeId = decodeURIComponent(req.params.routeId);
-  if (!eoRefreshQueue.includes(routeId)) eoRefreshQueue.push(routeId);
-  res.json({ ok: true });
-});
+// Ручной запрос обновления ЕО (`POST /eos/request-refresh` + очередь
+// eoRefreshQueue) убран 2026-09-06 по просьбе пользователя: списки ЕО
+// обновляются фоном сами, раз в 5 минут, устройством с включённым
+// автообновлением (frontend-app/src/lib/eoAutoRefresh.jsx) — очередь
+// «попроси другое устройство сходить в WMS» стала лишней сущностью.
 
 // Корп. устройство вызывает после завершения полного runFetchForHours
 app.post('/api/vs/mark-updated', vsSessionRequired, (req, res) => {
@@ -4014,6 +4018,19 @@ app.get('/api/rk/routes/:routeId/eos', async (req, res) => {
   }
 });
 
+// GET /api/rk/eo-refresh-targets?days=2 — что обновлять фоном (публичный):
+// список маршрутов за последние дни без самих ЕО, для устройства с включённым
+// автообновлением (frontend-app/src/lib/eoAutoRefresh.jsx). В проде этот путь
+// уходит на dotnet (Caddyfile, /api/rk/*) — здесь для запуска node в одиночку.
+app.get('/api/rk/eo-refresh-targets', async (req, res) => {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 2));
+    res.json(await rkStorage.getEoRefreshTargets({ days }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/rk/routes/:routeId/eos/refresh — обновить ЕО из WMS
 // Клиент (браузер) сам делает запрос к WMS и передаёт сюда сырые данные в теле
 app.post('/api/rk/routes/:routeId/eos/refresh', async (req, res) => {
@@ -4026,8 +4043,6 @@ app.post('/api/rk/routes/:routeId/eos/refresh', async (req, res) => {
 
     // Обновляем все ЦФЗ за один load+save
     const results = await rkStorage.updateRouteEosBatch(routeId, stores);
-    // Убираем из очереди запросов
-    eoRefreshQueue = eoRefreshQueue.filter(id => id !== routeId);
     res.json({ ok: true, results });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

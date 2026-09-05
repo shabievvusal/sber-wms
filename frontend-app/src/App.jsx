@@ -8,6 +8,7 @@ import { Sidebar, SidebarNav, findNavLabel, NAV_ITEMS, HIDDEN_PAGE_MODULES, hasM
 import LoginPage from '@/components/layout/LoginPage'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
+import { EoAutoRefresh } from '@/lib/eoAutoRefresh'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -116,6 +117,11 @@ function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Фоновое обновление списков ЕО — работает только на устройстве с
+          включённым автообновлением и живой WMS-сессией, на всех остальных
+          это no-op (см. eoAutoRefresh.jsx). Здесь, а не на странице приёмки:
+          обновлять должен корп. компьютер, где открыта другая страница. */}
+      <EoAutoRefresh />
       <Sidebar activePage={route.page} onNavigate={navigate} />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -130,7 +136,7 @@ function AppShell() {
         </div>
 
         <main className="min-w-0 flex-1 overflow-x-hidden">
-          <ActivePage initialId={route.id} />
+          <ActivePage initialId={route.id} initialSub={route.sub} />
         </main>
       </div>
 

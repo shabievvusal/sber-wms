@@ -655,9 +655,37 @@ async function getRouteEos(routeId) {
   if (!rows.length) return null;
   const result = {};
   for (const cfz of (rows[0].cfz_addresses || [])) {
-    result[cfz.storeId] = { address: cfz.address, eos: cfz.eos || [], removedEos: cfz.removedEos || [] };
+    result[cfz.storeId] = { address: cfz.address, eos: cfz.eos || [], removedEos: cfz.removedEos || [], eosUpdatedAt: cfz.eosUpdatedAt || null };
   }
   return result;
+}
+
+// Маршруты, чьи ЕО имеет смысл обновлять фоном (устройство с включённым
+// автообновлением): последние `days` календарных дней, только те, у которых
+// есть ЦФЗ с storeId — по остальным WMS всё равно не отдаёт ЕО.
+async function getEoRefreshTargets({ days = 2 } = {}) {
+  const from = new Date();
+  from.setDate(from.getDate() - Math.max(0, days - 1));
+  // Локальная дата, а не toISOString() — иначе ночью окно уезжает на сутки.
+  const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+  const { rows } = await pool.query(
+    `SELECT route_id, route_number, date, cfz_addresses, receiving FROM routes WHERE date >= $1::date ORDER BY date DESC`,
+    [fromStr]
+  );
+  return rows
+    .filter(r => isPartialReceiving({ receiving: r.receiving, cfzAddresses: r.cfz_addresses || [] }))
+    .map(r => {
+      const cfz = (r.cfz_addresses || []).filter(c => c.storeId);
+      const updated = cfz.map(c => c.eosUpdatedAt).filter(Boolean).sort();
+      return {
+        routeId: r.route_id,
+        routeNumber: r.route_number,
+        date: r.date ? new Date(r.date).toISOString().slice(0, 10) : null,
+        cfzCount: cfz.length,
+        eosUpdatedAt: updated.length ? updated[updated.length - 1] : null,
+      };
+    })
+    .filter(r => r.cfzCount > 0);
 }
 
 async function updateStoreEos(routeId, storeId, newEos) {
@@ -675,6 +703,7 @@ async function updateStoreEos(routeId, storeId, newEos) {
 
   cfz.eos = newEos;
   cfz.removedEos = allRemoved;
+  cfz.eosUpdatedAt = new Date().toISOString();
 
   await pool.query('UPDATE routes SET cfz_addresses=$2 WHERE route_id=$1', [routeId, JSON.stringify(cfzAddresses)]);
   return { current: newEos, removed: allRemoved };
@@ -708,6 +737,7 @@ async function updateRouteEosBatch(routeId, stores) {
 
     cfz.eos = newEos;
     cfz.removedEos = allRemoved;
+    cfz.eosUpdatedAt = new Date().toISOString();
     results[storeId] = { current: newEos, removed: allRemoved };
   }
 
@@ -769,5 +799,5 @@ module.exports = {
   getAddresses,
   getReportData,
   deleteRoutesByIds, deleteRoutesByDateRange,
-  getRouteEos, updateStoreEos, updateRouteEosBatch,
+  getRouteEos, updateStoreEos, updateRouteEosBatch, getEoRefreshTargets,
 };
