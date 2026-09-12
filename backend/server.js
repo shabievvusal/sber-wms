@@ -959,6 +959,11 @@ app.post('/api/save-fetched-data', async (req, res) => {
     // Обновляем список неучтённых товаров в фоне после сохранения новых данных.
     startMissingWeightRebuild('save-fetched-data');
 
+    // В новой выгрузке могли появиться исполнители, которых нет в сотрудниках,
+    // — сбрасываем кэш скана, чтобы «Настройки» показали их сразу, не дожидаясь
+    // истечения EXECUTORS_TTL_MS.
+    invalidateExecutorsCache();
+
     // Дуал-райт (Фаза 3, временный мост): те же raw-items дополнительно
     // отправляются в backend-dotnet (Postgres, wms_ops) — читает GET /api/date/
     // :date/summary и другая перенесённая статистика. JSON-файлы (выше) остаются
@@ -1517,10 +1522,127 @@ app.post('/api/empl/add-new', async (req, res) => {
 });
 
 // GET /api/empl/find-unregistered — найти исполнителей из всех смен, которых нет в списке сотрудников
+//
+// Раньше на каждый запрос синхронно читались и парсились ВСЕ почасовые файлы
+// data/YYYY-MM-DD/HH.json. Node однопоточный, поэтому на накопленной истории
+// скан вешал весь сервер целиком — и тем сильнее, что «Настройки» зовут его
+// автоматически при открытии страницы (EmployeesCard.jsx), у каждого
+// пользователя. Теперь:
+//   • при USE_PG=true список исполнителей берётся одним SQL по wms_ops —
+//     файлы не читаются вообще, event loop не блокируется;
+//   • файловый фоллбэк (установка без Postgres) читает асинхронно и только
+//     изменившиеся даты: закрытые дни отдаются из кэша по stat-штампу;
+//   • параллельные запросы делят один скан (single-flight), результат живёт
+//     EXECUTORS_TTL_MS и сбрасывается после сохранения новых данных.
+// Сверка с известными ID делается заново на каждый запрос — она дешёвая, а
+// только что добавленный сотрудник должен сразу исчезать из выдачи.
+
+const EXECUTORS_TTL_MS = 5 * 60 * 1000;
+let executorsCache = null;           // { at, list: [{ executorId, fio }] }
+let executorsInflight = null;        // Promise активного скана (single-flight)
+const executorsDirCache = new Map(); // 'YYYY-MM-DD' -> { stamp, execs: Map<id, fio> }
+
+function invalidateExecutorsCache() {
+  executorsCache = null;
+}
+
+function titleCaseExecutorFio(fio) {
+  return fio.replace(/\S+/g, w =>
+    w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
+}
+
+/** Исполнители из Postgres (wms_ops) — то же множество, что и в почасовых JSON. */
+async function collectExecutorsFromPg() {
+  const rows = await wmsOpsPg.listExecutors();
+  const out = [];
+  for (const row of rows) {
+    const executorId = String(row.executor_id || '').trim();
+    const fio        = String(row.executor    || '').trim();
+    if (!executorId || !fio) continue;
+    out.push({ executorId, fio: titleCaseExecutorFio(fio) });
+  }
+  return out;
+}
+
+/** Исполнители из почасовых файлов: асинхронно, с покаталожным кэшем. */
+async function collectExecutorsFromFiles() {
+  const fsp = fs.promises;
+  if (!fs.existsSync(DATA_DIR)) return [];
+
+  let dateDirs;
+  try {
+    dateDirs = (await fsp.readdir(DATA_DIR, { withFileTypes: true }))
+      .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
+      .map(e => e.name);
+  } catch { return []; }
+
+  const found = new Map(); // executorId -> fio
+  for (const dir of dateDirs) {
+    const dirPath = path.join(DATA_DIR, dir);
+    let hourFiles;
+    try { hourFiles = (await fsp.readdir(dirPath)).filter(f => /^\d{2}\.json$/.test(f)); } catch { continue; }
+    hourFiles.sort();
+
+    // Штамп каталога — имена+mtime+размер часовых файлов. Прошедшие дни больше
+    // не меняются, так что их JSON не перечитываем: stat вместо read+parse.
+    let stamp = '';
+    for (const hf of hourFiles) {
+      try {
+        const st = await fsp.stat(path.join(dirPath, hf));
+        stamp += `${hf}:${st.mtimeMs}:${st.size};`;
+      } catch {}
+    }
+
+    const cached = executorsDirCache.get(dir);
+    let execs;
+    if (cached && cached.stamp === stamp) {
+      execs = cached.execs;
+    } else {
+      execs = new Map();
+      for (const hf of hourFiles) {
+        let raw;
+        try { raw = JSON.parse(await fsp.readFile(path.join(dirPath, hf), 'utf8')); } catch { continue; }
+        const list = Array.isArray(raw.items) ? raw.items : Object.values(raw.items || {});
+        for (const item of list) {
+          const fio        = (item.executor   || '').trim();
+          const executorId = (item.executorId || '').trim();
+          if (!fio || !executorId || execs.has(executorId)) continue;
+          execs.set(executorId, titleCaseExecutorFio(fio));
+        }
+      }
+      executorsDirCache.set(dir, { stamp, execs });
+    }
+
+    for (const [id, fio] of execs) if (!found.has(id)) found.set(id, fio);
+  }
+
+  return [...found].map(([executorId, fio]) => ({ executorId, fio }));
+}
+
+async function getAllExecutors() {
+  if (executorsCache && Date.now() - executorsCache.at < EXECUTORS_TTL_MS) return executorsCache.list;
+  if (executorsInflight) return executorsInflight;
+
+  executorsInflight = (async () => {
+    let list = null;
+    if (wmsOpsPg) {
+      // Таблицы может не быть (установка без выполненной миграции) — тогда
+      // не 500, а честный обход файлов.
+      try { list = await collectExecutorsFromPg(); }
+      catch (err) { console.error('find-unregistered: wms_ops недоступна, читаем файлы:', err.message); }
+    }
+    if (list === null) list = await collectExecutorsFromFiles();
+    executorsCache = { at: Date.now(), list };
+    return list;
+  })().finally(() => { executorsInflight = null; });
+
+  return executorsInflight;
+}
+
 app.get('/api/empl/find-unregistered', async (req, res) => {
   try {
     // Собираем известные ID. ФИО не используется для сопоставления.
-    const knownIds  = new Set();
+    const knownIds = new Set();
     if (emplPg) {
       const data = await emplPg.listEmployees();
       for (const e of data.employees) {
@@ -1530,42 +1652,9 @@ app.get('/api/empl/find-unregistered', async (req, res) => {
       for (const id of Object.keys(loadEmplIdRegistry())) knownIds.add(id);
     }
 
-    // Сканируем все почасовые файлы
-    const seenKeys  = new Set(); // все уже проверенные ключи (не перепроверяем)
-    const found     = new Map(); // key -> { executorId, fio }
-
-    if (!fs.existsSync(DATA_DIR)) return res.json({ employees: [] });
-
-    let dateDirs;
-    try {
-      dateDirs = fs.readdirSync(DATA_DIR, { withFileTypes: true })
-        .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name));
-    } catch { return res.json({ employees: [] }); }
-
-    for (const dir of dateDirs) {
-      const dirPath = path.join(DATA_DIR, dir.name);
-      let hourFiles;
-      try { hourFiles = fs.readdirSync(dirPath).filter(f => /^\d{2}\.json$/.test(f)); } catch { continue; }
-      for (const hf of hourFiles) {
-        let raw;
-        try { raw = JSON.parse(fs.readFileSync(path.join(dirPath, hf), 'utf8')); } catch { continue; }
-        const list = Array.isArray(raw.items) ? raw.items : Object.values(raw.items || {});
-        for (const item of list) {
-          const fio        = (item.executor   || '').trim();
-          const executorId = (item.executorId || '').trim();
-          if (!fio || !executorId) continue;
-          const key = executorId;
-          if (seenKeys.has(key)) continue;
-          seenKeys.add(key);
-          if (knownIds.has(executorId)) continue;
-          const titled = fio.replace(/\S+/g, w =>
-            w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-          found.set(key, { executorId, fio: titled });
-        }
-      }
-    }
-
-    const employees = [...found.values()].sort((a, b) => a.fio.localeCompare(b.fio, 'ru'));
+    const employees = (await getAllExecutors())
+      .filter(e => !knownIds.has(e.executorId))
+      .sort((a, b) => a.fio.localeCompare(b.fio, 'ru'));
     res.json({ employees });
   } catch (err) {
     console.error('GET /api/empl/find-unregistered', err);

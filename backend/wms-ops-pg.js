@@ -30,4 +30,20 @@ async function init() {
   await pool.query("ALTER TABLE IF EXISTS wms_ops ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''");
 }
 
-module.exports = { init };
+/**
+ * Все исполнители, встречавшиеся в операциях: executor_id -> самое полное ФИО.
+ * Заменяет обход всех почасовых JSON в GET /api/empl/find-unregistered —
+ * группировка выполняется в Postgres и не блокирует event loop Node.
+ */
+async function listExecutors() {
+  const { rows } = await pool.query(`
+    SELECT executor_id,
+           (array_agg(executor ORDER BY length(executor) DESC, executor))[1] AS executor
+      FROM wms_ops
+     WHERE executor_id <> '' AND executor <> ''
+     GROUP BY executor_id
+  `);
+  return rows;
+}
+
+module.exports = { init, listExecutors };
