@@ -62,18 +62,26 @@ RUN dotnet publish SaveFetchedData/SaveFetchedData.csproj \
 # ───────────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
 
-# .NET runtime + зависимости
+# Системные зависимости: libvips — для sharp, libicu72/libssl3 — для .NET
+# runtime (глобализация ru-RU, HTTPS).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
         libvips \
-    && wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O /tmp/ms.deb \
-    && dpkg -i /tmp/ms.deb \
-    && rm /tmp/ms.deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends dotnet-runtime-9.0 \
+        libicu72 \
+        libssl3 \
     && rm -rf /var/lib/apt/lists/*
+
+# .NET runtime копируется из официального образа, а не ставится apt-ом из
+# packages.microsoft.com (2026-09-13): этот репозиторий недоступен с
+# российских серверов — сборка висела на wget до таймаута. mcr.microsoft.com
+# при этом отдаётся нормально. Образ runtime:9.0 — Debian 12 (bookworm), как
+# и node:20-slim, так что бинарники совместимы. Инструментам в tools/ хватает
+# чистого runtime — все они консольные (Microsoft.NET.Sdk), без ASP.NET.
+COPY --from=mcr.microsoft.com/dotnet/runtime:9.0 /usr/share/dotnet /usr/share/dotnet
+RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet \
+    && dotnet --list-runtimes
 
 WORKDIR /app
 
