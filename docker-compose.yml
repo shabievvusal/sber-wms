@@ -15,14 +15,24 @@ x-logging: &default-logging
 services:
   # Trek 2, Фаза 0 — reverse-proxy перед node и dotnet. Единственный сервис с
   # внешним портом теперь caddy (раньше — node напрямую), см. Caddyfile.
+  # 80/443 (2026-09-13) — домен robops.ru с автоматическим HTTPS, 443/udp —
+  # HTTP/3. 3009 — старый адрес http://<IP>:3009 на переходный период.
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     logging: *default-logging
     ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
       - "${PORT:-3009}:3009"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Сертификаты Let's Encrypt и состояние Caddy. Без томов сертификат
+      # выпускался бы заново при каждом пересоздании контейнера и упёрся бы
+      # в лимиты Let's Encrypt.
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       node:
         condition: service_healthy
@@ -120,4 +130,8 @@ volumes:
   node-persist:
     driver: local
   pg-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local
