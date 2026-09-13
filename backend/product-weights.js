@@ -36,6 +36,9 @@ if (USE_PG) {
     user: process.env.PG_USER || 'zlp',
     password: process.env.PG_PASSWORD || '',
   });
+  // Без обработчика обрыв простаивающего соединения (рестарт Postgres, сеть)
+  // всплывает как необработанное 'error' и роняет весь процесс Node.
+  pgPool.on('error', err => console.error('[pg] product-weights pool:', err.message));
 }
 
 async function initPg() {

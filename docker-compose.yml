@@ -1,9 +1,24 @@
+# Ротация логов контейнеров. Без неё json-логи Docker растут бесконечно, а
+# Caddy теперь пишет журнал каждого запроса (см. Caddyfile) — 5 × 20 МБ на
+# контейнер хватает на несколько суток истории для разбора инцидентов.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+# restart: unless-stopped у всех сервисов (2026-09-13). Раньше у caddy/node/
+# dotnet было on-failure — такой контейнер Docker НЕ поднимает после
+# перезагрузки сервера, если тот завершился штатно (caddy и dotnet выходят с
+# кодом 0 по SIGTERM). Итог: после каждой перезагрузки сайт лежал, пока
+# кто-нибудь не делал `docker compose up -d` руками (12.09 — 46 минут).
 services:
   # Trek 2, Фаза 0 — reverse-proxy перед node и dotnet. Единственный сервис с
   # внешним портом теперь caddy (раньше — node напрямую), см. Caddyfile.
   caddy:
     image: caddy:2-alpine
-    restart: on-failure
+    restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${PORT:-3009}:3009"
     volumes:
@@ -23,7 +38,12 @@ services:
       # здесь был доп.контекст на сиблинг-папку `new zlp` — больше не
       # нужен, обе части проекта теперь в одном каталоге.
     image: wms-node
-    restart: on-failure
+    restart: unless-stopped
+    # node запускается как PID 1 и без init игнорирует SIGTERM — Docker ждал
+    # 10 с и убивал его SIGKILL посреди возможной записи JSON-файлов в data/.
+    # init (tini) пересылает сигнал, процесс завершается сразу.
+    init: true
+    logging: *default-logging
     expose:
       - "3009"
     env_file: .env
@@ -61,7 +81,8 @@ services:
   # S3_PUBLIC_URL), та же переменная DOTNET_PORT (если задана) тоже отсюда.
   dotnet:
     build: ./backend-dotnet
-    restart: on-failure
+    restart: unless-stopped
+    logging: *default-logging
     expose:
       - "5080"
     env_file: .env
@@ -81,6 +102,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB:       ${PG_DB:-zlp}
       POSTGRES_USER:     ${PG_USER:-zlp}

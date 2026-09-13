@@ -21,6 +21,9 @@ const pool = new Pool({
   user:     process.env.PG_USER     || 'zlp',
   password: process.env.PG_PASSWORD || '',
 });
+// Без обработчика обрыв простаивающего соединения (рестарт Postgres, сеть)
+// всплывает как необработанное 'error' и роняет весь процесс Node.
+pool.on('error', err => console.error('[pg] wms-ops pool:', err.message));
 
 async function init() {
   // GUID товара из ответа WMS (product.productId). NOT NULL DEFAULT '' —

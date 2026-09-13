@@ -40,6 +40,14 @@
 # данных за смену сразу во всех 4 доменах статистики (Настройки → Система,
 # только admin/developer) — на dotnet, там же живут все 4 таблицы.
 :3009 {
+	# Журнал каждого запроса (2026-09-13) — JSON в stdout контейнера, смотреть
+	# `docker compose logs caddy`. Без него при недоступности сайта нельзя
+	# было понять, доходили ли запросы до сервера вообще. Cookie Caddy сам
+	# маскирует (REDACTED); ротация — logging в docker-compose.yml.
+	log {
+		output stdout
+	}
+
 	handle /api/dotnet-status* {
 		reverse_proxy dotnet:5080
 	}
