@@ -577,8 +577,24 @@ function getMissingWeightRebuildStatus() {
   return { ...missingWeightRebuildStatus };
 }
 
+// Автоматический пересчёт (после каждой выгрузки из WMS) — не чаще раза в
+// 3 часа (2026-09-13). .NET-инструмент перечитывает ВСЮ почасовую историю
+// data/*.json (9+ ГБ), а автовыгрузка идёт каждые ~30 минут: история не
+// помещалась в кэш памяти, сервер гнал ~560 ГБ чтения с диска в сутки, и на
+// это время тормозили Postgres и отдача сайта. Список товаров без веса за
+// 3 часа почти не меняется; ручной запуск (reason 'manual') — без ограничений.
+// Время хранится в памяти: после рестарта первая выгрузка пересчитывает сразу.
+const MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+
 function startMissingWeightRebuild(reason = 'manual') {
   if (missingWeightRebuildStatus.running) return false;
+
+  const lastFinished = Date.parse(missingWeightRebuildStatus.finishedAt || '');
+  if (reason !== 'manual'
+      && !missingWeightRebuildStatus.error
+      && Date.now() - lastFinished < MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS) {
+    return false;
+  }
 
   Object.assign(missingWeightRebuildStatus, {
     running: true,
@@ -4355,8 +4371,16 @@ app.delete('/api/violations/:id', vsSessionRequired, (req, res) => {
 
 // ─── React SPA (после всех API-маршрутов) ────────────────────────────────────
 const DIST_DIR = path.join(__dirname, '..', 'frontend', 'app', 'dist');
-app.use(express.static(DIST_DIR));
+// Файлы сборки Vite в /assets/ содержат хеш в имени (index-Ab12Cd.js) и после
+// сборки не меняются — кэшируем на год, браузер больше не перепроверяет их при
+// каждом открытии. fallthrough: false — отсутствующий бандл отдаёт 404, а не
+// index.html со статусом 200 (иначе браузер падал на разборе HTML как JS).
+// index.html, наоборот, no-cache: после деплоя браузер сразу получит новые
+// имена бандлов. index: false — чтобы "/" тоже шёл через обработчик ниже.
+app.use('/assets', express.static(path.join(DIST_DIR, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }));
+app.use(express.static(DIST_DIR, { index: false }));
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(DIST_DIR, 'index.html'));
 });
 
@@ -4374,6 +4398,8 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     scheduler.ensureDataDir();
     startTelegramBindingPolling();
+    // В фоне, не блокируя старт и healthcheck, — см. комментарий в wms-ops-pg.js.
+    if (process.env.USE_PG === 'true') wmsOpsPg.ensureStatsIndexes();
     console.log(`Сервер: http://localhost:${PORT} (доступен по сети на порту ${PORT})`);
   });
 }

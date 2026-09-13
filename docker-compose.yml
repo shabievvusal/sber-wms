@@ -16,7 +16,7 @@ services:
   # Trek 2, Фаза 0 — reverse-proxy перед node и dotnet. Единственный сервис с
   # внешним портом теперь caddy (раньше — node напрямую), см. Caddyfile.
   # 80/443 (2026-09-13) — домен robops.ru с автоматическим HTTPS, 443/udp —
-  # HTTP/3. 3009 — старый адрес http://<IP>:3009 на переходный период.
+  # HTTP/3. Старый адрес http://<IP>:3009 убран — только по домену.
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -25,7 +25,6 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
-      - "${PORT:-3009}:3009"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Сертификаты Let's Encrypt и состояние Caddy. Без томов сертификат
@@ -59,13 +58,12 @@ services:
     env_file: .env
     environment:
       - NODE_HOST_PROJECT_PATH=${PWD}
-      # .env's PORT — это внешний, хост-фейсинговый порт для caddy (маппинг
-      # ниже), а не порт, на котором должен слушать сам node. Caddyfile
-      # жёстко проксирует на node:3009, поэтому node ВСЕГДА должен слушать
-      # именно 3009 внутри контейнера — эта строка перекрывает PORT из
-      # env_file (Compose: explicit environment важнее env_file), иначе
-      # server.js (`process.env.PORT || 3000`) слушал бы порт из .env и
-      # Caddy получал бы "connection refused".
+      # Caddyfile жёстко проксирует на node:3009, поэтому node ВСЕГДА должен
+      # слушать именно 3009 внутри контейнера. Эта строка перекрывает PORT из
+      # .env, если он там задан (Compose: explicit environment важнее
+      # env_file), иначе server.js (`process.env.PORT || 3000`) слушал бы
+      # другой порт и Caddy получал бы "connection refused". Наружу 3009 не
+      # пробрасывается — сайт доступен только через caddy по домену.
       - PORT=3009
     volumes:
       - node-persist:/app/persist
@@ -113,6 +111,29 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     logging: *default-logging
+    # Настройки под сервер с ~8 ГБ RAM и SSD (2026-09-13). По умолчанию у
+    # Postgres shared_buffers = 128 МБ при базе 4+ ГБ и wms_ops в миллионы
+    # строк — почти всё читалось мимо собственного кэша. random_page_cost=1.1 —
+    # поправка на SSD (дефолт 4 рассчитан на HDD и отговаривает от индексов),
+    # max_wal_size — реже контрольные точки при пакетном ingest статистики.
+    # shm_size: у Docker /dev/shm по умолчанию 64 МБ, а параллельные запросы
+    # Postgres берут разделяемую память оттуда — на больших сканах падали бы
+    # с "could not resize shared memory segment".
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_wal_size=2GB
     environment:
       POSTGRES_DB:       ${PG_DB:-zlp}
       POSTGRES_USER:     ${PG_USER:-zlp}

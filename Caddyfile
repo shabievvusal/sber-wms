@@ -39,8 +39,8 @@
 # 2026-07-27 — /api/stats/shift-data/{count,delete} (новое): удаление/подсчёт
 # данных за смену сразу во всех 4 доменах статистики (Настройки → Система,
 # только admin/developer) — на dotnet, там же живут все 4 таблицы.
-# (app) — общие правила сайта, подключаются через `import app` в блоки
-# robops.ru и :3009 внизу файла.
+# (app) — общие правила сайта, подключаются через `import app` в блок
+# robops.ru внизу файла.
 (app) {
 	# Журнал каждого запроса (2026-09-13) — JSON в stdout контейнера, смотреть
 	# `docker compose logs caddy`. Без него при недоступности сайта нельзя
@@ -48,6 +48,22 @@
 	# маскирует (REDACTED); ротация — logging в docker-compose.yml.
 	log {
 		output stdout
+	}
+
+	# Сжатие ответов (2026-09-13). Node сжимает сам (compression), а dotnet —
+	# нет: вся статистика (/api/date/*, /api/shifts, отчёты) шла несжатым JSON,
+	# что заметно на медленном складском интернете. Уже сжатые ответы Node
+	# Caddy повторно не трогает. Типы перечислены явно, чтобы не сжимать
+	# text/event-stream (SSE из dotnet) — сжатие может задерживать события.
+	encode zstd gzip {
+		match {
+			header Content-Type application/json*
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type image/svg+xml*
+		}
 	}
 
 	handle /api/dotnet-status* {
@@ -151,8 +167,5 @@ www.robops.ru {
 	redir https://robops.ru{uri} permanent
 }
 
-# Старый адрес http://<IP>:3009 — на переходный период, пока все не перешли
-# на robops.ru. Потом этот блок и порт 3009 в docker-compose.yml можно убрать.
-:3009 {
-	import app
-}
+# Старый адрес http://<IP>:3009 убран (2026-09-13): сайт открывается только по
+# домену. Порт 3009 больше не пробрасывается наружу (см. docker-compose.yml).

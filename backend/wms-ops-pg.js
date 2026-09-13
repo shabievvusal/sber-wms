@@ -34,6 +34,35 @@ async function init() {
 }
 
 /**
+ * Индексы (date, hour) для четырёх таблиц статистики (2026-09-13). Почти все
+ * запросы dotnet фильтруют по дате И часу (StatsService: смена = date + hour,
+ * дедупликация при ingest — date == и hour ==), а у wms_placement/receiving/
+ * remains индексов не было вовсе — полный скан таблицы на каждый запрос.
+ *
+ * Вызывается в фоне ПОСЛЕ старта сервера, не из init(): первое построение на
+ * миллионах строк идёт десятки секунд, и если бы старт его ждал, healthcheck
+ * успел бы пометить node как unhealthy, а caddy (depends_on: service_healthy)
+ * не поднялся бы. На время построения запись в таблицу ждёт, чтение идёт;
+ * при следующих стартах IF NOT EXISTS отрабатывает мгновенно.
+ */
+const STATS_TABLES = ['wms_ops', 'wms_placement', 'wms_receiving', 'wms_remains'];
+
+async function ensureStatsIndexes() {
+  for (const table of STATS_TABLES) {
+    try {
+      const { rows } = await pool.query('SELECT to_regclass($1) AS t', [table]);
+      if (!rows[0].t) continue; // таблицы ещё нет (миграция не выполнялась)
+      const t0 = Date.now();
+      await pool.query(`CREATE INDEX IF NOT EXISTS ${table}_date_hour_idx ON ${table} (date, hour)`);
+      const sec = Math.round((Date.now() - t0) / 1000);
+      if (sec >= 1) console.log(`[pg] индекс ${table}_date_hour_idx построен за ${sec} с`);
+    } catch (err) {
+      console.error(`[pg] индекс ${table}_date_hour_idx:`, err.message);
+    }
+  }
+}
+
+/**
  * Все исполнители, встречавшиеся в операциях: executor_id -> самое полное ФИО.
  * Заменяет обход всех почасовых JSON в GET /api/empl/find-unregistered —
  * группировка выполняется в Postgres и не блокирует event loop Node.
@@ -49,4 +78,4 @@ async function listExecutors() {
   return rows;
 }
 
-module.exports = { init, listExecutors };
+module.exports = { init, ensureStatsIndexes, listExecutors };
