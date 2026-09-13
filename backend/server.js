@@ -4398,8 +4398,6 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     scheduler.ensureDataDir();
     startTelegramBindingPolling();
-    // В фоне, не блокируя старт и healthcheck, — см. комментарий в wms-ops-pg.js.
-    if (process.env.USE_PG === 'true') wmsOpsPg.ensureStatsIndexes();
     console.log(`Сервер: http://localhost:${PORT} (доступен по сети на порту ${PORT})`);
   });
 }
