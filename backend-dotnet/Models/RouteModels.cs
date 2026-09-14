@@ -20,6 +20,12 @@ public class Eo
 {
     public string? Barcode { get; set; }
     public double? Weight { get; set; }
+
+    // Флаги отгрузки из WMS (stores[].handlingUnits[]): подвезена к воротам /
+    // загружена в машину. null — ЕО сохранена до появления статусов, данных
+    // нет до ближайшего обновления из WMS.
+    public bool? MovedToGate { get; set; }
+    public bool? MovedIntoVehicle { get; set; }
 }
 
 public class CfzAddress

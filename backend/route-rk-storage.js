@@ -61,6 +61,20 @@ function ensurePhotoDir() {
 
 // ─── WMS импорт ───────────────────────────────────────────────────────────────
 
+// ЕО одного ЦФЗ из ответа WMS — то же, что parseStoreEos в route-rk-pg.js:
+// штрихкод, вес и флаги отгрузки movedToGate / movedIntoVehicle (null — нет данных).
+function parseStoreEos(store) {
+  const rawEos = Array.isArray(store.handlingUnits) ? store.handlingUnits
+    : Array.isArray(store.parcels) ? store.parcels
+    : Array.isArray(store.items) ? store.items : [];
+  return rawEos.map(eo => ({
+    barcode: eo.barcode || eo.id || eo.handlingUnitBarcode || eo.code || null,
+    weight: eo.weight ?? eo.grossWeight ?? null,
+    movedToGate: typeof eo.movedToGate === 'boolean' ? eo.movedToGate : null,
+    movedIntoVehicle: typeof eo.movedIntoVehicle === 'boolean' ? eo.movedIntoVehicle : null,
+  })).filter(eo => eo.barcode);
+}
+
 function parseWmsRoute(json) {
   const route = json?.value ?? json;
   if (!route || !Array.isArray(route.stores)) throw new Error('Неверный формат маршрута');
@@ -77,16 +91,7 @@ function parseWmsRoute(json) {
     : null;
   const logisticsCompany = route.logisticsCompany?.name || null;
   const cfzAddresses = (route.stores || [])
-    .map(s => {
-      const rawEos = Array.isArray(s.handlingUnits) ? s.handlingUnits
-        : Array.isArray(s.parcels) ? s.parcels
-        : Array.isArray(s.items) ? s.items : [];
-      const eos = rawEos.map(eo => ({
-        barcode: eo.barcode || eo.id || eo.handlingUnitBarcode || eo.code || null,
-        weight: eo.weight ?? eo.grossWeight ?? null,
-      })).filter(eo => eo.barcode);
-      return { address: String(s.address || '').trim(), storeId: s.id || null, eos };
-    })
+    .map(s => ({ address: String(s.address || '').trim(), storeId: s.id || null, eos: parseStoreEos(s) }))
     .filter(s => s.address);
 
   return { routeId: route.id || null, routeNumber: route.routeNumber || null, date, driver, vehicle, logisticsCompany, cfzAddresses };
@@ -734,13 +739,7 @@ function updateRouteEosBatch(routeId, stores) {
     const cfz = (route.cfzAddresses || []).find(c => c.storeId === storeId);
     if (!cfz) continue;
 
-    const rawEos = Array.isArray(store.handlingUnits) ? store.handlingUnits
-      : Array.isArray(store.parcels) ? store.parcels
-      : Array.isArray(store.items) ? store.items : [];
-    const newEos = rawEos.map(eo => ({
-      barcode: eo.barcode || eo.id || eo.handlingUnitBarcode || eo.code || null,
-      weight: eo.weight ?? eo.grossWeight ?? null,
-    })).filter(eo => eo.barcode);
+    const newEos = parseStoreEos(store);
 
     const newBarcodes = new Set(newEos.map(e => e.barcode));
     const newlyRemoved = (cfz.eos || []).filter(e => !newBarcodes.has(e.barcode));

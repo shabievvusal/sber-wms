@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Search } from 'lucide-react'
 import { fmtDate } from './format'
+import { routeShipStatus, summarizeEos } from './eoStatus'
 
 const MODE_BY_OP = { ship: 'unshipped', receive: 'pending', eo_list: '' }
 
@@ -65,6 +66,10 @@ export function StepSearch({ opType, onSelect }) {
           const cfz = r.cfzAddresses || []
           const cfzStr = cfz.slice(0, 3).map(a => a.address).join(', ') + (cfz.length > 3 ? '…' : '')
           const done = opType === 'ship' && r.shipment ? (r.shipment.items || []).length : null
+          // Статус подвоза/загрузки — только в «Списке ЕО» и только когда он
+          // известен (у маршрутов, ЕО которых ещё не обновлялись со статусами, бейджа нет).
+          const routeStatus = opType === 'eo_list' ? routeShipStatus(summarizeEos(cfz.flatMap(a => a.eos || []))) : null
+          const shipStatus = routeStatus?.key === 'unknown' ? null : routeStatus
           return (
             <button
               key={r.routeId || i}
@@ -79,6 +84,7 @@ export function StepSearch({ opType, onSelect }) {
               {r.driver && <div className="text-sm">{r.driver.name || ''}</div>}
               {cfzStr && <div className="text-xs text-muted-foreground">{cfzStr}</div>}
               {done !== null && <Badge variant="warning">Заполнено {done} из {cfz.length} адресов</Badge>}
+              {shipStatus && <Badge variant={shipStatus.variant}>{shipStatus.label}</Badge>}
             </button>
           )
         })}

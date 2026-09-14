@@ -147,6 +147,42 @@ public class RouteService
         return v.GetDouble();
     }
 
+    private static bool? GetBool(JsonElement el, string prop)
+    {
+        if (el.ValueKind != JsonValueKind.Object || !el.TryGetProperty(prop, out var v)) return null;
+        return v.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
+    }
+
+    // ЕО одного ЦФЗ из ответа WMS (порт parseStoreEos из route-rk-pg.js):
+    // штрихкод, вес и флаги отгрузки movedToGate / movedIntoVehicle.
+    private static List<Eo> ParseStoreEos(JsonElement store)
+    {
+        var eos = new List<Eo>();
+        foreach (var field in new[] { "handlingUnits", "parcels", "items" })
+        {
+            if (!store.TryGetProperty(field, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+            foreach (var eo in arr.EnumerateArray())
+            {
+                var barcode = GetIdString(eo, "barcode") ?? GetIdString(eo, "id") ?? GetIdString(eo, "handlingUnitBarcode") ?? GetIdString(eo, "code");
+                if (string.IsNullOrEmpty(barcode)) continue;
+                eos.Add(new Eo
+                {
+                    Barcode = barcode,
+                    Weight = GetDouble(eo, "weight") ?? GetDouble(eo, "grossWeight"),
+                    MovedToGate = GetBool(eo, "movedToGate"),
+                    MovedIntoVehicle = GetBool(eo, "movedIntoVehicle"),
+                });
+            }
+            break;
+        }
+        return eos;
+    }
+
     private record ParsedWmsRoute(string? RouteId, string? RouteNumber, DateOnly? Date, Driver? Driver, Vehicle? Vehicle, string? LogisticsCompany, List<CfzAddress> CfzAddresses);
 
     private static ParsedWmsRoute ParseWmsRoute(JsonElement json)
@@ -184,23 +220,7 @@ public class RouteService
         var cfzAddresses = new List<CfzAddress>();
         foreach (var s in storesEl.EnumerateArray())
         {
-            JsonElement rawEos = default;
-            var hasEos = false;
-            foreach (var field in new[] { "handlingUnits", "parcels", "items" })
-            {
-                if (s.TryGetProperty(field, out var arr) && arr.ValueKind == JsonValueKind.Array) { rawEos = arr; hasEos = true; break; }
-            }
-            var eos = new List<Eo>();
-            if (hasEos)
-            {
-                foreach (var eo in rawEos.EnumerateArray())
-                {
-                    var barcode = GetIdString(eo, "barcode") ?? GetIdString(eo, "id") ?? GetIdString(eo, "handlingUnitBarcode") ?? GetIdString(eo, "code");
-                    if (string.IsNullOrEmpty(barcode)) continue;
-                    var weight = GetDouble(eo, "weight") ?? GetDouble(eo, "grossWeight");
-                    eos.Add(new Eo { Barcode = barcode, Weight = weight });
-                }
-            }
+            var eos = ParseStoreEos(s);
             var address = (GetStr(s, "address") ?? "").Trim();
             if (string.IsNullOrEmpty(address)) continue;
             cfzAddresses.Add(new CfzAddress { Address = address, StoreId = GetIdString(s, "id"), Eos = eos });
@@ -765,23 +785,7 @@ public class RouteService
                 var cfz = cfzAddresses.FirstOrDefault(c => c.StoreId == storeId);
                 if (cfz == null) continue;
 
-                JsonElement rawEos = default;
-                var hasEos = false;
-                foreach (var field in new[] { "handlingUnits", "parcels", "items" })
-                {
-                    if (store.TryGetProperty(field, out var arr) && arr.ValueKind == JsonValueKind.Array) { rawEos = arr; hasEos = true; break; }
-                }
-                var newEos = new List<Eo>();
-                if (hasEos)
-                {
-                    foreach (var eo in rawEos.EnumerateArray())
-                    {
-                        var barcode = GetIdString(eo, "barcode") ?? GetIdString(eo, "id") ?? GetIdString(eo, "handlingUnitBarcode") ?? GetIdString(eo, "code");
-                        if (string.IsNullOrEmpty(barcode)) continue;
-                        var weight = GetDouble(eo, "weight") ?? GetDouble(eo, "grossWeight");
-                        newEos.Add(new Eo { Barcode = barcode, Weight = weight });
-                    }
-                }
+                var newEos = ParseStoreEos(store);
 
                 var newBarcodes = newEos.Select(e => e.Barcode).ToHashSet();
                 var newlyRemoved = cfz.Eos.Where(e => !newBarcodes.Contains(e.Barcode)).ToList();
