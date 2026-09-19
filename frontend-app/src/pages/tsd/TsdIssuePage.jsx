@@ -41,6 +41,12 @@ import { ScanLine, Printer, RotateCcw, CheckSquare, Square, RefreshCw } from 'lu
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
+// Пауза между символами длиннее этой — набирает человек, а не сканер:
+// автоотправка выключается, код уходит по Enter.
+const MANUAL_GAP_MS = 80
+// Короче — не код, а случайное нажатие: не отправляем.
+const MIN_SCAN_LENGTH = 3
+
 const TSD_PRINT_CSS = `
 .tsd-print-portal { display: none; }
 @media print {
@@ -116,6 +122,10 @@ export default function TsdIssuePage() {
   // символ нет. Контролируемое поле здесь ломало скан (см. onKeyDown ниже).
   const scanRef = useRef(null)
   const submitScanRef = useRef(() => {})
+  // Автоотправка без Enter: таймер «код дописан» + статистика пауз скана.
+  const scanTimerRef = useRef(0)
+  const lastKeyAtRef = useRef(0)
+  const maxGapRef = useRef(0)
 
   const load = useCallback(async ({ clearMessage = false } = {}) => {
     try {
@@ -166,6 +176,25 @@ export default function TsdIssuePage() {
     el.focus()
   }, [])
 
+  // Отправка без Enter. «Код дописан» определяем по паузе, но порог берём от
+  // фактических пауз ЭТОГО скана: у разных сканеров интервал между символами
+  // от 1 до 50 мс, поэтому фиксированная константа либо разрезала бы код
+  // пополам, либо ждала бы впустую. Ручной набор с клавиатуры (паузы длиннее
+  // MANUAL_GAP_MS) под автоотправку не попадает — там по-прежнему Enter.
+  const noteScanKey = useCallback(() => {
+    const el = scanRef.current
+    const now = Date.now()
+    const prev = lastKeyAtRef.current
+    lastKeyAtRef.current = now
+    if (prev) maxGapRef.current = Math.max(maxGapRef.current, now - prev)
+
+    window.clearTimeout(scanTimerRef.current)
+    if (maxGapRef.current > MANUAL_GAP_MS) return
+    if ((el?.value || '').trim().length < MIN_SCAN_LENGTH) return
+    const delay = Math.min(300, Math.max(60, maxGapRef.current * 3))
+    scanTimerRef.current = window.setTimeout(() => { submitScanRef.current() }, delay)
+  }, [])
+
   useEffect(() => {
     if (activeTab !== 'issue') return
     focusScan()
@@ -193,6 +222,7 @@ export default function TsdIssuePage() {
         e.preventDefault()
         el.value += e.key
         el.focus()
+        noteScanKey()
       } else if (e.key === 'Enter') {
         // Раньше этот Enter только возвращал фокус и терялся — код висел в
         // поле до следующего нажатия.
@@ -205,9 +235,10 @@ export default function TsdIssuePage() {
     document.addEventListener('keydown', onKeyDown)
     return () => {
       window.clearInterval(timer)
+      window.clearTimeout(scanTimerRef.current)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [activeTab, focusScan])
+  }, [activeTab, focusScan, noteScanKey])
 
   const handleScanBlur = useCallback(() => {
     setScanFocused(false)
@@ -335,14 +366,12 @@ export default function TsdIssuePage() {
   const selectedEmployees = useMemo(() => [...selectedIds].map(id => employeesById.get(id)).filter(Boolean), [employeesById, selectedIds])
   const visibleSelected = filtered.length > 0 && filtered.every(emp => selectedIds.has(emp.executorId))
 
-  const reloadAssignments = useCallback(async () => {
-    try {
-      const data = await api.getTsdAssignments()
-      setAssignments(data?.assignments || [])
-      setTsdSettings(data?.settings || { totalCount: 0 })
-    } catch (err) {
-      setError(err.message || 'Не удалось обновить назначения ТСД')
-    }
+  // assign/return-tsd уже возвращают свежие assignments и settings — отдельный
+  // запрос за тем же самым (был reloadAssignments) добавлял второй сетевой
+  // round-trip к каждой выдаче, то есть примерно удваивал её время.
+  const applyScanResult = useCallback(data => {
+    if (data?.assignments) setAssignments(data.assignments)
+    if (data?.settings) setTsdSettings(data.settings)
   }, [])
 
   // История грузится отдельно от активных выдач: строк за период сильно
@@ -386,7 +415,7 @@ export default function TsdIssuePage() {
           returnedByFio: employee.fio,
           returnedByCompany: employee.company || '',
         })
-        await reloadAssignments()
+        applyScanResult(res)
         if (res.foreignReturn) {
           setMessage(`Внимание: ТСД ${pendingTsd.tsd} числился за ${pendingTsd.assignment?.fio || 'другим сотрудником'}, вернул ${employee.fio}`)
         } else {
@@ -396,8 +425,7 @@ export default function TsdIssuePage() {
         return
       }
 
-      await doAssign({ executorId: employee.executorId, fio: employee.fio, company: employee.company || '', tsd: pendingTsd.tsd })
-      await reloadAssignments()
+      applyScanResult(await doAssign({ executorId: employee.executorId, fio: employee.fio, company: employee.company || '', tsd: pendingTsd.tsd }))
       setMessage(`ТСД ${pendingTsd.tsd} выдан: ${employee.fio}`)
       setPendingTsd(null)
       return
@@ -417,13 +445,16 @@ export default function TsdIssuePage() {
       setMessage(`ТСД ${code}`)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentsByTsd, employeesById, pendingTsd, reloadAssignments])
+  }, [applyScanResult, assignmentsByTsd, employeesById, pendingTsd])
 
   // Код забираем из DOM и чистим поле ДО запроса. Раньше очистка шла после
   // await: бейдж сотрудника, отсканированный пока летел запрос, дописывался
   // в поле и стирался вместе с ним — второй скан терялся, и всю выдачу
   // приходилось начинать заново.
   const submitScan = useCallback(async () => {
+    window.clearTimeout(scanTimerRef.current)
+    lastKeyAtRef.current = 0
+    maxGapRef.current = 0
     const el = scanRef.current
     const raw = el?.value || ''
     if (!raw.trim()) return
@@ -469,8 +500,7 @@ export default function TsdIssuePage() {
   const handleReturn = async (emp, active) => {
     if (!active) return
     try {
-      await doReturn({ tsd: active.tsd, returnedByExecutorId: emp.executorId, returnedByFio: emp.fio, returnedByCompany: emp.company || '' })
-      await reloadAssignments()
+      applyScanResult(await doReturn({ tsd: active.tsd, returnedByExecutorId: emp.executorId, returnedByFio: emp.fio, returnedByCompany: emp.company || '' }))
       setMessage(`ТСД ${active.tsd} возвращен: ${emp.fio}`)
     } catch (err) {
       setMessage(err.message || 'Не удалось вернуть ТСД')
@@ -544,6 +574,7 @@ export default function TsdIssuePage() {
               <Input
                 ref={scanRef}
                 defaultValue=""
+                onInput={noteScanKey}
                 onFocus={() => setScanFocused(true)}
                 onBlur={handleScanBlur}
                 autoComplete="off"
