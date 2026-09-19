@@ -41,6 +41,32 @@ public class TsdService
         return rows.Select(ToAssignment).ToList();
     }
 
+    // Журнал выдачи/приёма. Строка относится к периоду, если в него попало
+    // хотя бы одно её событие: выдача (assigned_at) или возврат (returned_at).
+    // Поэтому ТСД, выданный вчера и сданный сегодня, виден и во вчерашнем
+    // журнале (как выдача), и в сегодняшнем (как приём).
+    public async Task<List<TsdAssignment>> ListHistoryAsync(DateTimeOffset? from, DateTimeOffset? to, int limit)
+    {
+        var query = _db.TsdAssignments.AsNoTracking().AsQueryable();
+
+        if (from.HasValue)
+        {
+            var f = from.Value.UtcDateTime;
+            query = query.Where(t => t.AssignedAt >= f || (t.ReturnedAt != null && t.ReturnedAt >= f));
+        }
+        if (to.HasValue)
+        {
+            var t2 = to.Value.UtcDateTime;
+            query = query.Where(t => t.AssignedAt <= t2);
+        }
+
+        var rows = await query
+            .OrderByDescending(t => t.AssignedAt)
+            .Take(Math.Clamp(limit, 1, 5000))
+            .ToListAsync();
+        return rows.Select(ToAssignment).ToList();
+    }
+
     public async Task<TsdAssignment> AssignAsync(TsdAssignRequest req)
     {
         var id = Clean(req.ExecutorId);

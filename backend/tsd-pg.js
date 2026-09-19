@@ -96,6 +96,32 @@ async function listActive() {
   return rows.map(toAssignment);
 }
 
+// Журнал выдачи/приёма: без фильтра returned_at IS NULL, строка относится к
+// периоду, если в него попало любое её событие — выдача или возврат.
+// (Паритет с TsdService.ListHistoryAsync — наружу Caddy проксирует dotnet.)
+async function listHistory({ from, to, limit } = {}) {
+  const conds = [];
+  const params = [];
+  if (from) {
+    params.push(from);
+    conds.push(`(assigned_at >= $${params.length} OR returned_at >= $${params.length})`);
+  }
+  if (to) {
+    params.push(to);
+    conds.push(`assigned_at <= $${params.length}`);
+  }
+  params.push(Math.min(Math.max(parseInt(limit, 10) || 1000, 1), 5000));
+  const { rows } = await pool.query(`
+    SELECT id, executor_id, fio, company, tsd, assigned_at, returned_at,
+           returned_by_executor_id, returned_by_fio, returned_by_company
+    FROM tsd_assignments
+    ${conds.length ? `WHERE ${conds.join(' AND ')}` : ''}
+    ORDER BY assigned_at DESC
+    LIMIT $${params.length}
+  `, params);
+  return rows.map(toAssignment);
+}
+
 async function assign({ executorId, fio, company, tsd }) {
   const id = clean(executorId);
   const name = clean(fio);
@@ -185,4 +211,4 @@ async function setSettings({ totalCount }) {
   return getSettings();
 }
 
-module.exports = { init, listActive, assign, returnByExecutor, returnByTsd, getSettings, setSettings };
+module.exports = { init, listActive, listHistory, assign, returnByExecutor, returnByTsd, getSettings, setSettings };

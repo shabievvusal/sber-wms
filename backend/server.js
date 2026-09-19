@@ -1427,6 +1427,21 @@ app.get('/api/tsd-assignments', vsSessionRequired, async (_req, res) => {
   }
 });
 
+app.get('/api/tsd-assignments/history', vsSessionRequired, async (req, res) => {
+  try {
+    if (!requireTsdPg(res)) return;
+    const assignments = await tsdPg.listHistory({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      limit: req.query.limit,
+    });
+    res.json({ ok: true, assignments });
+  } catch (err) {
+    console.error('GET /api/tsd-assignments/history', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/tsd-assignments/assign', vsSessionRequired, async (req, res) => {
   try {
     if (!requireTsdPg(res)) return;

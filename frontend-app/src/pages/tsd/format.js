@@ -28,11 +28,42 @@ export function employeeCode(executorId) {
   return executorId ? `EMP:${executorId}` : ''
 }
 
-export function formatTime(iso) {
+/**
+ * Дата + время. Одно время без даты (как было раньше во всех таблицах ТСД)
+ * невозможно прочитать: ТСД нередко не сдают до следующей смены, и «08:14»
+ * не отвечало на вопрос «сегодняшний это или позавчерашний».
+ */
+export function formatDateTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   const p = n => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** "YYYY-MM-DD" локальной даты со сдвигом в днях (0 — сегодня) */
+export function dayStr(offsetDays = 0) {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+// Границы локального дня как ISO-инстанты для фильтра истории. Именно
+// локального, а не МСК (как dateToApiFrom в WMS-страницах): здесь диапазон
+// должен совпадать с тем, что пользователь видит в колонке «Время», а она
+// рисуется браузерным временем.
+export function dayStartIso(value) {
+  if (!value) return ''
+  const [y, m, d] = String(value).split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString()
+}
+
+export function dayEndIso(value) {
+  if (!value) return ''
+  const [y, m, d] = String(value).split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString()
 }
 
 /** "Иванов Иван Иванович" → "Иванов И.И." */

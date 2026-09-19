@@ -1,3 +1,4 @@
+using System.Globalization;
 using BackendDotnet.Models;
 using BackendDotnet.Services;
 
@@ -18,6 +19,20 @@ public static class TsdEndpoints
                 return Results.Json(new { assignments, settings });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // Журнал выдачи/приёма за период. from/to — ISO-инстанты (фронт шлёт
+        // границы локального дня), limit — страховка от выгрузки всей таблицы.
+        // Путь под тем же `handle /api/tsd-assignments*` в Caddyfile, отдельное
+        // правило проксирования не нужно.
+        app.MapGet("/api/tsd-assignments/history", async (string? from, string? to, int? limit, TsdService svc) =>
+        {
+            try
+            {
+                var assignments = await svc.ListHistoryAsync(ParseInstant(from), ParseInstant(to), limit ?? 1000);
+                return Results.Json(new { ok = true, assignments });
+            }
+            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
         app.MapPost("/api/tsd-assignments/assign", async (TsdAssignRequest body, TsdService svc) =>
@@ -108,5 +123,13 @@ public static class TsdEndpoints
             var deleted = await svc.DeleteManualEmployeeAsync(id);
             return Results.Json(new { ok = deleted });
         }).AddEndpointFilter<VsSessionRequiredFilter>();
+    }
+
+    private static DateTimeOffset? ParseInstant(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : (DateTimeOffset?)null;
     }
 }

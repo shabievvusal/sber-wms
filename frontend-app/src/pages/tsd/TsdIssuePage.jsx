@@ -11,8 +11,12 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import QrCodeSvg from '@/components/QrCodeSvg'
-import { employeeCode, extractEmployeeCode, formatTime, normalizeScannerCode, shortFio } from './format'
-import { ScanLine, Printer, RotateCcw, CheckSquare, Square } from 'lucide-react'
+import { DateRangePicker } from '@/components/ui/date-picker'
+import {
+  dayEndIso, dayStartIso, dayStr, employeeCode, extractEmployeeCode, formatDateTime,
+  normalizeScannerCode, shortFio,
+} from './format'
+import { ScanLine, Printer, RotateCcw, CheckSquare, Square, RefreshCw } from 'lucide-react'
 
 // Перенесено из оригинала (frontend/app/src/pages/tsd/TsdIssuePage.jsx) — кио­ск
 // сканирования: держит и отдаёт сотрудникам физические ТСД (сканеры штрихкодов
@@ -101,6 +105,14 @@ export default function TsdIssuePage() {
   const [printRequested, setPrintRequested] = useState(false)
   const [activeTab, setActiveTab] = useState('issue')
   const [sort, setSort] = useState({ key: 'company', dir: 'asc' })
+  const [scanFocused, setScanFocused] = useState(false)
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const [historyFrom, setHistoryFrom] = useState(() => dayStr(-6))
+  const [historyTo, setHistoryTo] = useState(() => dayStr(0))
+  const [historyType, setHistoryType] = useState('all')
+  const [historyQuery, setHistoryQuery] = useState('')
   const scanRef = useRef(null)
 
   const load = useCallback(async ({ clearMessage = false } = {}) => {
@@ -138,10 +150,63 @@ export default function TsdIssuePage() {
     }
   }, [load])
 
+  // ── Удержание фокуса на поле сканера ──────────────────────────────────────
+  // Раньше поле было размером 1px с opacity:0, и фокус терялся от любого
+  // клика мимо карточки, переключения вкладки или сворачивания окна — чтобы
+  // отсканировать, приходилось каждый раз вслепую прокликивать карточку.
+  // Теперь поле видимое, а фокус возвращается сам: (1) после blur, если он
+  // ушёл «в никуда» (на body), (2) по таймеру — после закрытия диалогов и
+  // алертов, (3) на первом же символе, напечатанном мимо поля: сканер бьёт
+  // по клавиатуре, символ дописываем руками, поэтому он не теряется.
+  const focusScan = useCallback(() => {
+    const el = scanRef.current
+    if (!el || el === document.activeElement) return
+    el.focus()
+  }, [])
+
   useEffect(() => {
     if (activeTab !== 'issue') return
-    scanRef.current?.focus()
-  }, [activeTab, pendingTsd])
+    focusScan()
+  }, [activeTab, pendingTsd, focusScan])
+
+  useEffect(() => {
+    if (activeTab !== 'issue') return
+
+    // Фокус не отбираем, если пользователь намеренно ушёл в другой контрол
+    // (фильтр, кнопка) — только если он повис на body после клика по пустому.
+    const idle = () => !document.activeElement || document.activeElement === document.body
+    const timer = window.setInterval(() => { if (idle()) focusScan() }, 1500)
+
+    const onKeyDown = e => {
+      const el = scanRef.current
+      if (!el || document.activeElement === el) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const target = document.activeElement
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      if (e.key.length === 1) {
+        e.preventDefault()
+        setScanValue(prev => prev + e.key)
+        el.focus()
+      } else if (e.key === 'Enter') {
+        el.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activeTab, focusScan])
+
+  const handleScanBlur = useCallback(() => {
+    setScanFocused(false)
+    window.setTimeout(() => {
+      const target = document.activeElement
+      if (target && target !== document.body && target !== scanRef.current) return
+      focusScan()
+    }, 0)
+  }, [focusScan])
 
   useEffect(() => {
     if (!printRequested || !printItems.length) return
@@ -213,6 +278,50 @@ export default function TsdIssuePage() {
     return activeList.map(rec => ({ key: `${emp.executorId}-${rec.tsd}`, employee: emp, assignment: rec }))
   }), [assignmentsByEmployee, statusEmployees])
 
+  // Одна строка tsd_assignments = до двух событий журнала: выдача и (если ТСД
+  // уже сдан) приём. Разворачиваем в плоский поток и режем по границам
+  // периода — сервер отдаёт строку целиком, даже когда в период попало лишь
+  // одно из двух её событий (выдали вчера, сдали сегодня).
+  const historyEvents = useMemo(() => {
+    const fromTs = historyFrom ? new Date(dayStartIso(historyFrom)).getTime() : -Infinity
+    const toTs = historyTo ? new Date(dayEndIso(historyTo)).getTime() : Infinity
+    const events = []
+    for (const rec of history) {
+      if (rec.assignedAt) {
+        events.push({ key: `${rec.id}-issue`, at: rec.assignedAt, type: 'issue', tsd: rec.tsd, fio: rec.fio, company: rec.company, note: '' })
+      }
+      if (rec.returnedAt) {
+        // returned_by_* пустые — строку закрыл не приём, а выдача этого же ТСД
+        // другому сотруднику: assign() гасит активную выдачу (см. TsdService).
+        const auto = !rec.returnedByFio && !rec.returnedByExecutorId
+        const foreign = !auto && rec.returnedByExecutorId && rec.executorId && rec.returnedByExecutorId !== rec.executorId
+        events.push({
+          key: `${rec.id}-return`,
+          at: rec.returnedAt,
+          type: 'return',
+          tsd: rec.tsd,
+          fio: auto ? rec.fio : (rec.returnedByFio || rec.fio),
+          company: auto ? rec.company : (rec.returnedByCompany || rec.company),
+          note: auto ? 'Закрыт выдачей другому' : (foreign ? `Сдал за ${rec.fio}` : ''),
+        })
+      }
+    }
+    return events
+      .filter(ev => {
+        const ts = new Date(ev.at).getTime()
+        return ts >= fromTs && ts <= toTs
+      })
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+  }, [history, historyFrom, historyTo])
+
+  const filteredHistory = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase()
+    return historyEvents
+      .filter(ev => historyType === 'all' || ev.type === historyType)
+      .filter(ev => !company || ev.company === company)
+      .filter(ev => !q || `${ev.fio} ${ev.company} ${ev.tsd}`.toLowerCase().includes(q))
+  }, [company, historyEvents, historyQuery, historyType])
+
   const selectedEmployees = useMemo(() => [...selectedIds].map(id => employeesById.get(id)).filter(Boolean), [employeesById, selectedIds])
   const visibleSelected = filtered.length > 0 && filtered.every(emp => selectedIds.has(emp.executorId))
 
@@ -225,6 +334,27 @@ export default function TsdIssuePage() {
       setError(err.message || 'Не удалось обновить назначения ТСД')
     }
   }, [])
+
+  // История грузится отдельно от активных выдач: строк за период сильно
+  // больше, а на вкладках «Выдача»/«Печать»/«Статусы» они не нужны — поэтому
+  // запрос уходит только при открытой вкладке «История» и не участвует в
+  // 10-секундном автообновлении.
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const data = await api.getTsdHistory({ from: dayStartIso(historyFrom), to: dayEndIso(historyTo), limit: 2000 })
+      setHistory(data?.assignments || [])
+      setHistoryError('')
+    } catch (err) {
+      setHistoryError(err.message || 'Не удалось загрузить историю')
+    }
+    setHistoryLoading(false)
+  }, [historyFrom, historyTo])
+
+  useEffect(() => {
+    if (activeTab !== 'history') return
+    loadHistory().catch(() => {})
+  }, [activeTab, loadHistory])
 
   const doAssign = payload => api.assignTsd(payload)
   const doReturn = payload => api.returnTsdByBarcode(payload)
@@ -356,6 +486,7 @@ export default function TsdIssuePage() {
             <TabsTrigger value="issue">Выдача</TabsTrigger>
             <TabsTrigger value="print">Печать QR</TabsTrigger>
             <TabsTrigger value="status">Статусы</TabsTrigger>
+            <TabsTrigger value="history">История</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-4 text-sm">
@@ -367,23 +498,58 @@ export default function TsdIssuePage() {
 
         <TabsContent value="issue">
           <div
-            className="relative flex min-h-[420px] cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed bg-card p-10 text-center"
-            onClick={() => scanRef.current?.focus()}
+            className={cn(
+              'relative flex min-h-[420px] cursor-text flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed bg-card p-10 text-center transition-colors',
+              scanFocused ? 'border-primary/50' : 'border-border'
+            )}
+            // preventDefault вместо focus() по клику: браузер тогда вообще не
+            // снимает фокус с поля, а не снимает-и-возвращает.
+            onMouseDown={e => {
+              if (e.target.closest?.('button, input, select, [role="button"]')) return
+              e.preventDefault()
+              focusScan()
+            }}
           >
-            <form onSubmit={handleScanSubmit} className="absolute size-px overflow-hidden opacity-0">
-              <input ref={scanRef} value={scanValue} onChange={e => setScanValue(e.target.value)} autoComplete="off" />
-              <button type="submit">ОК</button>
-            </form>
             <div className={cn('flex size-24 items-center justify-center rounded-full', pendingTsd ? 'bg-warning/20 text-warning-foreground' : 'bg-success/15 text-success')}>
               <ScanLine size={56} strokeWidth={1.6} />
             </div>
             <div className="text-lg font-semibold">{pendingTsd ? 'Сканируйте QR сотрудника' : 'Сканируйте ТСД'}</div>
-            <div className="text-sm text-muted-foreground">{pendingTsd ? `ТСД ${pendingTsd.tsd} считан` : 'Сканер готов к работе'}</div>
+
+            <form onSubmit={handleScanSubmit} className="w-full max-w-sm">
+              <Input
+                ref={scanRef}
+                value={scanValue}
+                onChange={e => setScanValue(e.target.value)}
+                onFocus={() => setScanFocused(true)}
+                onBlur={handleScanBlur}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Код сканируется сюда"
+                className="h-11 text-center font-mono text-base"
+              />
+              <button type="submit" className="sr-only">ОК</button>
+            </form>
+
+            <div className={cn('flex items-center gap-1.5 text-sm', scanFocused ? 'text-success' : 'text-muted-foreground')}>
+              <span className={cn('size-2 rounded-full', scanFocused ? 'bg-success' : 'bg-muted-foreground')} />
+              {scanFocused ? 'Сканер активен' : 'Начните сканировать — поле подхватит код само'}
+            </div>
+
             <div className="max-w-md text-sm">
               {message || (pendingTsd
                 ? (pendingTsd.mode === 'return' ? 'После QR сотрудника ТСД будет возвращён' : 'После QR сотрудника ТСД будет закреплён за ним')
                 : 'Для возврата сначала сканируйте ТСД')}
             </div>
+
+            {pendingTsd && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setPendingTsd(null); setMessage(''); setScanValue(''); focusScan() }}
+              >
+                Отменить ТСД {pendingTsd.tsd}
+              </Button>
+            )}
           </div>
         </TabsContent>
 
@@ -426,7 +592,7 @@ export default function TsdIssuePage() {
                       <div className="text-xs text-muted-foreground">{emp.company || '—'}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                         <span title={activeList.map(x => x.tsd).join(', ')}>ТСД: {activeList.length ? activeList.map(x => x.tsd).join(', ') : '—'}</span>
-                        <span>Выдан: {activeList[0]?.assignedAt ? formatTime(activeList[0].assignedAt) : '—'}</span>
+                        <span>Выдан: {activeList[0]?.assignedAt ? formatDateTime(activeList[0].assignedAt) : '—'}</span>
                       </div>
                     </div>
                     <Button size="icon" variant="ghost" className="shrink-0" onClick={() => printEmployees([emp])} title="Печать бейджа"><Printer className="size-3.5" /></Button>
@@ -460,7 +626,7 @@ export default function TsdIssuePage() {
                         <TableCell>{emp.fio}</TableCell>
                         <TableCell title={activeList.map(x => x.tsd).join(', ')}>{activeList.length ? activeList.map(x => x.tsd).join(', ') : '—'}</TableCell>
                         <TableCell><Badge variant={activeList.length ? 'warning' : 'success'}>{activeList.length ? 'Не сдал' : 'Сдал'}</Badge></TableCell>
-                        <TableCell>{activeList[0]?.assignedAt ? formatTime(activeList[0].assignedAt) : '—'}</TableCell>
+                        <TableCell>{activeList[0]?.assignedAt ? formatDateTime(activeList[0].assignedAt) : '—'}</TableCell>
                         <TableCell>
                           <Button size="icon" variant="ghost" onClick={() => printEmployees([emp])} title="Печать бейджа"><Printer className="size-3.5" /></Button>
                         </TableCell>
@@ -505,7 +671,7 @@ export default function TsdIssuePage() {
                       <div className="text-xs text-muted-foreground">{emp.company || '—'}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                         <span>ТСД: {active?.tsd || '—'}</span>
-                        <span>Выдан: {active?.assignedAt ? formatTime(active.assignedAt) : '—'}</span>
+                        <span>Выдан: {active?.assignedAt ? formatDateTime(active.assignedAt) : '—'}</span>
                       </div>
                     </div>
                     <Button size="icon" variant="ghost" className="shrink-0" disabled={!active} onClick={() => handleReturn(emp, active)} title="Вернуть без сканирования">
@@ -540,7 +706,7 @@ export default function TsdIssuePage() {
                         <TableCell>{emp.fio}</TableCell>
                         <TableCell>{active?.tsd || '—'}</TableCell>
                         <TableCell><Badge variant={active ? 'warning' : 'success'}>{active ? 'Не сдал' : 'Сдал'}</Badge></TableCell>
-                        <TableCell>{active?.assignedAt ? formatTime(active.assignedAt) : '—'}</TableCell>
+                        <TableCell>{active?.assignedAt ? formatDateTime(active.assignedAt) : '—'}</TableCell>
                         <TableCell>
                           <Button size="icon" variant="ghost" disabled={!active} onClick={() => handleReturn(emp, active)} title="Вернуть без сканирования">
                             <RotateCcw className="size-3.5" />
@@ -551,6 +717,97 @@ export default function TsdIssuePage() {
                   })}
                   {!statusRows.length && (
                     <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Нет сотрудников</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Журнал выдачи/приёма — все строки tsd_assignments за период, а не
+            только активные; каждая строка разворачивается в 1-2 события. */}
+        <TabsContent value="history" className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              from={historyFrom}
+              to={historyTo}
+              onChange={({ from, to }) => { setHistoryFrom(from); setHistoryTo(to || from) }}
+              className="h-8"
+            />
+            <select className={selectClass} value={historyType} onChange={e => setHistoryType(e.target.value)}>
+              <option value="all">Все события</option>
+              <option value="issue">Только выдача</option>
+              <option value="return">Только приём</option>
+            </select>
+            <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
+              <option value="">Все компании</option>
+              {companies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <Input className="h-8 w-48" placeholder="ФИО или ТСД" value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} />
+            <Button size="sm" variant="outline" onClick={() => loadHistory()} disabled={historyLoading}>
+              <RefreshCw className={cn('size-3.5', historyLoading && 'animate-spin')} /> Обновить
+            </Button>
+            <span className="ml-auto text-sm text-muted-foreground">Событий: {filteredHistory.length}</span>
+          </div>
+
+          {historyError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">{historyError}</div>
+          )}
+
+          <div className="rounded-lg border">
+            {/* Мобильные карточки — до md (768px) */}
+            <div className="divide-y md:hidden">
+              {filteredHistory.map(ev => (
+                <div key={ev.key} className="p-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={ev.type === 'issue' ? 'warning' : 'success'}>{ev.type === 'issue' ? 'Выдача' : 'Приём'}</Badge>
+                    <span className="truncate font-medium">{ev.fio || '—'}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">{ev.company || '—'}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span>ТСД: {ev.tsd}</span>
+                    <span>{formatDateTime(ev.at)}</span>
+                  </div>
+                  {ev.note && <div className="mt-0.5 text-xs text-warning-foreground">{ev.note}</div>}
+                </div>
+              ))}
+              {!filteredHistory.length && (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  {historyLoading ? 'Загрузка...' : 'Нет событий за период'}
+                </div>
+              )}
+            </div>
+
+            {/* Десктопная таблица — от md и шире */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-40">Время</TableHead>
+                    <TableHead className="w-28">Событие</TableHead>
+                    <TableHead className="w-28">ТСД</TableHead>
+                    <TableHead>Исполнитель</TableHead>
+                    <TableHead>Компания</TableHead>
+                    <TableHead>Примечание</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredHistory.map(ev => (
+                    <TableRow key={ev.key}>
+                      <TableCell className="whitespace-nowrap">{formatDateTime(ev.at)}</TableCell>
+                      <TableCell><Badge variant={ev.type === 'issue' ? 'warning' : 'success'}>{ev.type === 'issue' ? 'Выдача' : 'Приём'}</Badge></TableCell>
+                      <TableCell>{ev.tsd}</TableCell>
+                      <TableCell>{ev.fio || '—'}</TableCell>
+                      <TableCell>{ev.company || '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">{ev.note || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!filteredHistory.length && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        {historyLoading ? 'Загрузка...' : 'Нет событий за период'}
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>

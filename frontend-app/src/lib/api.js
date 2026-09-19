@@ -312,6 +312,18 @@ export async function assignTsd({ executorId, fio, company, tsd }) {
   })
 }
 
+// Журнал выдачи/приёма — те же строки tsd_assignments, но БЕЗ фильтра
+// returned_at IS NULL: строка попадает в выборку, если в диапазон [from, to]
+// попало хотя бы одно её событие (выдача или возврат), см. TsdService.
+export async function getTsdHistory({ from, to, limit } = {}) {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (limit) params.set('limit', String(limit))
+  const qs = params.toString()
+  return req(`/api/tsd-assignments/history${qs ? `?${qs}` : ''}`)
+}
+
 export async function returnTsdByBarcode({ tsd, returnedByExecutorId, returnedByFio, returnedByCompany }) {
   return req('/api/tsd-assignments/return-tsd', {
     method: 'POST',
