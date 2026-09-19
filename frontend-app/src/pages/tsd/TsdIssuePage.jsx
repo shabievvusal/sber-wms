@@ -98,7 +98,6 @@ export default function TsdIssuePage() {
   const [company, setCompany] = useState('')
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [scanValue, setScanValue] = useState('')
   const [pendingTsd, setPendingTsd] = useState(null)
   const [message, setMessage] = useState('')
   const [printItems, setPrintItems] = useState([])
@@ -113,7 +112,10 @@ export default function TsdIssuePage() {
   const [historyTo, setHistoryTo] = useState(() => dayStr(0))
   const [historyType, setHistoryType] = useState('all')
   const [historyQuery, setHistoryQuery] = useState('')
+  // Поле сканера — НЕуправляемое: значение живёт в DOM, состояния на каждый
+  // символ нет. Контролируемое поле здесь ломало скан (см. onKeyDown ниже).
   const scanRef = useRef(null)
+  const submitScanRef = useRef(() => {})
 
   const load = useCallback(async ({ clearMessage = false } = {}) => {
     try {
@@ -184,11 +186,19 @@ export default function TsdIssuePage() {
       const target = document.activeElement
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
       if (e.key.length === 1) {
+        // Символ дописываем прямо в DOM, а не через setState: React применяет
+        // состояние асинхронно, и следующие символы сканера успевали
+        // напечататься в ещё пустое поле — onChange затирал начало кода.
+        // Код приходил обрезанным, ТСД не выдавался, скан повторяли заново.
         e.preventDefault()
-        setScanValue(prev => prev + e.key)
+        el.value += e.key
         el.focus()
       } else if (e.key === 'Enter') {
+        // Раньше этот Enter только возвращал фокус и терялся — код висел в
+        // поле до следующего нажатия.
+        e.preventDefault()
         el.focus()
+        submitScanRef.current()
       }
     }
 
@@ -409,16 +419,31 @@ export default function TsdIssuePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentsByTsd, employeesById, pendingTsd, reloadAssignments])
 
-  const handleScanSubmit = async e => {
-    e.preventDefault()
+  // Код забираем из DOM и чистим поле ДО запроса. Раньше очистка шла после
+  // await: бейдж сотрудника, отсканированный пока летел запрос, дописывался
+  // в поле и стирался вместе с ним — второй скан терялся, и всю выдачу
+  // приходилось начинать заново.
+  const submitScan = useCallback(async () => {
+    const el = scanRef.current
+    const raw = el?.value || ''
+    if (!raw.trim()) return
+    if (el) el.value = ''
     try {
-      await processScan(scanValue)
-      setScanValue('')
+      await processScan(raw)
     } catch (err) {
       setMessage(err.message || 'Ошибка операции')
     } finally {
-      scanRef.current?.focus()
+      focusScan()
     }
+  }, [focusScan, processScan])
+
+  // Перехват клавиш живёт в эффекте выше по файлу, объявленном раньше
+  // submitScan — держим ссылку на актуальную версию.
+  useEffect(() => { submitScanRef.current = submitScan }, [submitScan])
+
+  const handleScanSubmit = e => {
+    e.preventDefault()
+    submitScan()
   }
 
   const toggleOne = executorId => setSelectedIds(prev => {
@@ -518,8 +543,7 @@ export default function TsdIssuePage() {
             <form onSubmit={handleScanSubmit} className="w-full max-w-sm">
               <Input
                 ref={scanRef}
-                value={scanValue}
-                onChange={e => setScanValue(e.target.value)}
+                defaultValue=""
                 onFocus={() => setScanFocused(true)}
                 onBlur={handleScanBlur}
                 autoComplete="off"
@@ -545,7 +569,12 @@ export default function TsdIssuePage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => { setPendingTsd(null); setMessage(''); setScanValue(''); focusScan() }}
+                onClick={() => {
+                  setPendingTsd(null)
+                  setMessage('')
+                  if (scanRef.current) scanRef.current.value = ''
+                  focusScan()
+                }}
               >
                 Отменить ТСД {pendingTsd.tsd}
               </Button>
