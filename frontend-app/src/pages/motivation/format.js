@@ -93,19 +93,25 @@ export function resolveAccount(text, index) {
 
 const OTHER_ROLE_WORDS = ['грузчик', 'заморозк', 'другое', 'без нормы', 'other']
 
-// Вставка из таблицы/мессенджера: по строке на человека —
-// «ФИО <разделитель> учётка [<разделитель> роль]». Разделитель — табуляция,
-// «;» или тире с пробелами. Учётка может отсутствовать (тогда «нет учётки»).
-export function parsePeopleText(text, index) {
+// Вставка из таблицы/мессенджера, по строке на человека. Разделитель —
+// табуляция, «;» или тире с пробелами. Режимы:
+//   'accounts' — «учётка [; ФИО из акта] [; роль]»: ФИО не обязательно,
+//                по умолчанию берётся ФИО учётки из справочника/WMS;
+//   'people'   — «ФИО из акта ; учётка [; роль]»: учётка может отсутствовать
+//                (тогда «нет учётки»).
+export function parsePeopleText(text, index, mode = 'accounts') {
   const rows = []
   for (const line of String(text || '').split(/\r?\n/)) {
     if (!line.trim()) continue
     const parts = line.split(/\t|;|\s[-–—]\s/).map(s => s.trim())
-    const fio = parts[0].replace(/^\d+[.)]\s*/, '')
+    parts[0] = parts[0].replace(/^\d+[.)]\s+/, '')
+    const [accountText, fioText] = mode === 'accounts' ? [parts[0], parts[1]] : [parts[1], parts[0]]
+    const account = resolveAccount(accountText, index)
+    const fio = fioText || (mode === 'accounts' ? account.executorName : '')
     if (!fio) continue
     const roleText = (parts[2] || '').toLowerCase()
     const role = OTHER_ROLE_WORDS.some(w => roleText.includes(w)) ? 'other' : 'picker'
-    rows.push({ fio, role, accountText: parts[1] || '', ...resolveAccount(parts[1], index) })
+    rows.push({ fio, role, accountText: accountText || '', ...account })
   }
   return rows
 }

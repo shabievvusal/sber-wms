@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { RefreshCw, FileDown, FileText, Settings2, Loader2 } from 'lucide-react'
+import { RefreshCw, FileDown, FileText, Settings2, Loader2, ClipboardPaste } from 'lucide-react'
 import * as api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export default function MotivationPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
@@ -82,8 +83,8 @@ export default function MotivationPage() {
         fromStats: true,
         people: list.map(r => ({
           company: r.company === '—' ? '' : r.company,
-          fio: r.executorName || r.executorId,
-          role: 'picker',
+          fio: r.fio || r.executorName || r.executorId,
+          role: r.role || 'picker',
           executorId: r.executorId,
           executorName: r.executorName,
         })),
@@ -183,6 +184,9 @@ export default function MotivationPage() {
         <Button size="sm" variant="ghost" onClick={() => setShowSettings(v => !v)}>
           <Settings2 className="size-4" /> Нормы
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => setShowImport(v => !v)}>
+          <ClipboardPaste className="size-4" /> Вставить списком
+        </Button>
       </div>
 
       {showSettings && calc?.settings && (
@@ -226,7 +230,15 @@ export default function MotivationPage() {
         </div>
       )}
 
-      <ImportPanel date={date} shift={shift} companies={companies} accountIndex={accountIndex} onSaved={load} />
+      {showImport && (
+        <ImportPanel date={date} shift={shift} companies={companies} accountIndex={accountIndex} onSaved={load} />
+      )}
+
+      {calc && (rows.length > 0 || calc.unmapped?.length > 0) && (
+        <div className="text-xs text-muted-foreground">
+          Нажмите на сотрудника (левой или правой кнопкой) — меню: внести в акт, изменить ФИО, сменить учётку, роль, удалить.
+        </div>
+      )}
 
       {[...byCompany.entries()].map(([company, list]) => (
         <ShiftTable key={company} company={company} rows={list} accountIndex={accountIndex} onChanged={load} />

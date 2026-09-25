@@ -16,9 +16,10 @@ export function ImportPanel({ date, shift, companies, accountIndex, onSaved }) {
   const [company, setCompany] = useState('')
   const [receivedTime, setReceivedTime] = useState(nowTimeStr)
   const [text, setText] = useState('')
+  const [mode, setMode] = useState('accounts')
   const [saving, setSaving] = useState(false)
 
-  const parsed = useMemo(() => parsePeopleText(text, accountIndex), [text, accountIndex])
+  const parsed = useMemo(() => parsePeopleText(text, accountIndex, mode), [text, accountIndex, mode])
   const unmatched = parsed.filter(p => !p.matched).length
   const withoutAccount = parsed.filter(p => !p.accountText).length
 
@@ -56,13 +57,22 @@ export function ImportPanel({ date, shift, companies, accountIndex, onSaved }) {
           </select>
         </label>
         <label className="space-y-1 text-sm">
+          <span className="block text-xs text-muted-foreground">Что в строке</span>
+          <select className={selectClass} value={mode} onChange={e => setMode(e.target.value)}>
+            <option value="accounts">Только учётки (ФИО — из учётки)</option>
+            <option value="people">ФИО из акта ; учётка</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Список получен в</span>
           <Input type="time" className="h-8 w-28" value={receivedTime} onChange={e => setReceivedTime(e.target.value)} />
         </label>
       </div>
       <Textarea
         className="mt-3 min-h-28 font-mono text-xs"
-        placeholder={'По строке на человека: ФИО из акта ; учётка (ID или ФИО учётки) ; роль\nИванов Иван Иванович ; 1234567\nПетров Пётр ; Сидоров Сидор Сидорович\nКузнецов Алексей ; ; грузчик'}
+        placeholder={mode === 'accounts'
+          ? 'По строке на учётку — ID или ФИО учётки. ФИО в акт подставится из учётки.\nЕсли в акте другой человек — допишите его через «;».\n1234567\nСидоров Сидор Сидорович\n7654321 ; Петров Пётр Петрович'
+          : 'По строке на человека: ФИО из акта ; учётка (ID или ФИО учётки) ; роль\nИванов Иван Иванович ; 1234567\nПетров Пётр ; Сидоров Сидор Сидорович\nКузнецов Алексей ; ; грузчик'}
         value={text}
         onChange={e => setText(e.target.value)}
       />

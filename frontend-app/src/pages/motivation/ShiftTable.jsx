@@ -1,81 +1,40 @@
-import { useState } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Pencil, AlertTriangle, UserPlus } from 'lucide-react'
+import { AlertTriangle, UserPlus } from 'lucide-react'
 import * as api from '@/lib/api'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { fmtHours, fmtNum, fmtPct, fmtTime, resolveAccount, STATUS_META } from './format'
+import { PersonMenu } from './PersonMenu'
 
 const th = 'h-8 px-2 text-[11px] whitespace-nowrap'
 const td = 'px-2 py-1.5 text-[13px] whitespace-nowrap'
 const num = `${td} text-right tabular-nums`
 
-function AccountCell({ row, accountIndex, onChanged }) {
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState('')
-
-  const start = () => { setValue(row.executorId || row.executorName); setEditing(true) }
-  const commit = async () => {
-    setEditing(false)
-    const next = resolveAccount(value, accountIndex)
-    if (next.executorId === row.executorId && next.executorName === row.executorName) return
-    try {
-      await api.updateMotivationPerson(row.id, { executorId: next.executorId, executorName: next.executorName })
-      if (!next.matched) toast.warning(`«${next.executorName}» нет в справочнике — будет искаться по имени в WMS`)
-      onChanged()
-    } catch (err) {
-      toast.error(err.message)
-    }
-  }
-
-  if (editing) {
-    return (
-      <Input
-        autoFocus list="motivation-accounts" className="h-7 w-56 text-xs" value={value}
-        placeholder="ID или ФИО учётки"
-        onChange={e => setValue(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditing(false) }}
-      />
-    )
-  }
-  return (
-    <button type="button" className="group inline-flex items-center gap-1 text-left" onClick={start}>
-      {row.executorId || row.executorName
-        ? <span>{row.executorName || row.executorId}{row.executorId && <span className="text-muted-foreground"> · {row.executorId}</span>}</span>
-        : <span className="text-destructive">не указана</span>}
-      <Pencil className="size-3 opacity-0 group-hover:opacity-60" />
-    </button>
-  )
-}
-
-function RoleCell({ row, onChanged }) {
-  const change = async e => {
-    try {
-      await api.updateMotivationPerson(row.id, { role: e.target.value })
-      onChanged()
-    } catch (err) {
-      toast.error(err.message)
-    }
-  }
-  return (
-    <select className="h-7 rounded-md border border-input bg-transparent px-1 text-xs" value={row.role} onChange={change}>
-      <option value="picker">Комплект.</option>
-      <option value="other">Без нормы</option>
-    </select>
-  )
-}
-
 // readOnly — учётки из статистики без человека в акте (MotivationPage):
-// норма посчитана, но редактировать нечего — нет записи в смене. onAdd —
-// внести учётки в смену (в акт), когда подрядчик учётки не прислал.
+// записи в смене нет, меню по клику на имя предлагает внести в акт (onAdd).
+// Иначе — люди смены: меню по клику меняет ФИО/учётку/роль или удаляет.
 export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = false, onAdd }) {
   const totalHours = rows.reduce((s, r) => s + (r.hours || 0), 0)
   const zero = rows.filter(r => r.role === 'picker' && (r.hours || 0) === 0).length
   const under = rows.filter(r => r.status === 'under').length
   const over = rows.filter(r => r.status === 'over').length
+
+  const update = async (row, patch, okMessage) => {
+    try {
+      await api.updateMotivationPerson(row.id, patch)
+      if (okMessage) toast.success(okMessage)
+      onChanged()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const changeAccount = (row, text) => {
+    const next = resolveAccount(text, accountIndex)
+    if (!next.matched) toast.warning(`«${next.executorName}» нет в справочнике — будет искаться по имени в WMS`)
+    return update(row, { executorId: next.executorId, executorName: next.executorName })
+  }
 
   const remove = async row => {
     if (!window.confirm(`Удалить «${row.fio}» из смены?`)) return
@@ -98,7 +57,7 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
           {!readOnly && zero > 0 && <> · <span className="text-destructive">0 часов: {zero}</span></>}
           {onAdd && (
             <Button size="sm" variant="outline" className="ml-3 h-7" onClick={() => onAdd(rows)}>
-              <UserPlus className="size-3.5" /> Внести в акт
+              <UserPlus className="size-3.5" /> Внести всех в акт
             </Button>
           )}
         </span>
@@ -121,20 +80,40 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
               <TableHead className={`${th} text-right`}>Итог</TableHead>
               <TableHead className={`${th} text-right`}>Часы</TableHead>
               <TableHead className={th}>Статус</TableHead>
-              {(!readOnly || onAdd) && <TableHead className={th} />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map(r => {
               const [label, variant] = STATUS_META[r.status] || [r.status, 'outline']
               const hasStats = r.storageTasks + r.kdkTasks > 0
+              const hasAccount = r.executorId || r.executorName
               return (
                 <TableRow key={readOnly ? r.executorId : r.id}>
-                  <TableCell className={`${td} font-medium`}>{r.fio}</TableCell>
+                  <TableCell className={td}>
+                    {readOnly ? (
+                      onAdd
+                        ? <PersonMenu row={r} onAdd={extra => onAdd([{ ...r, ...extra }])} />
+                        : <span className="font-medium">{r.fio}</span>
+                    ) : (
+                      <PersonMenu
+                        row={r} inShift
+                        onRename={fio => update(r, { fio })}
+                        onChangeAccount={text => changeAccount(r, text)}
+                        onSetRole={role => update(r, { role })}
+                        onDelete={() => remove(r)}
+                      />
+                    )}
+                  </TableCell>
                   {readOnly ? <TableCell className={`${td} text-muted-foreground`}>{r.executorId}</TableCell> : <>
-                    <TableCell className={td}><RoleCell row={r} onChanged={onChanged} /></TableCell>
-                    <TableCell className={td}><AccountCell row={r} accountIndex={accountIndex} onChanged={onChanged} /></TableCell>
-                    <TableCell className={`${td} ${r.late ? 'font-semibold text-destructive' : ''}`}>{r.receivedAt ? fmtTime(r.receivedAt) : (r.executorId || r.executorName) ? <span className="text-xs text-muted-foreground">из статистики</span> : '—'}</TableCell>
+                    <TableCell className={`${td} text-xs`}>{r.role === 'other' ? 'Без нормы' : 'Комплект.'}</TableCell>
+                    <TableCell className={td}>
+                      {hasAccount
+                        ? <span>{r.executorName || r.executorId}{r.executorId && <span className="text-muted-foreground"> · {r.executorId}</span>}</span>
+                        : <span className="text-destructive">не указана</span>}
+                    </TableCell>
+                    <TableCell className={`${td} ${r.late ? 'font-semibold text-destructive' : ''}`}>
+                      {r.receivedAt ? fmtTime(r.receivedAt) : hasAccount ? <span className="text-xs text-muted-foreground">из статистики</span> : '—'}
+                    </TableCell>
                   </>}
                   <TableCell className={num}>{hasStats ? fmtNum(r.storageTasks) : '—'}</TableCell>
                   <TableCell className={num}>{hasStats ? fmtNum(r.kdkTasks) : '—'}</TableCell>
@@ -158,18 +137,6 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
                     )}
                   </TableCell>
                   <TableCell className={td}><Badge variant={variant}>{label}</Badge></TableCell>
-                  {!readOnly && <TableCell className={td}>
-                    <Button variant="ghost" size="icon" className="size-7" onClick={() => remove(r)} title="Удалить из смены">
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </TableCell>}
-                  {readOnly && onAdd && (
-                    <TableCell className={td}>
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => onAdd([r])} title="Внести в акт">
-                        <UserPlus className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  )}
                 </TableRow>
               )
             })}
