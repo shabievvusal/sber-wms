@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Pencil, AlertTriangle } from 'lucide-react'
+import { Trash2, Pencil, AlertTriangle, UserPlus } from 'lucide-react'
 import * as api from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -69,8 +69,9 @@ function RoleCell({ row, onChanged }) {
 }
 
 // readOnly — учётки из статистики без человека в акте (MotivationPage):
-// норма посчитана, но редактировать нечего — нет записи в смене.
-export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = false }) {
+// норма посчитана, но редактировать нечего — нет записи в смене. onAdd —
+// внести учётки в смену (в акт), когда подрядчик учётки не прислал.
+export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = false, onAdd }) {
   const totalHours = rows.reduce((s, r) => s + (r.hours || 0), 0)
   const zero = rows.filter(r => r.role === 'picker' && (r.hours || 0) === 0).length
   const under = rows.filter(r => r.status === 'under').length
@@ -95,6 +96,11 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
           {under > 0 && <> · <span className="text-destructive">недобор: {under}</span></>}
           {over > 0 && <> · <span className="text-blue-600">перевыполнение: {over}</span></>}
           {!readOnly && zero > 0 && <> · <span className="text-destructive">0 часов: {zero}</span></>}
+          {onAdd && (
+            <Button size="sm" variant="outline" className="ml-3 h-7" onClick={() => onAdd(rows)}>
+              <UserPlus className="size-3.5" /> Внести в акт
+            </Button>
+          )}
         </span>
       </div>
       <div className="overflow-x-auto">
@@ -115,7 +121,7 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
               <TableHead className={`${th} text-right`}>Итог</TableHead>
               <TableHead className={`${th} text-right`}>Часы</TableHead>
               <TableHead className={th}>Статус</TableHead>
-              {!readOnly && <TableHead className={th} />}
+              {(!readOnly || onAdd) && <TableHead className={th} />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -128,7 +134,7 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
                   {readOnly ? <TableCell className={`${td} text-muted-foreground`}>{r.executorId}</TableCell> : <>
                     <TableCell className={td}><RoleCell row={r} onChanged={onChanged} /></TableCell>
                     <TableCell className={td}><AccountCell row={r} accountIndex={accountIndex} onChanged={onChanged} /></TableCell>
-                    <TableCell className={`${td} ${r.late ? 'font-semibold text-destructive' : ''}`}>{fmtTime(r.receivedAt)}</TableCell>
+                    <TableCell className={`${td} ${r.late ? 'font-semibold text-destructive' : ''}`}>{r.receivedAt ? fmtTime(r.receivedAt) : (r.executorId || r.executorName) ? <span className="text-xs text-muted-foreground">из статистики</span> : '—'}</TableCell>
                   </>}
                   <TableCell className={num}>{hasStats ? fmtNum(r.storageTasks) : '—'}</TableCell>
                   <TableCell className={num}>{hasStats ? fmtNum(r.kdkTasks) : '—'}</TableCell>
@@ -157,6 +163,13 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
                       <Trash2 className="size-3.5" />
                     </Button>
                   </TableCell>}
+                  {readOnly && onAdd && (
+                    <TableCell className={td}>
+                      <Button variant="ghost" size="icon" className="size-7" onClick={() => onAdd([r])} title="Внести в акт">
+                        <UserPlus className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               )
             })}

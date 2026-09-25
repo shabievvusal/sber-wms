@@ -169,7 +169,7 @@ public class MotivationService
                 ExecutorName = Clean(p.ExecutorName),
                 // Время получения — только если учётка указана: человек без
                 // учётки ещё ничего «не подал».
-                ReceivedAt = executorId != "" || Clean(p.ExecutorName) != "" ? receivedAt : null,
+                ReceivedAt = !req.FromStats && (executorId != "" || Clean(p.ExecutorName) != "") ? receivedAt : null,
                 CreatedAt = DateTime.UtcNow,
             };
             _db.MotivationPeople.Add(entity);

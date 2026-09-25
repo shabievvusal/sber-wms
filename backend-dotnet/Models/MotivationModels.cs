@@ -78,6 +78,9 @@ public class MotivationAddPeopleRequest
     public string? Shift { get; set; }
     // ISO-время получения списка от подрядчика; пусто — «сейчас».
     public string? ReceivedAt { get; set; }
+    // true — люди взяты из статистики (учётки от подрядчика не получены):
+    // время получения не ставится, срок подачи на них не распространяется.
+    public bool FromStats { get; set; }
     public List<MotivationPersonInput>? People { get; set; }
 }
 

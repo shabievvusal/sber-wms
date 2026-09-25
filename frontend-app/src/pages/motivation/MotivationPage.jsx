@@ -71,6 +71,29 @@ export default function MotivationPage() {
   }, [rows])
   const totalHours = rows.reduce((s, r) => s + (r.hours || 0), 0)
 
+  // Учётки не прислали — вносим в смену тех, кто работал, по статистике:
+  // ФИО = имя учётки, компания — из справочника, срок подачи не действует.
+  const addFromStats = async list => {
+    try {
+      await api.addMotivationPeople({
+        date,
+        shift,
+        fromStats: true,
+        people: list.map(r => ({
+          company: r.company === '—' ? '' : r.company,
+          fio: r.executorName || r.executorId,
+          role: 'picker',
+          executorId: r.executorId,
+          executorName: r.executorName,
+        })),
+      })
+      toast.success(`Внесено в акт: ${list.length}`)
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   const downloadActs = async () => {
     if (!rows.length) return
     setGenerating(true)
@@ -199,7 +222,7 @@ export default function MotivationPage() {
             </span>
           </div>
           {[...unmappedByCompany.entries()].map(([company, list]) => (
-            <ShiftTable key={company} company={company} rows={list} readOnly />
+            <ShiftTable key={company} company={company} rows={list} readOnly onAdd={addFromStats} />
           ))}
         </div>
       )}
