@@ -119,9 +119,11 @@ public class MotivationResultRow
     public int KdkTasks { get; set; }
     public double StorageWeightKg { get; set; }
     public double KdkWeightKg { get; set; }
-    // Отборы товаров без веса в справочнике — их вес не посчитан, и недобор
-    // по весу может быть не по вине работника (Статистика → «Нет веса»).
+    // Отборы товаров без веса в справочнике. Их вес оценён средним весом
+    // отбора этой же учётки (или средним по складу за смену) и уже входит в
+    // StorageWeightKg/KdkWeightKg; EstimatedWeightKg — сколько из них оценено.
     public int MissingWeightItems { get; set; }
+    public double EstimatedWeightKg { get; set; }
     // Доли нормы (1 = 100%). Для смешанной работы складываются:
     // 450 СЗ хранения + 750 СЗ КДК = 0,5 + 0,5 = 100%.
     public double TasksPct { get; set; }

@@ -232,15 +232,37 @@ public class MotivationService
 
     // ─── Расчёт ──────────────────────────────────────────────────────────────
 
+    // Вес одного вида отбора (хранение или КДК) по учётке. Отборы товаров без
+    // веса в справочнике досчитываются средним весом отбора этой же учётки
+    // (а если у неё нет ни одного отбора с весом — средним по складу за
+    // смену), чтобы дыра в справочнике не срезала часы работнику.
+    private class WeightPart
+    {
+        public decimal Grams;        // по справочнику
+        public int WeightedItems;    // отборов с весом
+        public int MissingItems;     // отборов без веса
+        public decimal EstimatedGrams;
+
+        public void Estimate(decimal shiftAvgGramsPerItem)
+        {
+            if (MissingItems == 0) return;
+            var avg = WeightedItems > 0 ? Grams / WeightedItems : shiftAvgGramsPerItem;
+            EstimatedGrams = avg * MissingItems;
+        }
+
+        public decimal Total => Grams + EstimatedGrams;
+    }
+
     private class AccountStats
     {
         public string ExecutorId = "";
         public string Name = "";
         public int StorageTasks;
         public HashSet<string> KdkKeys = new();
-        public decimal StorageGrams;
-        public decimal KdkGrams;
-        public int MissingWeight;
+        public WeightPart Storage = new();
+        public WeightPart Kdk = new();
+        public int MissingWeight => Storage.MissingItems + Kdk.MissingItems;
+        public decimal EstimatedGrams => Storage.EstimatedGrams + Kdk.EstimatedGrams;
     }
 
     private async Task<Dictionary<string, AccountStats>> LoadAccountStatsAsync(string date, string shift)
@@ -274,15 +296,30 @@ public class MotivationService
                 acc.KdkKeys.Add($"{hour}|{product}||{cell}");
             }
 
-            if (string.IsNullOrEmpty(item.ProductName)) continue;
+            var part = isKdk ? acc.Kdk : acc.Storage;
             var article = (item.NomenclatureCode ?? "").Trim();
-            if (article == "" || !weightMap.TryGetValue(article, out var gramsPerUnit) || gramsPerUnit <= 0)
+            if (string.IsNullOrEmpty(item.ProductName) || article == ""
+                || !weightMap.TryGetValue(article, out var gramsPerUnit) || gramsPerUnit <= 0)
             {
-                acc.MissingWeight++;
+                part.MissingItems++;
                 continue;
             }
-            var grams = gramsPerUnit * Math.Max(1, item.Quantity ?? 1);
-            if (isKdk) acc.KdkGrams += grams; else acc.StorageGrams += grams;
+            part.Grams += gramsPerUnit * Math.Max(1, item.Quantity ?? 1);
+            part.WeightedItems++;
+        }
+
+        decimal ShiftAvg(Func<AccountStats, WeightPart> pick)
+        {
+            var parts = byAccount.Values.Select(pick).ToList();
+            var items = parts.Sum(p => p.WeightedItems);
+            return items > 0 ? parts.Sum(p => p.Grams) / items : 0;
+        }
+        var storageAvg = ShiftAvg(a => a.Storage);
+        var kdkAvg = ShiftAvg(a => a.Kdk);
+        foreach (var acc in byAccount.Values)
+        {
+            acc.Storage.Estimate(storageAvg);
+            acc.Kdk.Estimate(kdkAvg);
         }
         return byAccount;
     }
@@ -330,11 +367,7 @@ public class MotivationService
                 usedAccounts.Add(accountId);
                 row.ExecutorId = accountId;
                 if (row.ExecutorName == "") row.ExecutorName = found.Name;
-                row.StorageTasks = found.StorageTasks;
-                row.KdkTasks = found.KdkKeys.Count;
-                row.StorageWeightKg = Math.Round((double)found.StorageGrams / 1000, 1);
-                row.KdkWeightKg = Math.Round((double)found.KdkGrams / 1000, 1);
-                row.MissingWeightItems = found.MissingWeight;
+                FillStats(row, found);
             }
 
             if (p.Role == MotivationRoles.Other)
@@ -379,12 +412,8 @@ public class MotivationService
                 Fio = a.Name,
                 Role = MotivationRoles.Picker,
                 Company = idMap.TryGetValue(a.ExecutorId, out var c) && c != "" ? c : "—",
-                StorageTasks = a.StorageTasks,
-                KdkTasks = a.KdkKeys.Count,
-                StorageWeightKg = Math.Round((double)a.StorageGrams / 1000, 1),
-                KdkWeightKg = Math.Round((double)a.KdkGrams / 1000, 1),
-                MissingWeightItems = a.MissingWeight,
             };
+            FillStats(row, a);
             if (row.StorageTasks + row.KdkTasks > 0) ApplyNorm(row, a, settings);
             else row.Status = MotivationStatuses.NoStats;
             return row;
@@ -402,12 +431,23 @@ public class MotivationService
         };
     }
 
+    // Вес — с учётом оценки для отборов без веса в справочнике (WeightPart).
+    private static void FillStats(MotivationResultRow row, AccountStats acc)
+    {
+        row.StorageTasks = acc.StorageTasks;
+        row.KdkTasks = acc.KdkKeys.Count;
+        row.StorageWeightKg = Math.Round((double)acc.Storage.Total / 1000, 1);
+        row.KdkWeightKg = Math.Round((double)acc.Kdk.Total / 1000, 1);
+        row.MissingWeightItems = acc.MissingWeight;
+        row.EstimatedWeightKg = Math.Round((double)acc.EstimatedGrams / 1000, 1);
+    }
+
     private static void ApplyNorm(MotivationResultRow row, AccountStats acc, MotivationSettings s)
     {
         var storageShare = row.StorageTasks / s.Storage.Tasks;
         var kdkShare = row.KdkTasks / s.Kdk.Tasks;
         var tasksPct = storageShare + kdkShare;
-        var weightPct = (double)acc.StorageGrams / 1000 / s.Storage.WeightKg + (double)acc.KdkGrams / 1000 / s.Kdk.WeightKg;
+        var weightPct = (double)acc.Storage.Total / 1000 / s.Storage.WeightKg + (double)acc.Kdk.Total / 1000 / s.Kdk.WeightKg;
         var pct = Math.Min(tasksPct, weightPct);
 
         // Сколько часов «стоит» вся норма: хранение 900/100 = 9 ч, КДК

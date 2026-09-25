@@ -33,7 +33,7 @@ export function reasonText(r, s, deadlineIso) {
   if (r.status === 'under') text += ` Недобор — снято ${fmtHours(-r.deltaHours)} ч.`
   else if (r.status === 'over') text += ` Перевыполнение — добавлено ${fmtHours(r.deltaHours)} ч.`
   else text += ' Изменение меньше шага округления — полная смена.'
-  if (r.missingWeightItems > 0) text += ` Внимание: отборов без веса в справочнике — ${r.missingWeightItems}, их вес не учтён.`
+  if (r.missingWeightItems > 0) text += ` Для ${r.missingWeightItems} отб. без веса в справочнике вес оценён по среднему весу отбора сотрудника: ${fmtNum(r.estimatedWeightKg)} кг (входит в вес выше).`
   return text
 }
 
@@ -65,6 +65,7 @@ export function buildJustificationWorkbook(ExcelJS, { company, date, shift, rows
     'Выполнение считается и по СЗ, и по весу; засчитывается меньшее. При работе и в хранении, и в КДК доли нормы складываются.',
     `Часы меняются шагом ${fmtHours(s.roundStep)} ч; недобор округляется в пользу работника${s.bonusEnabled ? `, перевыполнение добавляет часы (не более ${fmtHours(s.maxHours)} ч)` : ''}.`,
     `Учётки сотрудников — до ${fmtTime(deadline)}. Нет учётки${s.strictDeadline ? ', учётка после срока' : ''} или нет отбора под учёткой — часы не засчитываются.`,
+    'Если у товара нет веса в справочнике, вес такого отбора оценивается по среднему весу отбора сотрудника (при отсутствии — по среднему по складу за смену).',
     'Источник данных — выгрузка выполненных заданий WMS за смену.',
   ]
   rules.forEach((text, i) => {
