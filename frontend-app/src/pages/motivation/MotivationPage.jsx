@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { RefreshCw, FileDown, Settings2, Loader2 } from 'lucide-react'
+import { RefreshCw, FileDown, FileText, Settings2, Loader2 } from 'lucide-react'
 import * as api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { loadActConstants, loadCompanyFullNames } from '../shift-plan/actConstants'
 import { buildActWorkbook } from '../shift-plan/actTemplate'
+import { buildJustificationWorkbook } from './justification'
 import { ImportPanel } from './ImportPanel'
 import { ShiftTable } from './ShiftTable'
 import { SettingsPanel } from './SettingsPanel'
@@ -94,42 +95,61 @@ export default function MotivationPage() {
     }
   }
 
-  const downloadActs = async () => {
+  const shiftSuffix = `${date}_${shift === 'night' ? 'ночь' : 'день'}`
+
+  // По файлу на компанию, все — в одном ZIP. buildFile(ExcelJS, company,
+  // list) → [имя файла, workbook].
+  const downloadZip = async (zipName, buildFile) => {
     if (!rows.length) return
     setGenerating(true)
     try {
       const ExcelJS = (await import('exceljs')).default
       const JSZip = (await import('jszip')).default
       const zip = new JSZip()
-      const constants = loadActConstants()
-      const fullNames = loadCompanyFullNames()
-      const [y, m, d] = date.split('-').map(Number)
-      const dateObj = new Date(Date.UTC(y, m - 1, d))
       for (const [company, list] of byCompany) {
-        const wb = buildActWorkbook(ExcelJS, {
-          customerName: constants.customerName,
-          contractorFullName: fullNames[company]?.trim() || company || '—',
-          warehouseAddress: constants.warehouseAddress,
-          warehouseType: constants.warehouseType,
-          warehouseCategory: constants.warehouseCategory,
-          date: dateObj,
-          shift,
-          employees: list.map(r => ({ name: r.fio, hours: r.hours || 0 })),
-        })
-        zip.file(`Акт ${company || 'без компании'} ${date}.xlsx`, await wb.xlsx.writeBuffer())
+        const [fileName, wb] = buildFile(ExcelJS, company, list)
+        zip.file(fileName, await wb.xlsx.writeBuffer())
       }
       const blob = await zip.generateAsync({ type: 'blob' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Акты_мотивация_${date}_${shift === 'night' ? 'ночь' : 'день'}.zip`
+      a.download = zipName
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
-      toast.error(err.message || 'Не удалось сформировать акты')
+      toast.error(err.message || 'Не удалось сформировать файлы')
     }
     setGenerating(false)
   }
+
+  const downloadActs = () => {
+    const constants = loadActConstants()
+    const fullNames = loadCompanyFullNames()
+    const [y, m, d] = date.split('-').map(Number)
+    const dateObj = new Date(Date.UTC(y, m - 1, d))
+    return downloadZip(`Акты_мотивация_${shiftSuffix}.zip`, (ExcelJS, company, list) => [
+      `Акт ${company || 'без компании'} ${date}.xlsx`,
+      buildActWorkbook(ExcelJS, {
+        customerName: constants.customerName,
+        contractorFullName: fullNames[company]?.trim() || company || '—',
+        warehouseAddress: constants.warehouseAddress,
+        warehouseType: constants.warehouseType,
+        warehouseCategory: constants.warehouseCategory,
+        date: dateObj,
+        shift,
+        employees: list.map(r => ({ name: r.fio, hours: r.hours || 0 })),
+      }),
+    ])
+  }
+
+  const downloadJustification = () =>
+    downloadZip(`Обоснование_часов_${shiftSuffix}.zip`, (ExcelJS, company, list) => [
+      `Обоснование ${company || 'без компании'} ${date}.xlsx`,
+      buildJustificationWorkbook(ExcelJS, {
+        company, date, shift, rows: list, settings: calc.settings, deadline: calc.deadline,
+      }),
+    ])
 
   return (
     <div className="space-y-4 p-4">
@@ -156,6 +176,9 @@ export default function MotivationPage() {
         </Button>
         <Button size="sm" onClick={downloadActs} disabled={generating || !rows.length}>
           <FileDown className="size-4" /> Акты с часами (ZIP)
+        </Button>
+        <Button size="sm" variant="outline" onClick={downloadJustification} disabled={generating || !rows.length}>
+          <FileText className="size-4" /> Обоснование (ZIP)
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setShowSettings(v => !v)}>
           <Settings2 className="size-4" /> Нормы
