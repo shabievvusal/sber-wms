@@ -25,6 +25,7 @@ import KdkPlacementPage from '@/pages/picking/KdkPlacementPage'
 import EoSearchPage from '@/pages/picking/EoSearchPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
 import ShiftPlanPage from '@/pages/shift-plan/ShiftPlanPage'
+import MotivationPage from '@/pages/motivation/MotivationPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
 import ConsolidationFormPage from '@/pages/consolidation-form/ConsolidationFormPage'
 import StatsPage from '@/pages/stats/StatsPage'
@@ -53,6 +54,7 @@ const PAGES = {
   'picking-eo': EoSearchPage,
   'picking-gaps': PickingGapsPage,
   shift_plan: ShiftPlanPage,
+  motivation: MotivationPage,
   violations: ViolationsPage,
   'consolidation-form': ConsolidationFormPage,
   stats: StatsPage,

@@ -150,6 +150,11 @@
 	handle /api/reports/stock-consolidation* {
 		reverse_proxy dotnet:5080
 	}
+	# Мотивация аутсорса (2026-09-25) — учётки людей из актов и расчёт
+	# часов по норме, см. backend-dotnet/Services/MotivationService.cs.
+	handle /api/motivation/* {
+		reverse_proxy dotnet:5080
+	}
 	handle {
 		reverse_proxy node:3009
 	}

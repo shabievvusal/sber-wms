@@ -33,7 +33,10 @@ const SHIFT_TIMES = {
  * @param {string} params.warehouseCategory
  * @param {Date} params.date Дата смены
  * @param {'day'|'night'} params.shift
- * @param {{name: string}[]} params.employees
+ * @param {{name: string, hours?: number}[]} params.employees `hours` — часы
+ *   по мотивации (MotivationPage); без него — полная смена. Окончание
+ *   сдвигается под часы: начало + перерыв + часы, при 0 часов время и
+ *   перерыв не заполняются.
  * @param {typeof import('exceljs')} ExcelJS — передаётся вызывающим кодом
  *   (динамический импорт делается один раз на все акты, не на каждый).
  */
@@ -105,12 +108,15 @@ export function buildActWorkbook(ExcelJS, params) {
     r.getCell(2).value = emp.name
     r.getCell(3).value = SERVICE_TYPE_LABEL
     r.getCell(4).value = null // № Жилета — намеренно не заполняется
-    r.getCell(5).value = times.start
-    r.getCell(5).numFmt = 'h:mm'
-    r.getCell(6).value = times.end
-    r.getCell(6).numFmt = 'h:mm'
-    r.getCell(7).value = times.breakHours
-    r.getCell(8).value = times.totalHours
+    const hours = emp.hours ?? times.totalHours
+    if (hours > 0) {
+      r.getCell(5).value = times.start
+      r.getCell(5).numFmt = 'h:mm'
+      r.getCell(6).value = emp.hours == null ? times.end : (times.start + (times.breakHours + hours) / 24) % 1
+      r.getCell(6).numFmt = 'h:mm'
+      r.getCell(7).value = times.breakHours
+    }
+    r.getCell(8).value = hours
     r.getCell(9).value = null // Подпись — от руки
     for (let col = 1; col <= 9; col++) {
       const cell = r.getCell(col)

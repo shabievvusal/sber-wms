@@ -19,6 +19,7 @@ const rkStorage = process.env.USE_PG === 'true'
   : require('./route-rk-storage');
 const emplPg = process.env.USE_PG === 'true' ? require('./empl-pg') : null;
 const tsdPg = process.env.USE_PG === 'true' ? require('./tsd-pg') : null;
+const motivationPg = process.env.USE_PG === 'true' ? require('./motivation-pg') : null;
 const wmsOpsPg = process.env.USE_PG === 'true' ? require('./wms-ops-pg') : null;
 const s3Storage = require('./s3');
 const excelReports = require('./excel-reports');
@@ -4405,6 +4406,7 @@ async function startServer() {
     await rkStorage.init();
     await emplPg.init();
     await tsdPg.init();
+    await motivationPg.init();
     await wmsOpsPg.init();
     await vsAuth.init();
     await productWeights.initPg();

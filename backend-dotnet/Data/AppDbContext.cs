@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<WmsRemainsEntity> WmsRemains => Set<WmsRemainsEntity>();
     public DbSet<ProductWeightEntity> ProductWeights => Set<ProductWeightEntity>();
     public DbSet<WmsStorageAggEntity> WmsStorageAgg => Set<WmsStorageAggEntity>();
+    public DbSet<MotivationPersonEntity> MotivationPeople => Set<MotivationPersonEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -184,6 +185,21 @@ public class AppDbContext : DbContext
         tsdManual.Property(t => t.Fio).HasColumnName("fio");
         tsdManual.Property(t => t.Company).HasColumnName("company");
         tsdManual.Property(t => t.CreatedAt).HasColumnName("created_at");
+
+        // Мотивация аутсорса — таблица создана Node (motivation-pg.js init()).
+        var motivation = modelBuilder.Entity<MotivationPersonEntity>();
+        motivation.ToTable("motivation_people");
+        motivation.HasKey(m => m.Id);
+        motivation.Property(m => m.Id).HasColumnName("id");
+        motivation.Property(m => m.ShiftDate).HasColumnName("shift_date");
+        motivation.Property(m => m.Shift).HasColumnName("shift");
+        motivation.Property(m => m.Company).HasColumnName("company");
+        motivation.Property(m => m.Fio).HasColumnName("fio");
+        motivation.Property(m => m.Role).HasColumnName("role");
+        motivation.Property(m => m.ExecutorId).HasColumnName("executor_id");
+        motivation.Property(m => m.ExecutorName).HasColumnName("executor_name");
+        motivation.Property(m => m.ReceivedAt).HasColumnName("received_at");
+        motivation.Property(m => m.CreatedAt).HasColumnName("created_at");
 
         var empl = modelBuilder.Entity<EmployeeEntity>();
         empl.ToTable("employees");

@@ -638,3 +638,39 @@ export async function createViolation(formData) {
 export async function deleteViolation(id) {
   return req(`/api/violations/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+// ─── Мотивация аутсорса (/api/motivation/*, dotnet MotivationService) ───────
+
+const jsonBody = (method, body) => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
+export async function getMotivationSettings() {
+  return req('/api/motivation/settings')
+}
+
+export async function saveMotivationSettings(settings) {
+  return req('/api/motivation/settings', jsonBody('PUT', settings))
+}
+
+export async function getMotivationPeople(date, shift) {
+  return req(`/api/motivation/people?${new URLSearchParams({ date, shift })}`)
+}
+
+export async function addMotivationPeople({ date, shift, receivedAt, people }) {
+  return req('/api/motivation/people', jsonBody('POST', { date, shift, receivedAt, people }))
+}
+
+export async function updateMotivationPerson(id, patch) {
+  return req(`/api/motivation/people/${id}`, jsonBody('PUT', patch))
+}
+
+export async function deleteMotivationPerson(id) {
+  return req(`/api/motivation/people/${id}`, { method: 'DELETE' })
+}
+
+export async function getMotivationCalculation(date, shift) {
+  return req(`/api/motivation/calculate?${new URLSearchParams({ date, shift })}`)
+}
