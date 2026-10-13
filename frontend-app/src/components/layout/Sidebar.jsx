@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  BarChart2, Monitor, TrendingUp, Users, ScanBarcode, Package, FileText,
+  BarChart2, Monitor, ScanBarcode, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
   ChevronLeft, ChevronRight, ChevronDown, UserCircle, LogOut, Combine, Award,
 } from 'lucide-react'
@@ -27,12 +27,9 @@ const LS_KEY = 'sidebar_collapsed'
 export const NAV_ITEMS = [
   { key: 'stats', Icon: BarChart2, label: 'Статистика', page: 'stats', module: 'stats' },
   { key: 'monitor', Icon: Monitor, label: 'Мониторинг', page: 'monitor', module: 'monitor' },
-  { key: 'analysis', Icon: TrendingUp, label: 'Анализ', page: 'analysis', module: 'analysis' },
-  { key: 'shift_plan', Icon: Users, label: 'План смены', page: 'shift_plan', module: 'shift_plan' },
   { key: 'motivation', Icon: Award, label: 'Мотивация', page: 'motivation', module: 'motivation' },
   { key: 'tsd', Icon: ScanBarcode, label: 'Выдача ТСД', page: 'tsd', module: 'tsd' },
   { key: 'consolidation', Icon: Package, label: 'Консолидация', page: 'consolidation', module: 'consolidation' },
-  { key: 'docs', Icon: FileText, label: 'Документы', page: 'docs', module: 'docs' },
   {
     key: 'picking', Icon: ClipboardList, label: 'Комплектация', page: null, module: 'picking',
     children: [

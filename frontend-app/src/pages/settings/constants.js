@@ -3,11 +3,11 @@
 
 export const VS_MODULE_LABELS = {
   stats: 'Статистика', data: 'Данные', monitor: 'Мониторинг',
-  analysis: 'Анализ', consolidation: 'Консолидация', docs: 'Документы',
+  consolidation: 'Консолидация',
   settings: 'Настройки', shipments: 'Отгрузка',
   receive: 'Форма отгрузки', consolidation_form: 'Форма консолидации',
   reports: 'Отчёты', supplies: 'Поставки',
-  picking: 'Комплектация', shift_plan: 'План смены',
+  picking: 'Комплектация',
   tsd: 'Выдача ТСД', violations: 'Нарушения',
   stock_consolidation: 'Объединение остатков',
   motivation: 'Мотивация',

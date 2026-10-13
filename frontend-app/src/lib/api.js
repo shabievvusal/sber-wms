@@ -567,17 +567,6 @@ export async function getLiveMonitor() {
   return req('/api/monitor/live')
 }
 
-// Собственная база операций (C#-тул), не WMS — среднее СЗ/чел/час по артикулу
-// за период, используется как подсказка скорости в AnalysisPage.
-export async function getArticleSpeeds({ dateFrom, dateTo, opType, zone } = {}) {
-  const params = new URLSearchParams()
-  if (dateFrom) params.set('dateFrom', dateFrom)
-  if (dateTo) params.set('dateTo', dateTo)
-  if (opType) params.set('opType', opType)
-  if (zone) params.set('zone', zone)
-  return req(`/api/analysis/article-speeds?${params}`)
-}
-
 // ─── Жалобы на нарушения (страница называется «Консолидация» по историческим
 // причинам — см. PLAN.md) ────────────────────────────────────────────────────
 

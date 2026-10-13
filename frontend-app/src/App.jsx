@@ -15,8 +15,6 @@ import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
 import SuppliesPage from '@/pages/supplies/SuppliesPage'
 import MonitorPage from '@/pages/monitor/MonitorPage'
 import ReportsPage from '@/pages/reports/ReportsPage'
-import DocsPage from '@/pages/docs/DocsPage'
-import AnalysisPage from '@/pages/analysis/AnalysisPage'
 import ReceivePage from '@/pages/receive/ReceivePage'
 import TsdIssuePage from '@/pages/tsd/TsdIssuePage'
 import PieceSelectionPage from '@/pages/picking/PieceSelectionPage'
@@ -24,7 +22,6 @@ import KdkLayoutPage from '@/pages/picking/KdkLayoutPage'
 import KdkPlacementPage from '@/pages/picking/KdkPlacementPage'
 import EoSearchPage from '@/pages/picking/EoSearchPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
-import ShiftPlanPage from '@/pages/shift-plan/ShiftPlanPage'
 import MotivationPage from '@/pages/motivation/MotivationPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
 import ConsolidationFormPage from '@/pages/consolidation-form/ConsolidationFormPage'
@@ -44,8 +41,6 @@ const PAGES = {
   monitor: MonitorPage,
   reports: ReportsPage,
   'stock-consolidation': StockConsolidationPage,
-  docs: DocsPage,
-  analysis: AnalysisPage,
   receive: ReceivePage,
   tsd: TsdIssuePage,
   'picking-piece': PieceSelectionPage,
@@ -53,7 +48,6 @@ const PAGES = {
   'picking-kdk-layout': KdkPlacementPage,
   'picking-eo': EoSearchPage,
   'picking-gaps': PickingGapsPage,
-  shift_plan: ShiftPlanPage,
   motivation: MotivationPage,
   violations: ViolationsPage,
   'consolidation-form': ConsolidationFormPage,
