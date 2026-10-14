@@ -51,6 +51,19 @@
   const ICON_LOGOUT = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'
   const ICON_LOGO = '<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/>'
 
+  const ICON_MOON = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'
+  const ICON_SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>'
+  const ICON_AUTO = '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>'
+
+  // ─── Тема WMS (сама тема — theme.js, здесь переключатель) ────────────────
+  // По кругу: светлая → тёмная → как в системе.
+  const theme = window.__zlpTheme
+  const THEME_NEXT = { light: 'dark', dark: 'system', system: 'light' }
+  const THEME_LABEL = { light: 'Тема: светлая', dark: 'Тема: тёмная', system: 'Тема: как в системе' }
+  const THEME_ICON = { light: ICON_SUN, dark: ICON_MOON, system: ICON_AUTO }
+  const themeMode = () => theme?.mode || 'light'
+  const cycleTheme = () => theme?.set(THEME_NEXT[themeMode()])
+
   const allPages = SECTIONS.flatMap(s => (s.children ? s.children : [s]))
   const labelOf = page => allPages.find(s => s.page === page)?.label || 'СберЛогистика'
 
@@ -70,6 +83,7 @@
           <span class="zlp-avatar"></span><span class="zlp-user-name"></span>
           <button type="button" class="zlp-btn zlp-logout" title="Выйти из учётки СберЛогистики">${svg(ICON_LOGOUT, 16)}<span>Выйти</span></button>
         </span>
+        <button type="button" class="zlp-btn zlp-theme"></button>
         <a class="zlp-btn zlp-open" target="_blank" rel="noopener" title="Открыть в отдельной вкладке">${svg(ICON_EXT, 16)}</a>
         <button type="button" class="zlp-btn zlp-close" title="Закрыть">${svg(ICON_X, 16)}</button>
       </div>
@@ -98,7 +112,8 @@
           '</div>'
       }
       return `<button type="button" class="zlp-item${s.page === currentPage ? ' zlp-active' : ''}" data-page="${s.page}">${svg(s.icon)}<span>${s.label}</span></button>`
-    }).join('')
+    }).join('') +
+      `<button type="button" class="zlp-item zlp-theme-item">${svg(THEME_ICON[themeMode()])}<span>${THEME_LABEL[themeMode()]}</span></button>`
   }
 
   function open(page) {
@@ -133,6 +148,7 @@
 
   launcher.addEventListener('click', () => { renderMenu(); menu.hidden = !menu.hidden })
   menu.addEventListener('click', e => {
+    if (e.target.closest('.zlp-theme-item')) { cycleTheme(); return }
     const btn = e.target.closest('[data-page]')
     if (btn) open(btn.dataset.page)
   })
@@ -167,7 +183,7 @@
   // Сообщения от сайта: готов / какой раздел открыт (переходы внутри сайта)
   window.addEventListener('message', e => {
     if (e.origin !== SITE || e.source !== frame.contentWindow || !e.data) return
-    if (e.data.type === 'zlp:ready') { frameReady = true; sendToken(); checkUpdate(e.data.extLatest) }
+    if (e.data.type === 'zlp:ready') { frameReady = true; sendToken(); checkUpdate(e.data.extLatest); sendTheme() }
     if (e.data.type === 'zlp:user') {
       const name = e.data.name
       userBox.hidden = !name
@@ -181,6 +197,30 @@
       syncActive()
     }
   })
+
+  const themeBtn = root.querySelector('.zlp-theme')
+  themeBtn.addEventListener('click', cycleTheme)
+  // встроенный сайт — в той же теме, что WMS
+  function sendTheme() {
+    if (frameReady) frame.contentWindow?.postMessage({ type: 'zlp:theme', theme: theme?.dark ? 'dark' : 'light' }, SITE)
+  }
+  function renderTheme() {
+    const m = themeMode()
+    themeBtn.innerHTML = svg(THEME_ICON[m], 16)
+    themeBtn.title = `${THEME_LABEL[m]} — нажмите, чтобы сменить`
+    if (menuState?.themeItem) {
+      const fresh = cloneItem(menuState.found, THEME_LABEL[m], THEME_ICON[m])
+      fresh.classList.add('zlp-child', 'zlp-theme-row')
+      fresh.dataset.zlpTheme = ''
+      fresh.style.display = menuState.themeItem.style.display
+      menuState.children[menuState.children.indexOf(menuState.themeItem)] = fresh
+      menuState.themeItem.replaceWith(fresh)
+      menuState.themeItem = fresh
+    }
+    if (!menu.hidden) renderMenu()
+    sendTheme()
+  }
+  window.addEventListener('zlp:theme', renderTheme)
 
   // ─── Обновление расширения ────────────────────────────────────────────────
   // Сайт (во встроенном окне) сообщает актуальную версию; если наша старше —
@@ -264,7 +304,7 @@
   const ANCHORS = ['Мониторинг', 'Отгрузка', 'Отчёты']
   const LS_GROUP_OPEN = 'zlp-menu-open'
   const NS = 'http://www.w3.org/2000/svg'
-  let menuState = null // { container, items: Map(page → el), header, children: [] }
+  let menuState = null // { container, items: Map(page → el), header, children: [], themeItem, found }
 
   function elementByOwnText(text) {
     const r = document.evaluate(
@@ -377,10 +417,15 @@
         items.set(s.page, el); children.push(el); nodes.push(el)
       }
     }
+    const themeItem = cloneItem(found, THEME_LABEL[themeMode()], THEME_ICON[themeMode()])
+    themeItem.classList.add('zlp-child', 'zlp-theme-row')
+    themeItem.dataset.zlpTheme = ''
+    children.push(themeItem); nodes.push(themeItem)
+
     let anchor = found.template
     for (const n of nodes) { anchor.after(n); anchor = n }
 
-    menuState = { container: found.container, header, items, children }
+    menuState = { container: found.container, header, items, children, themeItem, found }
     if (updateAvailable) header.classList.add('zlp-has-update')
     applyGroupOpen(readGroupOpen())
     syncMenuActive()
@@ -482,6 +527,7 @@
     e.stopPropagation()
     if (ours.hasAttribute('data-zlp-group')) applyGroupOpen(!menuState.header.classList.contains('zlp-group-open'))
     else if (ours.dataset.zlpSubgroup) toggleSubgroup(ours.dataset.zlpSubgroup)
+    else if (ours.hasAttribute('data-zlp-theme')) cycleTheme()
     else if (ours.dataset.zlpPage) open(ours.dataset.zlpPage)
   }, true)
   document.addEventListener('keydown', e => {
@@ -500,4 +546,5 @@
   })
   observer.observe(document.body, { childList: true, subtree: true })
   if (injectIntoWmsMenu()) root.classList.add('zlp-in-menu')
+  renderTheme()
 })()

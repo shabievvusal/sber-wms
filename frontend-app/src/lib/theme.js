@@ -34,8 +34,22 @@ function apply(theme) {
   apply.timer = setTimeout(() => root.classList.remove('theme-switching'), 300)
 }
 
+/** Тема снаружи — от расширения, когда сайт встроен в WMS (lib/embed.js).
+ *  Боковое меню с переключателем там скрыто, поэтому применяем сразу. */
+export function setThemeExternal(theme) {
+  try { localStorage.setItem(KEY, theme) } catch { /* приватный режим */ }
+  apply(theme)
+  window.dispatchEvent(new CustomEvent('zlp:embed-theme', { detail: theme }))
+}
+
 export function useTheme() {
   const [theme, setTheme] = useState(readTheme)
+  // внутри WMS тему задаёт расширение — та же, что у самой WMS (lib/embed.js)
+  useEffect(() => {
+    const onEmbed = e => setTheme(e.detail)
+    window.addEventListener('zlp:embed-theme', onEmbed)
+    return () => window.removeEventListener('zlp:embed-theme', onEmbed)
+  }, [])
   useEffect(() => {
     try { localStorage.setItem(KEY, theme) } catch { /* приватный режим */ }
     apply(theme)

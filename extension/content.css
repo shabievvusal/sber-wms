@@ -154,17 +154,17 @@ html.zlp-open #zlp-root .zlp-launcher { opacity: 0; pointer-events: none; }
   background: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  #zlp-root {
-    --zlp-ink: #f5f6f8;
-    --zlp-ink-2: #a8adbb;
-    --zlp-muted: #8b90a0;
-    --zlp-surface: #141416;
-    --zlp-surface-2: #1c1c20;
-    --zlp-line: rgba(255, 255, 255, 0.1);
-  }
-  #zlp-root .zlp-panel { background: #09090b; }
+/* тёмная тема — вместе с темой WMS (theme.js ставит html.zlp-dark) */
+html.zlp-dark #zlp-root {
+  --zlp-brand: #3b82f6;
+  --zlp-ink: #f5f6f8;
+  --zlp-ink-2: #a8adbb;
+  --zlp-muted: #8b90a0;
+  --zlp-surface: #232425;
+  --zlp-surface-2: #3e3f40;
+  --zlp-line: rgba(255, 255, 255, 0.1);
 }
+html.zlp-dark #zlp-root .zlp-panel { background: #1a1b1c; }
 
 /* ── Окно раздела справа от меню WMS (когда пункты встроены в меню) ── */
 #zlp-root.zlp-in-menu .zlp-panel { left: var(--zlp-left, 0); }
@@ -230,5 +230,20 @@ html.zlp-menu-narrow [data-zlp].zlp-child { padding-left: 0 !important; box-shad
   height: 8px;
   border-radius: 999px;
   background: #ea580c;
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px var(--color-background-primary, #fff);
 }
+
+/* ── Кнопка темы в полосе окна ── */
+#zlp-root .zlp-theme { padding: 0 8px; }
+
+/* ── Тёмная тема WMS: места, где у WMS цвет задан не переменной ── */
+html.zlp-dark [class*="_fullpageLoader_"] { background-color: rgba(26, 27, 28, 0.67) !important; }
+html.zlp-dark [class*="_fillBackground_"] { background-color: var(--color-background-primary) !important; }
+/* акцент наших пунктов меню — светлее на тёмном фоне */
+html.zlp-dark [data-zlp].zlp-sub-has-active,
+html.zlp-dark [data-zlp].zlp-sub-has-active *,
+html.zlp-dark [data-zlp].zlp-wms-active-group,
+html.zlp-dark [data-zlp].zlp-wms-active-group *,
+html.zlp-dark [data-zlp].zlp-wms-active,
+html.zlp-dark [data-zlp].zlp-wms-active * { color: #60a5fa !important; }
+html.zlp-dark #zlp-root .zlp-update { color: #fb923c; }

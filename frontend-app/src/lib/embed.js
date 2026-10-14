@@ -5,6 +5,7 @@
 //   WMS → сайт:  { type: 'zlp:wms-token', accessToken, expiresAt }  — токен из открытой сессии WMS
 //                { type: 'zlp:navigate', page }                       — открыть раздел
 //                { type: 'zlp:logout' }                               — выйти из учётки сайта
+//                { type: 'zlp:theme', theme: 'light'|'dark' }          — тема WMS (сайт подстраивается)
 //   сайт → WMS:  { type: 'zlp:ready', extLatest }                     — сайт готов + актуальная версия расширения
 //                { type: 'zlp:page', page }                           — какой раздел сейчас открыт
 //                { type: 'zlp:user', name, role } | { type: 'zlp:user', name: null } — кто вошёл
@@ -12,6 +13,8 @@
 // Берём только access-токен: refresh-токен WMS сайт не трогает, иначе
 // обновление токена отсюда могло бы «выкинуть» пользователя из самой WMS.
 // Свежий токен расширение присылает само, когда WMS его обновит.
+
+import { setThemeExternal } from './theme'
 
 export const WMS_ORIGIN = 'https://wwh.samokat.ru'
 
@@ -55,6 +58,8 @@ export function initEmbedBridge({ onNavigate } = {}) {
       } catch { /* хранилище недоступно */ }
     } else if (d.type === 'zlp:navigate' && typeof d.page === 'string') {
       onNavigate?.(d.page)
+    } else if (d.type === 'zlp:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      setThemeExternal(d.theme)
     } else if (d.type === 'zlp:logout') {
       logoutHandler?.()
     }
