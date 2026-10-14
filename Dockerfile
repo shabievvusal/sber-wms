@@ -19,6 +19,8 @@ COPY frontend-app/package*.json ./
 RUN npm ci
 
 COPY frontend-app/ ./
+# расширение для WMS — собирается в архив для скачивания с сайта (frontend-app/extension-bundle.js)
+COPY extension/ /extension/
 RUN npm run build
 
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "СберЛогистика в WMS",
   "short_name": "СберЛогистика",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Разделы сайта СберЛогистика (robops.ru) прямо внутри WMS (wwh.samokat.ru): статистика, мониторинг, выдача ТСД и другие — без переключения между сайтами.",
   "content_scripts": [
     {

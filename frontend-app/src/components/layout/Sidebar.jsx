@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X,
+  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -71,6 +71,7 @@ export function hasModuleAccess(userModules, module) {
 // Заголовок текущей страницы для мобильного топ-бара — ищем и среди верхнего
 // уровня, и среди детей групп (сейчас только «Комплектация»).
 export function findNavLabel(page) {
+  if (page === 'extension') return 'Расширение для WMS'
   for (const item of NAV_ITEMS) {
     if (item.page === page) return item.label
     const child = item.children?.find(c => c.page === page)
@@ -266,6 +267,26 @@ function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', the
   )
 }
 
+/** Ссылка на страницу «Расширение для WMS» (внизу меню). */
+function ExtensionLink({ activePage, onNavigate, collapsed }) {
+  const active = activePage === 'extension'
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate('extension')}
+      title="Расширение для WMS — разделы сайта прямо в меню WMS"
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-medium transition-colors',
+        active ? 'bg-brand-soft text-brand' : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground',
+        collapsed && 'justify-center px-0',
+      )}
+    >
+      <Puzzle className="size-4 shrink-0" />
+      {!collapsed && <span className="truncate">Расширение для WMS</span>}
+    </button>
+  )
+}
+
 // Десктопное боковое меню — скрыто на мобильном (`hidden md:flex`, см.
 // App.jsx), там вместо него топ-бар с гамбургером, открывающим Sheet
 // с тем же SidebarNav внутри.
@@ -292,6 +313,7 @@ export function Sidebar({ activePage, onNavigate }) {
       <SidebarNav activePage={activePage} onNavigate={onNavigate} collapsed={collapsed} layoutPrefix="sidebar" />
 
       <div className="space-y-3 px-1">
+        <ExtensionLink activePage={activePage} onNavigate={onNavigate} collapsed={collapsed} />
         <div className={cn('flex items-center', collapsed ? 'justify-center' : 'justify-between')}>
           {!collapsed && <ThemeToggle id="sidebar-theme" />}
           <button
@@ -365,6 +387,7 @@ export function MobileDrawer({ open, onOpenChange, activePage, onNavigate }) {
                 <SidebarNav activePage={activePage} onNavigate={onNavigate} layoutPrefix="drawer" />
 
                 <div className="space-y-3 px-1">
+                  <ExtensionLink activePage={activePage} onNavigate={onNavigate} />
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">Тема</span>
                     <ThemeToggle id="drawer-theme" />

@@ -48,6 +48,7 @@
   const ICON_X = '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
   const ICON_BACK = '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'
   const ICON_EXT = '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+  const ICON_LOGOUT = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'
   const ICON_LOGO = '<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/>'
 
   const allPages = SECTIONS.flatMap(s => (s.children ? s.children : [s]))
@@ -65,6 +66,10 @@
       <div class="zlp-panel-bar">
         <button type="button" class="zlp-btn zlp-back" title="Вернуться в WMS">${svg(ICON_BACK, 16)}<span>WMS</span></button>
         <span class="zlp-title"></span>
+        <span class="zlp-user" hidden>
+          <span class="zlp-avatar"></span><span class="zlp-user-name"></span>
+          <button type="button" class="zlp-btn zlp-logout" title="Выйти из учётки СберЛогистики">${svg(ICON_LOGOUT, 16)}<span>Выйти</span></button>
+        </span>
         <a class="zlp-btn zlp-open" target="_blank" rel="noopener" title="Открыть в отдельной вкладке">${svg(ICON_EXT, 16)}</a>
         <button type="button" class="zlp-btn zlp-close" title="Закрыть">${svg(ICON_X, 16)}</button>
       </div>
@@ -78,6 +83,9 @@
   const frame = root.querySelector('.zlp-frame')
   const titleEl = root.querySelector('.zlp-title')
   const openLink = root.querySelector('.zlp-open')
+  const userBox = root.querySelector('.zlp-user')
+  const userName = root.querySelector('.zlp-user-name')
+  const userAvatar = root.querySelector('.zlp-avatar')
 
   let currentPage = null
   let frameReady = false
@@ -130,13 +138,42 @@
   })
   root.querySelector('.zlp-back').addEventListener('click', closePanel)
   root.querySelector('.zlp-close').addEventListener('click', closePanel)
+  // Выход — подтверждение прямо на кнопке (без системного окна браузера):
+  // первое нажатие — «Точно выйти?», второе в течение 4 с — выход.
+  const logoutBtn = root.querySelector('.zlp-logout')
+  const logoutLabel = logoutBtn.querySelector('span')
+  let logoutArmed = null
+  logoutBtn.addEventListener('click', () => {
+    if (!logoutArmed) {
+      logoutBtn.classList.add('zlp-armed')
+      logoutLabel.textContent = 'Точно выйти?'
+      logoutBtn.title = 'Нажмите ещё раз, чтобы выйти из учётки СберЛогистики (WMS это не затронет)'
+      logoutArmed = setTimeout(disarm, 4000)
+      return
+    }
+    disarm()
+    frame.contentWindow?.postMessage({ type: 'zlp:logout' }, SITE)
+  })
+  function disarm() {
+    clearTimeout(logoutArmed)
+    logoutArmed = null
+    logoutBtn.classList.remove('zlp-armed')
+    logoutLabel.textContent = 'Выйти'
+    logoutBtn.title = 'Выйти из учётки СберЛогистики'
+  }
   document.addEventListener('click', e => { if (!menu.hidden && !root.contains(e.target)) menu.hidden = true })
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) menu.hidden = true })
 
   // Сообщения от сайта: готов / какой раздел открыт (переходы внутри сайта)
   window.addEventListener('message', e => {
     if (e.origin !== SITE || e.source !== frame.contentWindow || !e.data) return
-    if (e.data.type === 'zlp:ready') { frameReady = true; sendToken() }
+    if (e.data.type === 'zlp:ready') { frameReady = true; sendToken(); checkUpdate(e.data.extLatest) }
+    if (e.data.type === 'zlp:user') {
+      const name = e.data.name
+      userBox.hidden = !name
+      userName.textContent = name || ''
+      userAvatar.textContent = (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
+    }
     if (e.data.type === 'zlp:page' && e.data.page && !panel.hidden) {
       currentPage = e.data.page
       titleEl.textContent = labelOf(currentPage)
@@ -144,6 +181,35 @@
       syncActive()
     }
   })
+
+  // ─── Обновление расширения ────────────────────────────────────────────────
+  // Сайт (во встроенном окне) сообщает актуальную версию; если наша старше —
+  // плашка «Доступно обновление» в полосе окна и точка у пункта меню.
+  const MY_VERSION = (() => { try { return chrome.runtime.getManifest().version } catch { return '0.0.0' } })()
+  const newer = (a, b) => {
+    const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number)
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0)
+    }
+    return false
+  }
+  let updateAvailable = null
+  function checkUpdate(latest) {
+    if (!latest || !newer(latest, MY_VERSION)) return
+    updateAvailable = latest
+    const bar = root.querySelector('.zlp-panel-bar')
+    if (!bar.querySelector('.zlp-update')) {
+      const a = document.createElement('a')
+      a.className = 'zlp-btn zlp-update'
+      a.href = `${SITE}/#/extension`
+      a.target = '_blank'
+      a.rel = 'noopener'
+      a.title = `Установлена версия ${MY_VERSION}, доступна ${latest} — откроется страница с инструкцией`
+      a.textContent = `Доступно обновление ${latest}`
+      titleEl.after(a)
+    }
+    menuState?.header.classList.add('zlp-has-update')
+  }
 
   // ─── WMS-токен из открытой сессии WMS ─────────────────────────────────────
   // Ищем в хранилищах страницы JWT (eyJ…) с полем exp и берём самый свежий.
@@ -223,7 +289,7 @@
     s.setAttribute('viewBox', '0 0 24 24')
     s.setAttribute('fill', 'none')
     s.setAttribute('stroke', 'currentColor')
-    s.setAttribute('stroke-width', '2')
+    s.setAttribute('stroke-width', '1.75')
     s.setAttribute('stroke-linecap', 'round')
     s.setAttribute('stroke-linejoin', 'round')
     const box = like?.getBoundingClientRect()
@@ -231,6 +297,11 @@
     s.setAttribute('width', String(size))
     s.setAttribute('height', String(size))
     if (like?.getAttribute('class')) s.setAttribute('class', like.getAttribute('class'))
+    // у WMS иконки залитые, и её класс иконки ставит fill — наши контурные
+    // иначе превращаются в чёрные пятна (см. content.css, [data-zlp-icon])
+    s.setAttribute('data-zlp-icon', '')
+    s.style.fill = 'none'
+    s.style.stroke = 'currentColor'
     s.innerHTML = paths
     return s
   }
@@ -287,14 +358,16 @@
     const nodes = [header]
     for (const s of SECTIONS) {
       if (s.children) {
-        const sub = cloneItem(found, s.label, s.icon)
+        const key = s.label
+        const sub = cloneItem(found, s.label, s.icon, { chevron: true })
         sub.classList.add('zlp-child', 'zlp-menu-subhead')
-        sub.style.cursor = 'default'
+        sub.dataset.zlpSubgroup = key
         children.push(sub); nodes.push(sub)
         for (const c of s.children) {
           const el = cloneItem(found, c.label, null)
           el.classList.add('zlp-child', 'zlp-child2')
           el.dataset.zlpPage = c.page
+          el.dataset.zlpParent = key
           items.set(c.page, el); children.push(el); nodes.push(el)
         }
       } else {
@@ -308,6 +381,7 @@
     for (const n of nodes) { anchor.after(n); anchor = n }
 
     menuState = { container: found.container, header, items, children }
+    if (updateAvailable) header.classList.add('zlp-has-update')
     applyGroupOpen(readGroupOpen())
     syncMenuActive()
     trackMenuWidth()
@@ -317,11 +391,30 @@
   function readGroupOpen() {
     try { return localStorage.getItem(LS_GROUP_OPEN) !== '0' } catch { return true }
   }
+  // раскрытые подгруппы («Комплектация»): по умолчанию свёрнуты
+  const LS_SUB_OPEN = 'zlp-menu-sub-open'
+  let subOpen = (() => { try { return new Set(JSON.parse(localStorage.getItem(LS_SUB_OPEN) || '[]')) } catch { return new Set() } })()
+  function saveSubOpen() { try { localStorage.setItem(LS_SUB_OPEN, JSON.stringify([...subOpen])) } catch { /* ignore */ } }
+
+  function applyVisibility() {
+    if (!menuState) return
+    const open = menuState.header.classList.contains('zlp-group-open')
+    for (const c of menuState.children) {
+      const parent = c.dataset.zlpParent
+      c.style.display = open && (!parent || subOpen.has(parent)) ? '' : 'none'
+      if (c.dataset.zlpSubgroup) c.classList.toggle('zlp-group-open', subOpen.has(c.dataset.zlpSubgroup))
+    }
+  }
   function applyGroupOpen(open) {
     if (!menuState) return
-    for (const c of menuState.children) c.style.display = open ? '' : 'none'
     menuState.header.classList.toggle('zlp-group-open', open)
     try { localStorage.setItem(LS_GROUP_OPEN, open ? '1' : '0') } catch { /* ignore */ }
+    applyVisibility()
+  }
+  function toggleSubgroup(key) {
+    subOpen.has(key) ? subOpen.delete(key) : subOpen.add(key)
+    saveSubOpen()
+    applyVisibility()
   }
 
   // Подсветка открытого раздела — родным классом WMS «активный пункт»
@@ -338,6 +431,11 @@
   }
   function syncMenuActive() {
     if (!menuState) return
+    const parent = currentPage && menuState.items.get(currentPage)?.dataset.zlpParent
+    if (parent && !subOpen.has(parent)) { subOpen.add(parent); saveSubOpen(); applyVisibility() }
+    for (const c of menuState.children) {
+      if (c.dataset.zlpSubgroup) c.classList.toggle('zlp-sub-has-active', c.dataset.zlpSubgroup === parent)
+    }
     const cls = findWmsActiveClass()
     for (const [page, el] of menuState.items) {
       const on = page === currentPage
@@ -383,6 +481,7 @@
     e.preventDefault()
     e.stopPropagation()
     if (ours.hasAttribute('data-zlp-group')) applyGroupOpen(!menuState.header.classList.contains('zlp-group-open'))
+    else if (ours.dataset.zlpSubgroup) toggleSubgroup(ours.dataset.zlpSubgroup)
     else if (ours.dataset.zlpPage) open(ours.dataset.zlpPage)
   }, true)
   document.addEventListener('keydown', e => {

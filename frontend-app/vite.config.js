@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
+import { extensionBundle } from './extension-bundle.js'
 
 // Отдельный дев-сервер (5174), чтобы работать одновременно с zlp-main-main/frontend/app (5173).
 // Проксирует на Caddy бэкенд-песочницы `new zlp-backend` (docker-compose,
@@ -12,7 +13,8 @@ import path from 'node:path'
 // Порт в .env менялся (3007 → 3009, под внешнюю панель управления) — если
 // поменяется ещё раз, поправить и здесь (или выставить BACKEND_PORT).
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // архив расширения для WMS — со страницы «Расширение для WMS» (см. extension-bundle.js)
+  plugins: [react(), tailwindcss(), extensionBundle(path.resolve(__dirname, '../extension'))],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

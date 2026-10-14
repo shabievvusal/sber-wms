@@ -173,7 +173,12 @@ html.zlp-open #zlp-root .zlp-launcher { opacity: 0; pointer-events: none; }
 [data-zlp] { user-select: none; }
 [data-zlp].zlp-child { padding-left: 12px !important; box-shadow: inset 2px 0 0 rgba(37, 99, 235, 0.18); }
 [data-zlp].zlp-child2 { padding-left: 24px !important; }
-[data-zlp].zlp-menu-subhead { opacity: 0.75; }
+/* наши иконки — контур, без заливки (класс иконки WMS заливает svg) */
+[data-zlp] svg[data-zlp-icon],
+[data-zlp] svg[data-zlp-icon] * { fill: none !important; stroke: currentColor !important; }
+/* подгруппа «Комплектация»: открыт её раздел — подсвечена, как группы WMS */
+[data-zlp].zlp-sub-has-active,
+[data-zlp].zlp-sub-has-active * { color: #2563eb !important; }
 [data-zlp] .zlp-chevron {
   flex: none;
   margin-left: auto;
@@ -192,3 +197,38 @@ html.zlp-open #zlp-root .zlp-launcher { opacity: 0; pointer-events: none; }
 /* меню WMS свёрнуто до иконок — без стрелки и отступов */
 html.zlp-menu-narrow [data-zlp] .zlp-chevron { display: none; }
 html.zlp-menu-narrow [data-zlp].zlp-child { padding-left: 0 !important; box-shadow: none; }
+
+/* ── Кто вошёл на сайт + «Выйти» (в полосе окна раздела) ── */
+#zlp-root .zlp-user { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px; }
+#zlp-root .zlp-user[hidden] { display: none; }
+#zlp-root .zlp-avatar {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+  background: rgba(37, 99, 235, 0.1); color: var(--zlp-brand); font-size: 11px; font-weight: 600;
+}
+#zlp-root .zlp-user-name { max-width: 220px; overflow: hidden; font-size: 13px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+#zlp-root .zlp-logout:hover { color: #dc2626; border-color: rgba(220, 38, 38, 0.3); background: rgba(220, 38, 38, 0.06); }
+@media (max-width: 900px) { #zlp-root .zlp-user-name { display: none; } }
+#zlp-root .zlp-logout.zlp-armed,
+#zlp-root .zlp-logout.zlp-armed:hover { color: #fff; border-color: #dc2626; background: #dc2626; }
+
+/* ── Доступно обновление расширения ── */
+#zlp-root .zlp-update {
+  border-color: transparent;
+  background: rgba(234, 88, 12, 0.12);
+  color: #c2410c;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#zlp-root .zlp-update:hover { background: rgba(234, 88, 12, 0.2); color: #9a3412; }
+[data-zlp].zlp-has-update { position: relative; }
+[data-zlp].zlp-has-update::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 26px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ea580c;
+  box-shadow: 0 0 0 2px #fff;
+}

@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
 import { EoAutoRefresh } from '@/lib/eoAutoRefresh'
 import { usePresence } from '@/lib/presence'
-import { isEmbedded, initEmbedBridge } from '@/lib/embed'
+import { isEmbedded, initEmbedBridge, postEmbedUser, setEmbedLogout } from '@/lib/embed'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -29,6 +29,7 @@ import ViolationsPage from '@/pages/violations/ViolationsPage'
 import ConsolidationFormPage from '@/pages/consolidation-form/ConsolidationFormPage'
 import StatsPage from '@/pages/stats/StatsPage'
 import StockConsolidationPage from '@/pages/stock-consolidation/StockConsolidationPage'
+import ExtensionPage from '@/pages/extension/ExtensionPage'
 
 // Песочница дизайна без роутера — переключение между готовыми страницами
 // через боковое меню (Sidebar.jsx), как в оригинальном Layout.jsx, вместо
@@ -54,6 +55,8 @@ const PAGES = {
   violations: ViolationsPage,
   'consolidation-form': ConsolidationFormPage,
   stats: StatsPage,
+  // без модуля — доступна всем вошедшим (ссылка внизу бокового меню)
+  extension: ExtensionPage,
 }
 
 // page → module, для гейта доступа (см. `hasModuleAccess`/App.jsx ниже) —
@@ -79,7 +82,10 @@ export default function App() {
 // входа (как в оригинале). Хэш-роутер (parseHash/setHash) не трогаем, он
 // просто скрыт за этим гейтом.
 function AppGate() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
+  // во встроенном в WMS режиме — имя и «Выйти» показывает расширение (lib/embed.js)
+  useEffect(() => { if (!loading) postEmbedUser(user) }, [user, loading])
+  useEffect(() => { setEmbedLogout(logout) }, [logout])
 
   if (loading) return <Spinner label="Загрузка сессии..." className="min-h-screen" />
   if (!user) return <LoginPage />
