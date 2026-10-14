@@ -41,7 +41,11 @@ function fmtDateTime(iso) {
 }
 
 export function UsersCard({ roles, currentUser, emplCompanies }) {
-  const [users, setUsers] = useState([])
+  // сервер присылает и тех, кто только пытался войти (без доступа) — они не
+  // нужны: доступ выдаётся через «Заявки на доступ», поэтому в списке только
+  // пользователи с доступом
+  const [rawUsers, setUsers] = useState([])
+  const users = useMemo(() => rawUsers.filter(u => u.hasAccess), [rawUsers])
   const [loading, setLoading] = useState(true)
   const [editUser, setEditUser] = useState(null) // null closed, {} new, {...} edit
   const [search, setSearch] = useState('')
@@ -89,7 +93,6 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   }
 
   const roleLabelsMap = rolesToLabelMap(rolesOrBuiltin(roles))
-  const withAccess = users.filter(u => u.hasAccess).length
   const seenMs = u => (u.lastSeenAt ? new Date(u.lastSeenAt).getTime() : 0)
   const onlineCount = users.filter(u => now - seenMs(u) < ONLINE_WINDOW_MS).length
 
@@ -108,7 +111,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   // админов защищаем от других админов, разработчиков — от всех, кроме разработчиков
   const isProtected = u => (u.role === 'admin' || u.role === 'developer') && currentUser?.role !== 'developer' && !isMe(u)
   // массово можно менять только тех, у кого есть доступ, кроме защищённых и себя
-  const canBulk = u => u.hasAccess && !isProtected(u) && !isMe(u)
+  const canBulk = u => !isProtected(u) && !isMe(u)
 
   const selectableShown = shown.filter(canBulk)
   const selectableAll = filtered.filter(canBulk)
@@ -140,7 +143,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
     <SettingCard
       icon={Users}
       title="Пользователи сайта"
-      subtitle={loading ? 'Загрузка…' : `${users.length} всего · с доступом ${withAccess} · в сети ${onlineCount}`}
+      subtitle={loading ? 'Загрузка…' : `${users.length} с доступом · в сети ${onlineCount}`}
       actions={<Button size="sm" variant="outline" onClick={() => setEditUser({})}><Plus className="size-3.5" /> Добавить</Button>}
       bodyClassName="p-2"
     >
@@ -152,7 +155,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
       {loading ? (
         <Spinner label="Загрузка пользователей..." />
       ) : !filtered.length ? (
-        <div className="p-6 text-center text-sm text-muted-foreground">{users.length ? 'Никого не нашлось' : 'Пока никто не входил'}</div>
+        <div className="p-6 text-center text-sm text-muted-foreground">{users.length ? 'Никого не нашлось' : 'Пользователей с доступом пока нет'}</div>
       ) : (
         <>
         {selectableAll.length > 0 && (
@@ -179,7 +182,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
             const protectedAdmin = isProtected(u)
             const checked = selected.has(u.login)
             return (
-              <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50', !u.hasAccess && 'opacity-75', checked && 'bg-brand-soft/50 hover:bg-brand-soft/60')}>
+              <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50', checked && 'bg-brand-soft/50 hover:bg-brand-soft/60')}>
                 <span className="grid w-4 shrink-0 place-items-center">
                   {canBulk(u) && <Checkbox checked={checked} onCheckedChange={() => toggleOne(u.login)} aria-label={`Выбрать ${u.name || u.login}`} />}
                 </span>
@@ -194,7 +197,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                 <div className="flex min-w-0 basis-44 flex-wrap items-center gap-1.5">
                   {roleText
                     ? <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">{roleText}</span>
-                    : <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted-foreground">нет доступа</span>}
+                    : <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted-foreground">без роли</span>}
                   {u.allowWithoutToken && <span className="inline-flex items-center gap-1 rounded-full bg-warning/12 px-2 py-0.5 text-xs text-warning" title="Может входить без токена WMS"><KeyRound className="size-3" /> без токена</span>}
                 </div>
                 <div className="min-w-0 flex-1 basis-56">
@@ -225,13 +228,11 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                 <div className="flex w-[104px] shrink-0 justify-end gap-0.5">
                   {protectedAdmin ? (
                     <span className="text-xs text-muted-foreground">защищён</span>
-                  ) : u.hasAccess ? (
+                  ) : (
                     <>
                       <IconAction icon={Pencil} title="Права и разделы" tone="brand" onClick={() => setEditUser(u)} />
                       <IconAction icon={Trash2} title="Забрать доступ" tone="danger" onClick={() => handleDelete(u)} />
                     </>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => setEditUser(u)}>Дать доступ</Button>
                   )}
                 </div>
               </li>
