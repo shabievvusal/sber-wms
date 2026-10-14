@@ -11,6 +11,31 @@ public static class EmployeeEndpoints
 {
     public static void MapEmployeeEndpoints(this WebApplication app)
     {
+        // ─── Проверка учёток ТСД (см. Services/AccountCheckService.cs) ─────────
+        // В отличие от остального CRUD сотрудников — только для вошедших на сайт
+        // администраторов: проверка выполняет реальные входы в WMS.
+        app.MapGet("/api/empl/account-checks", async (AccountCheckService svc) =>
+        {
+            try { return Results.Json(new { ok = true, checks = await svc.ListAsync() }); }
+            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // Сайт шлёт пачками (до 25 за раз) и показывает прогресс — так длинный
+        // список не упирается в таймауты прокси.
+        app.MapPost("/api/empl/account-check", async (AccountCheckRequest body, AccountCheckService svc, HttpContext ctx) =>
+        {
+            try
+            {
+                var ids = (body.ExecutorIds ?? new List<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+                if (ids.Count == 0) return Results.Json(new { ok = false, error = "Не выбраны сотрудники" }, statusCode: 400);
+                if (ids.Count > 25) return Results.Json(new { ok = false, error = "Не больше 25 сотрудников за один запрос" }, statusCode: 400);
+                var results = await svc.CheckAsync(ids, ctx.RequestAborted);
+                return Results.Json(new { ok = true, results });
+            }
+            catch (OperationCanceledException) { return Results.Json(new { ok = false, error = "Проверка прервана" }, statusCode: 499); }
+            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+
         app.MapGet("/api/empl", async (EmployeeService svc) =>
         {
             try { return Results.Json(await svc.ListEmployeesAsync()); }

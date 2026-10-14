@@ -11,6 +11,7 @@ import { RolesMatrix } from './RolesMatrix'
 import { cn } from '@/lib/utils'
 import { Field, IconAction, ModuleChips } from './ui'
 import { Grid3x3, List, Lock, Pencil, Plus, Search, Shield, Trash2 } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 /** Окно создания/правки роли. role = null → новая. */
 function RoleDialog({ role, onClose, onSaved }) {
@@ -80,7 +81,7 @@ export function RolesCard({ roles, onChanged }) {
   const changeView = v => { setView(v); try { localStorage.setItem('settings_roles_view', v) } catch { /* ignore */ } }
 
   const handleDelete = async r => {
-    if (!confirm(`Удалить роль «${r.label}»?`)) return
+    if (!(await confirmDialog({ title: `Удалить роль «${r.label}»?`, description: 'Пользователи с этой ролью получат роль по умолчанию — «Менеджер».', confirmText: 'Удалить роль', danger: true }))) return
     try {
       await api.deleteVsAdminRole(r.key)
       toast.success('Роль удалена')

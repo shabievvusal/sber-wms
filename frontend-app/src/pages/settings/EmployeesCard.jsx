@@ -11,10 +11,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { QuickAssignDialog } from './QuickAssignDialog'
-import { exportEmployeesXlsx } from './employeesExport'
+import { exportEmployeesXlsx, exportAccountReportXlsx } from './employeesExport'
+import { confirmDialog } from '@/components/ui/confirm'
+import { ACCOUNT_STATUS, statusMeta, isProblem, statusReason, fmtChecked } from './accountStatus'
 import { ListPager, clampPage } from './ui'
 import {
   Users, Download, X, Search, MoreHorizontal, ScanSearch, Trash2, Undo2, Save, UserPlus, Pencil,
+  ShieldCheck, ShieldAlert, ShieldQuestion, Loader2, FileWarning,
 } from 'lucide-react'
 
 // Список сотрудников (Настройки → Сотрудники).
@@ -84,7 +87,32 @@ function CompanyBadge({ company }) {
   )
 }
 
-const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete }) {
+const TONE_CLS = {
+  good: 'bg-good/12 text-good',
+  bad: 'bg-destructive/10 text-destructive',
+  warn: 'bg-warning/12 text-warning',
+  muted: 'bg-surface-2 text-muted-foreground',
+}
+const TONE_ICON = { good: ShieldCheck, bad: ShieldAlert, warn: ShieldAlert, muted: ShieldQuestion }
+
+/** Статус учётки ТСД; нажатие — проверить заново этого сотрудника. */
+function AccountBadge({ check, busy, onRecheck, compact }) {
+  const meta = statusMeta(check)
+  const Icon = busy ? Loader2 : TONE_ICON[meta.tone]
+  const label = check?.status === 'wms_error' && check.code ? `Ошибка WMS: ${check.code}` : meta.label
+  const title = [label, statusReason(check), check?.checkedAt ? `Проверено ${fmtChecked(check.checkedAt)}` : null, onRecheck ? 'Нажмите, чтобы проверить снова' : null]
+    .filter(Boolean).join('\n')
+  const cls = cn('inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-2.5 py-0.5 text-xs font-medium', TONE_CLS[meta.tone])
+  const content = <><Icon className={cn('size-3.5 shrink-0', busy && 'animate-spin')} /><span className="truncate">{compact ? meta.short : label}</span></>
+  if (!onRecheck) return <span className={cls} title={title}>{content}</span>
+  return (
+    <button type="button" onClick={e => { e.stopPropagation(); onRecheck() }} disabled={busy} title={title} className={cn(cls, 'transition-opacity hover:opacity-80 disabled:opacity-70')}>
+      {content}
+    </button>
+  )
+}
+
+const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete, check, checkBusy, onRecheck }) {
   return (
     <tr className={cn('group border-b border-line last:border-0 transition-colors hover:bg-surface-2/40', state === 'dirty' && 'bg-warning/5')}>
       <td className="py-1.5 pr-1 pl-3">
@@ -105,6 +133,9 @@ const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete }) 
       <td className="px-1 py-1.5">
         <EditableCell value={row.password || ''} placeholder="Пароль" className="font-mono text-[13px]" onCommit={v => onChange(row._id, 'password', v)} />
       </td>
+      <td className="px-2 py-1.5">
+        <AccountBadge check={check} busy={checkBusy} onRecheck={() => onRecheck(row._id)} />
+      </td>
       <td className="py-1.5 pr-3 pl-1 text-right">
         <button
           type="button"
@@ -119,7 +150,7 @@ const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete }) 
   )
 })
 
-const MobileRow = memo(function MobileRow({ row, state, onOpen }) {
+const MobileRow = memo(function MobileRow({ row, state, onOpen, check }) {
   return (
     <button
       type="button"
@@ -134,6 +165,7 @@ const MobileRow = memo(function MobileRow({ row, state, onOpen }) {
         <span className="block truncate text-sm font-medium">{row.fio || <span className="text-muted-foreground">Без ФИО</span>}</span>
         <span className="mt-0.5 flex min-w-0 items-center gap-2">
           <CompanyBadge company={row.company} />
+          {check && <AccountBadge check={check} compact />}
           {row.phone && <span className="tabular truncate text-xs text-muted-foreground">{row.phone}</span>}
         </span>
       </span>
@@ -196,12 +228,21 @@ export function EmployeesCard() {
   const [addingFound, setAddingFound] = useState(false)
   const [editingMobile, setEditingMobile] = useState(null)
   const [page, setPage] = useState(1)
+  // Проверка учёток ТСД: последний результат по executorId (хранится на сервере)
+  const [checks, setChecks] = useState(() => new Map())
+  const [accountFilter, setAccountFilter] = useState('all') // all | problem | ok | unchecked
+  const [checkRun, setCheckRun] = useState(null)              // { done, total } — идёт проверка
+  const [checkingOne, setCheckingOne] = useState(() => new Set())
+  const [checksVersion, setChecksVersion] = useState(0)        // пересчёт фильтра после проверки
+  const cancelCheckRef = useRef(false)
   // Состав списка (не содержимое полей): по нему пересчитывается фильтр
   const [structVersion, setStructVersion] = useState(0)
   const bump = () => setStructVersion(v => v + 1)
 
   const rowsRef = useRef(rows)
   rowsRef.current = rows
+  const checksRef = useRef(checks)
+  checksRef.current = checks
   const origRef = useRef({ rows: [], keys: new Map() })
   const listTopRef = useRef(null)
 
@@ -229,8 +270,17 @@ export function EmployeesCard() {
     }).finally(() => setLoading(false))
   }
 
+  const loadChecks = async () => {
+    try {
+      const res = await api.getAccountChecks()
+      setChecks(new Map((res.checks || []).map(c => [c.executorId, c])))
+      setChecksVersion(v => v + 1)
+    } catch { /* нет прав или сервер недоступен — колонка останется «не проверялась» */ }
+  }
+
   useEffect(() => {
     load()
+    loadChecks()
     // «Без компании» — сразу сканируем все смены, не ждём ручного клика
     handleScan()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,11 +309,17 @@ export function EmployeesCard() {
       if (companyFilter === NONE && r.company) continue
       if (companyFilter !== ALL && companyFilter !== NONE && r.company !== companyFilter) continue
       if (q && !(r.fio.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || String(r.phone || '').toLowerCase().includes(q))) continue
+      if (accountFilter !== 'all') {
+        const c = checksRef.current.get(r._id)
+        if (accountFilter === 'problem' && !isProblem(c)) continue
+        if (accountFilter === 'ok' && c?.status !== 'ok') continue
+        if (accountFilter === 'unchecked' && c && c.status !== 'unavailable') continue
+      }
       out.push(r._id)
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, companyFilter, structVersion])
+  }, [q, companyFilter, structVersion, accountFilter, checksVersion])
 
   const companyCounts = useMemo(() => {
     const m = new Map()
@@ -282,7 +338,19 @@ export function EmployeesCard() {
   const curPage = clampPage(page, visibleRows.length, PAGE_SIZE)
   const shownRows = visibleRows.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE)
 
-  useEffect(() => { setPage(1) }, [q, companyFilter])
+  useEffect(() => { setPage(1) }, [q, companyFilter, accountFilter])
+
+  // счётчики для фильтра «Учётки» — по всему списку
+  const accountCounts = useMemo(() => {
+    let problem = 0, ok = 0, unchecked = 0
+    for (const r of rows) {
+      const c = checks.get(r._id)
+      if (isProblem(c)) problem++
+      else if (c?.status === 'ok') ok++
+      else unchecked++
+    }
+    return { problem, ok, unchecked }
+  }, [rows, checks])
 
   const goToPage = p => {
     setPage(p)
@@ -366,6 +434,91 @@ export function EmployeesCard() {
   // Выгружаются те, кто сейчас виден: с учётом фильтра компании и поиска
   // (если ничего не выбрано — весь список). Правки, ещё не сохранённые на
   // сервере, тоже попадают в файл — что на экране, то и в Excel.
+  // ─── Проверка учёток ТСД ────────────────────────────────────────────────
+  // Сервер берёт телефон и пароль из базы — поэтому несохранённые правки
+  // сначала нужно сохранить, иначе проверится старое.
+  const runAccountCheck = async ids => {
+    if (changes.total > 0) { toast.error('Сначала сохраните изменения — проверяются данные, сохранённые на сервере'); return }
+    cancelCheckRef.current = false
+    setCheckRun({ done: 0, total: ids.length })
+    const BATCH = 20
+    let done = 0
+    const tally = { ok: 0, problem: 0, unavailable: 0 }
+    try {
+      for (let i = 0; i < ids.length && !cancelCheckRef.current; i += BATCH) {
+        const res = await api.checkAccounts(ids.slice(i, i + BATCH))
+        if (res && res.ok === false) throw new Error(res.error || 'ошибка проверки')
+        const results = res.results || []
+        setChecks(prev => {
+          const next = new Map(prev)
+          for (const r of results) next.set(r.executorId, r)
+          return next
+        })
+        for (const r of results) {
+          if (r.status === 'ok') tally.ok++
+          else if (ACCOUNT_STATUS[r.status]?.problem) tally.problem++
+          else tally.unavailable++
+        }
+        done = Math.min(ids.length, i + BATCH)
+        setCheckRun({ done, total: ids.length })
+      }
+      const parts = [`работают ${tally.ok}`, `проблемы ${tally.problem}`]
+      if (tally.unavailable) parts.push(`не удалось проверить ${tally.unavailable}`)
+      if (cancelCheckRef.current) toast.info(`Проверка остановлена (${done} из ${ids.length}) · ${parts.join(' · ')}`)
+      else (tally.problem ? toast.warning : toast.success)(`Проверено ${done} · ${parts.join(' · ')}`)
+    } catch (err) {
+      toast.error(`Проверка прервалась (${done} из ${ids.length}): ${err.message}`)
+    } finally {
+      setCheckRun(null)
+      setChecksVersion(v => v + 1)
+    }
+  }
+
+  const handleCheckVisible = async () => {
+    setMenuOpen(false)
+    const ids = visibleRows.map(r => r._id)
+    if (!ids.length) { toast.error('Нет сотрудников для проверки'); return }
+    const withCreds = visibleRows.filter(r => r.phone && r.password).length
+    const ok = await confirmDialog({
+      title: `Проверить учётки (${ids.length})?`,
+      description: `Для каждого сотрудника будет выполнен вход в WMS (ТСД) по телефону и паролю из списка — сессию на терминале это не сбрасывает.\n` +
+        `С телефоном и паролем: ${withCreds}. Займёт примерно ${Math.max(1, Math.round(withCreds * 0.5 / 60))} мин.`,
+      confirmText: 'Проверить',
+    })
+    if (ok) runAccountCheck(ids)
+  }
+
+  const handleRecheckOne = useCallback(async id => {
+    if (rowState.get(id) === 'dirty') { toast.error('Сначала сохраните изменения этого сотрудника'); return }
+    setCheckingOne(prev => new Set(prev).add(id))
+    try {
+      const res = await api.checkAccounts([id])
+      const r = res.results?.[0]
+      if (r) {
+        setChecks(prev => new Map(prev).set(r.executorId, r))
+        const meta = ACCOUNT_STATUS[r.status]
+        ;(r.status === 'ok' ? toast.success : meta?.problem ? toast.error : toast.info)(`${rowsRef.current.find(x => x._id === id)?.fio || ''}: ${meta?.label || r.status}`)
+      }
+    } catch (err) {
+      toast.error('Не удалось проверить: ' + err.message)
+    } finally {
+      setCheckingOne(prev => { const n = new Set(prev); n.delete(id); return n })
+    }
+  }, [rowState])
+
+  const handleAccountReport = async () => {
+    setMenuOpen(false)
+    if (!visibleRows.length) { toast.error('Нет сотрудников для отчёта'); return }
+    const parts = []
+    if (companyFilter === NONE) parts.push('без компании')
+    else if (companyFilter !== ALL) parts.push(companyFilter)
+    try {
+      await exportAccountReportXlsx(visibleRows, checks, { fileSuffix: parts.join(' ') })
+    } catch (err) {
+      toast.error('Не удалось сформировать отчёт: ' + err.message)
+    }
+  }
+
   const handleExportXlsx = async () => {
     setMenuOpen(false)
     if (!visibleRows.length) { toast.error('Нет сотрудников для выгрузки'); return }
@@ -390,7 +543,12 @@ export function EmployeesCard() {
       return
     }
     if (before > 20 && all.length < before / 2 &&
-      !window.confirm(`Будет сохранено ${all.length} из ${before} сотрудников — остальные удалятся с сервера. Продолжить?`)) return
+      !(await confirmDialog({
+        title: `Сохранить только ${all.length} из ${before} сотрудников?`,
+        description: `Остальные ${before - all.length} будут удалены из списка на сервере.`,
+        confirmText: 'Сохранить',
+        danger: true,
+      }))) return
     setSaving(true)
     try {
       const res = await api.saveEmployeesAll(all)
@@ -512,8 +670,24 @@ export function EmployeesCard() {
           <PopoverTrigger asChild>
             <Button variant="outline" size="icon" title="Ещё действия"><MoreHorizontal className="size-4" /></Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-1.5">
+          <PopoverContent align="end" className="w-72 p-1.5">
             <MenuItem icon={ScanSearch} onClick={handleScan} disabled={scanning}>{scanning ? 'Ищу в сменах…' : 'Найти новых в сменах'}</MenuItem>
+            <div className="my-1 border-t border-line" />
+            <MenuItem icon={ShieldCheck} onClick={handleCheckVisible} disabled={!!checkRun}>
+              <span className="min-w-0 flex-1">
+                Проверить учётки ТСД
+                <span className="block text-xs text-muted-foreground">
+                  {companyFilter === ALL && !q && accountFilter === 'all' ? `весь список · ${visibleRows.length}` : `по фильтру · ${visibleRows.length}`}
+                </span>
+              </span>
+            </MenuItem>
+            <MenuItem icon={FileWarning} onClick={handleAccountReport}>
+              <span className="min-w-0 flex-1">
+                Отчёт по учёткам (Excel)
+                <span className="block text-xs text-muted-foreground">для компаний · по фильтру</span>
+              </span>
+            </MenuItem>
+            <div className="my-1 border-t border-line" />
             <MenuItem icon={Download} onClick={handleExportXlsx}>
               <span className="min-w-0 flex-1">
                 Выгрузить в Excel
@@ -527,6 +701,25 @@ export function EmployeesCard() {
         {scanResult !== null && scanResult.length === 0 && (
           <span className="text-xs text-muted-foreground">Все исполнители из смен уже в списке</span>
         )}
+        <div className="ml-auto inline-flex flex-wrap items-center gap-0.5 rounded-xl border border-line bg-surface-2 p-0.5" title="Фильтр по статусу учётки ТСД">
+          {[
+            { v: 'all', label: 'Все учётки' },
+            { v: 'problem', label: 'Проблемы', count: accountCounts.problem, tone: 'text-destructive' },
+            { v: 'ok', label: 'Работают', count: accountCounts.ok, tone: 'text-good' },
+            { v: 'unchecked', label: 'Не проверены', count: accountCounts.unchecked },
+          ].map(o => (
+            <button
+              key={o.v}
+              type="button"
+              onClick={() => setAccountFilter(o.v)}
+              className={cn('inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-xs font-medium transition-colors',
+                accountFilter === o.v ? 'bg-surface text-foreground shadow-card' : 'text-muted-foreground hover:text-ink-2')}
+            >
+              {o.label}
+              {o.count != null && <span className={cn('tabular', o.count && o.tone)}>{o.count}</span>}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Фильтр по компаниям */}
@@ -561,10 +754,11 @@ export function EmployeesCard() {
             isDesktop ? (
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  <col className="w-[34%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[18%]" />
+                  <col className="w-[28%]" />
+                  <col className="w-[22%]" />
                   <col className="w-[16%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[15%]" />
                   <col className="w-12" />
                 </colgroup>
                 <thead className="bg-surface-2/60">
@@ -573,18 +767,19 @@ export function EmployeesCard() {
                     <th className="px-3 py-2.5 font-medium">Компания</th>
                     <th className="px-3 py-2.5 font-medium">Телефон</th>
                     <th className="px-3 py-2.5 font-medium">Пароль</th>
+                    <th className="px-3 py-2.5 font-medium">Учётка ТСД</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
                   {shownRows.map(r => (
-                    <DesktopRow key={r._id} row={r} state={rowState.get(r._id)} onChange={handleRowChange} onDelete={handleDeleteRow} />
+                    <DesktopRow key={r._id} row={r} state={rowState.get(r._id)} onChange={handleRowChange} onDelete={handleDeleteRow} check={checks.get(r._id)} checkBusy={checkingOne.has(r._id)} onRecheck={handleRecheckOne} />
                   ))}
                 </tbody>
               </table>
             ) : (
               <div>
-                {shownRows.map(r => <MobileRow key={r._id} row={r} state={rowState.get(r._id)} onOpen={handleOpenMobile} />)}
+                {shownRows.map(r => <MobileRow key={r._id} row={r} state={rowState.get(r._id)} onOpen={handleOpenMobile} check={checks.get(r._id)} />)}
               </div>
             )
           ) : (
@@ -593,6 +788,25 @@ export function EmployeesCard() {
             </div>
           )}
           <ListPager page={curPage} pageSize={PAGE_SIZE} total={visibleRows.length} onChange={goToPage} />
+        </div>
+      )}
+
+      {/* Идёт проверка учёток */}
+      {checkRun && (
+        <div className="sticky bottom-3 z-20 mt-3">
+          <div className="rounded-2xl border border-line bg-[var(--glass)] p-3 shadow-float backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-4 shrink-0 animate-spin text-brand" />
+              <div className="min-w-0 flex-1 text-sm">
+                <span className="font-medium">Проверяю учётки ТСД</span>
+                <span className="tabular text-muted-foreground"> · {checkRun.done} из {checkRun.total}</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { cancelCheckRef.current = true }}>Остановить</Button>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-full rounded-full bg-brand-gradient transition-[width] duration-300" style={{ width: `${checkRun.total ? (checkRun.done / checkRun.total) * 100 : 0}%` }} />
+            </div>
+          </div>
         </div>
       )}
 

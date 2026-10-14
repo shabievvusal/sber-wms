@@ -14,6 +14,7 @@ import { rolesToLabelMap, rolesOrBuiltin } from './constants'
 import { Avatar, IconAction, ListPager, ModuleChips, clampPage } from './ui'
 import { KeyRound, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
 import { ONLINE_WINDOW_MS } from '@/lib/presence'
+import { confirmDialog } from '@/components/ui/confirm'
 
 const PAGE_SIZE = 20
 const phone10 = v => String(v || '').replace(/\D/g, '').slice(-10)
@@ -82,7 +83,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   }, [])
 
   const handleDelete = async u => {
-    if (!confirm(`Забрать доступ у ${u.name || u.login}?`)) return
+    if (!(await confirmDialog({ title: `Забрать доступ у ${u.name || u.login}?`, description: 'Пользователь больше не сможет войти на сайт. Чтобы вернуть доступ, ему придётся подать заявку заново.', confirmText: 'Забрать доступ', danger: true }))) return
     try {
       await api.deleteVsAdminUser(u.login)
       setUsers(prev => prev.filter(x => x.login !== u.login))
@@ -182,7 +183,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
             const protectedAdmin = isProtected(u)
             const checked = selected.has(u.login)
             return (
-              <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50', checked && 'bg-brand-soft/50 hover:bg-brand-soft/60')}>
+              <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 lg:flex-nowrap transition-colors hover:bg-surface-2/50', checked && 'bg-brand-soft/50 hover:bg-brand-soft/60')}>
                 <span className="grid w-4 shrink-0 place-items-center">
                   {canBulk(u) && <Checkbox checked={checked} onCheckedChange={() => toggleOne(u.login)} aria-label={`Выбрать ${u.name || u.login}`} />}
                 </span>
@@ -190,21 +191,21 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                   <Avatar name={u.name || u.login} className="size-9" />
                   {seen?.online && <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full bg-good ring-2 ring-card" title="В сети" />}
                 </span>
-                <div className="min-w-0 basis-52">
+                <div className="min-w-0 basis-52 lg:basis-0 lg:flex-[1.3]">
                   <div className="truncate text-sm font-medium">{u.name || 'Без имени'}</div>
                   <div className="tabular truncate text-xs text-muted-foreground">{u.login}</div>
                 </div>
-                <div className="flex min-w-0 basis-44 flex-wrap items-center gap-1.5">
+                <div className="flex min-w-0 basis-44 flex-wrap items-center gap-1.5 lg:basis-40 lg:shrink-0">
                   {roleText
                     ? <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">{roleText}</span>
                     : <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted-foreground">без роли</span>}
                   {u.allowWithoutToken && <span className="inline-flex items-center gap-1 rounded-full bg-warning/12 px-2 py-0.5 text-xs text-warning" title="Может входить без токена WMS"><KeyRound className="size-3" /> без токена</span>}
                 </div>
-                <div className="min-w-0 flex-1 basis-56">
+                <div className="min-w-0 flex-1 basis-56 lg:basis-0">
                   <ModuleChips modules={u.modules} max={3} />
                 </div>
                 <div
-                  className="w-36 shrink-0 text-xs"
+                  className="w-32 shrink-0 text-xs"
                   title={[seen && `Был в сети: ${seen.text}`, lastLogin ? `Последний вход: ${lastLogin}` : null].filter(Boolean).join('\n') || undefined}
                 >
                   {seen?.online ? (
@@ -225,7 +226,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                     <span className="text-muted-foreground">не заходил</span>
                   )}
                 </div>
-                <div className="flex w-[104px] shrink-0 justify-end gap-0.5">
+                <div className="flex w-[72px] shrink-0 justify-end gap-0.5">
                   {protectedAdmin ? (
                     <span className="text-xs text-muted-foreground">защищён</span>
                   ) : (

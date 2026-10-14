@@ -52,3 +52,8 @@ public class EmployeeSaveAllRequest
     public List<EmployeeUpsertRequest>? Employees { get; set; }
     public string? Csv { get; set; }
 }
+
+public class AccountCheckRequest
+{
+    public List<string>? ExecutorIds { get; set; }
+}

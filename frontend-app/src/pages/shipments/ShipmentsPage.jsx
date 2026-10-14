@@ -30,6 +30,7 @@ import EditRouteDialog from './EditRouteDialog'
 import Lightbox from '@/components/shared/Lightbox'
 import ShipmentsPageClassic from './ShipmentsPageClassic'
 import { LS_SHIPMENTS_CLASSIC } from '@/pages/settings/ShipmentsDesignCard'
+import { confirmDialog } from '@/components/ui/confirm'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Эскиз редизайна ShipmentsPage. Тот же подход, что и весь new zlp: Tailwind +
@@ -613,7 +614,7 @@ function ShipmentsPageModern() {
   const bulkDelete = async () => {
     const ids = [...selected]
     if (!ids.length) return
-    if (!confirm(`Удалить ${ids.length} маршрут(ов)? Это действие нельзя отменить.`)) return
+    if (!(await confirmDialog({ title: `Удалить маршруты (${ids.length})?`, description: 'Маршруты и их данные приёмки будут удалены. Это действие нельзя отменить.', confirmText: 'Удалить', danger: true }))) return
     try {
       const res = await api.deleteRkRoutesBulk(ids)
       if (!res.ok) throw new Error(res.error || 'Ошибка')

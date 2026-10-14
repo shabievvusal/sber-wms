@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { fmtHours, fmtNum, fmtPct, fmtTime, resolveAccount, STATUS_META } from './format'
 import { PersonMenu } from './PersonMenu'
+import { confirmDialog } from '@/components/ui/confirm'
 
 const th = 'h-8 px-2 text-[11px] whitespace-nowrap'
 const td = 'px-2 py-1.5 text-[13px] whitespace-nowrap'
@@ -37,7 +38,7 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
   }
 
   const remove = async row => {
-    if (!window.confirm(`Удалить «${row.fio}» из смены?`)) return
+    if (!(await confirmDialog({ title: `Удалить «${row.fio}» из смены?`, description: 'Человек пропадёт из таблицы смены и из актов.', confirmText: 'Удалить', danger: true }))) return
     try {
       await api.deleteMotivationPerson(row.id)
       onChanged()

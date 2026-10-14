@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
+import { ConfirmHost } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Sidebar, MobileDrawer, MobileUserMenu, findNavLabel, NAV_ITEMS, HIDDEN_PAGE_MODULES, hasModuleAccess } from '@/components/layout/Sidebar'
@@ -68,6 +69,7 @@ export default function App() {
     <AuthProvider>
       <AppGate />
       <Toaster position="top-right" richColors />
+      <ConfirmHost />
     </AuthProvider>
   )
 }

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { Field } from './ui'
 import { Search, Trash2, TriangleAlert } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 function todayStr() {
   const d = new Date()
@@ -59,11 +60,14 @@ export function DeleteShiftDataCard() {
   const handleDelete = async () => {
     if (!canDelete) return
     const shiftLabel = shift === 'day' ? 'дневную' : 'ночную'
-    const confirmed = confirm(
-      `Удалить ${shiftLabel} смену за ${date}?\n\n` +
-      `Операции: ${counts.ops}\nРаскладка: ${counts.placement}\nПриёмка: ${counts.receiving}\nОстатки: ${counts.remains}\nИтого: ${counts.total}\n\n` +
-      `Это необратимо, резервной копии не будет.`
-    )
+    const confirmed = await confirmDialog({
+      title: `Удалить ${shiftLabel} смену за ${date.split('-').reverse().join('.')}?`,
+      description:
+        `Операции: ${counts.ops}\nРаскладка: ${counts.placement}\nПриёмка: ${counts.receiving}\nОстатки: ${counts.remains}\nВсего: ${counts.total}\n\n` +
+        `Это необратимо, резервной копии не будет.`,
+      confirmText: `Удалить ${counts.total} записей`,
+      danger: true,
+    })
     if (!confirmed) return
     setDeleting(true)
     try {

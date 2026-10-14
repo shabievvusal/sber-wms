@@ -508,6 +508,19 @@ export async function rebuildMissingWeight() {
 // значений без известного executorId). Раньше здесь всегда слали `names`
 // с массивом ОБЪЕКТОВ {executorId, fio} — бэкенд пытался распарсить их как
 // List<string> и падал 400 Bad Request.
+// Проверка учёток ТСД (вход в WMS по телефону и паролю из списка сотрудников)
+export async function getAccountChecks() {
+  return req('/api/empl/account-checks')
+}
+
+export async function checkAccounts(executorIds) {
+  return req('/api/empl/account-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ executorIds }),
+  })
+}
+
 export async function addNewEmployees(executors) {
   return req('/api/empl/add-new', {
     method: 'POST',

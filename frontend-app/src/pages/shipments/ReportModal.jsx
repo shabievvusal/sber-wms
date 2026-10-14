@@ -7,6 +7,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { Download, Trash2, Loader2 } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 function monthStartIso() {
@@ -39,7 +40,7 @@ export default function ReportModal({ open, onOpenChange }) {
 
   const handleDelete = async () => {
     if (!dateFrom || !dateTo) { toast.error('Выберите период'); return }
-    if (!confirm(`Удалить все данные за период ${dateFrom} — ${dateTo}?\nЭто действие нельзя отменить.`)) return
+    if (!(await confirmDialog({ title: 'Удалить все маршруты за период?', description: `С ${dateFrom.split('-').reverse().join('.')} по ${dateTo.split('-').reverse().join('.')}.\nЭто действие нельзя отменить.`, confirmText: 'Удалить', danger: true }))) return
     setDeleting(true)
     try {
       const res = await api.deleteRkRoutesByDateRange(dateFrom, dateTo)

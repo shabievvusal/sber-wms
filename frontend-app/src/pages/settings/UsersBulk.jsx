@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
 import { ALL_MODULES, VS_MODULE_LABELS, knownModules } from './constants'
 import { LayoutGrid, RotateCcw, ShieldCheck, X } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 // У admin/developer разделы всегда все (бэкенд добавляет их поверх списка),
 // поэтому правка разделов их не касается.
@@ -138,14 +139,14 @@ export function UsersBulkBar({ users, roles, onClear, onDone }) {
   const assignRole = async () => {
     if (!role) { toast.error('Выберите роль'); return }
     const label = roles.find(r => r.key === role)?.label || role
-    if (!confirm(`Назначить роль «${label}» ${users.length} пользователям?${resetModules ? '\nИх разделы станут такими же, как у роли.' : ''}`)) return
+    if (!(await confirmDialog({ title: `Назначить роль «${label}»?`, description: `Роль сменится у ${users.length} пользователей.${resetModules ? '\nИх разделы станут такими же, как у роли.' : ''}`, confirmText: 'Назначить' }))) return
     const result = await applyToUsers(users, () => (resetModules ? { role, modules: [] } : { role }), setProgress)
     report(result, `Роль «${label}» назначена`)
     onDone()
   }
 
   const resetToRole = async () => {
-    if (!confirm(`Вернуть ${users.length} пользователям разделы их роли (убрать личные настройки разделов)?`)) return
+    if (!(await confirmDialog({ title: 'Вернуть разделы роли?', description: `У ${users.length} пользователей личные настройки разделов сбросятся — останутся разделы их роли.`, confirmText: 'Вернуть' }))) return
     const result = await applyToUsers(users, () => ({ modules: [] }), setProgress)
     report(result, 'Разделы как у роли')
     onDone()

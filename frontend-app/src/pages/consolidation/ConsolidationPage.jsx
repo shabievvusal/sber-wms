@@ -19,6 +19,7 @@ import { printServiceNotes } from './printServiceNote'
 import { setHash } from '@/lib/hashRoute'
 import { RefreshCw, Search, Printer, Download, ExternalLink } from 'lucide-react'
 import { Select } from '@/components/ui/select'
+import { confirmDialog } from '@/components/ui/confirm'
 
 const COMPLAINTS_PER_PAGE = 30
 const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
@@ -159,7 +160,7 @@ export default function ConsolidationPage() {
     if (lookingUpRef.current) return
     let needLookup = complaints.filter(c => !c.lookupDone)
     if (needLookup.length === 0) {
-      if (!confirm('Все жалобы уже проверены. Проверить заново?')) return
+      if (!(await confirmDialog({ title: 'Проверить все жалобы заново?', description: 'Все жалобы уже проверены. Повторная проверка заново найдёт нарушителей по каждой.', confirmText: 'Проверить заново' }))) return
       needLookup = [...complaints]
     }
     lookingUpRef.current = true
@@ -182,7 +183,7 @@ export default function ConsolidationPage() {
   const handleBulkDelete = async () => {
     const sel = getSelected()
     if (!sel.length) { toast.error('Отметьте жалобы галочкой'); return }
-    if (!confirm(`Удалить выбранные жалобы (${sel.length})?`)) return
+    if (!(await confirmDialog({ title: `Удалить выбранные жалобы (${sel.length})?`, description: 'Жалобы и их фото будут удалены без возможности восстановления.', confirmText: 'Удалить', danger: true }))) return
     const results = await Promise.allSettled(sel.map(c => api.deleteComplaint(c.id)))
     const fail = results.filter(r => r.status === 'rejected').length
     if (fail > 0) toast.error(`Удалено: ${results.length - fail}, с ошибкой: ${fail}`)

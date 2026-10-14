@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { SettingCard } from './SettingCard'
 import { IconAction } from './ui'
 import { FileSpreadsheet, Scale, Trash2, Upload } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
@@ -41,7 +42,7 @@ export function ProductWeightsCard() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Удалить файл весов товаров? Это действие нельзя отменить.')) return
+    if (!(await confirmDialog({ title: 'Удалить файл весов товаров?', description: 'Без него в статистике не посчитается вес операций. Действие нельзя отменить — понадобится загрузить файл заново.', confirmText: 'Удалить', danger: true }))) return
     setDeleting(true)
     try {
       await withMinDuration(async () => { await api.deleteProductWeightsExcel() })

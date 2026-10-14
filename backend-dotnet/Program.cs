@@ -38,6 +38,7 @@ builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<RouteService>();
 builder.Services.AddScoped<TsdService>();
 builder.Services.AddScoped<EmployeeService>();
+builder.Services.AddScoped<AccountCheckService>();
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<MotivationService>();

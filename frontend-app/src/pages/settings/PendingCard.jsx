@@ -7,6 +7,7 @@ import { SettingCard } from './SettingCard'
 import { rolesOrBuiltin } from './constants'
 import { Avatar, IconAction } from './ui'
 import { Check, UserPlus, X } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
@@ -46,7 +47,7 @@ export function PendingCard({ roles, onApproved }) {
   }
 
   const handleReject = async phone => {
-    if (!confirm('Отклонить заявку?')) return
+    if (!(await confirmDialog({ title: 'Отклонить заявку?', description: 'Заявка будет удалена. Человек сможет подать её заново.', confirmText: 'Отклонить', danger: true }))) return
     try {
       await api.rejectVsPending(phone)
       setPending(prev => prev.filter(p => p.phone !== phone))

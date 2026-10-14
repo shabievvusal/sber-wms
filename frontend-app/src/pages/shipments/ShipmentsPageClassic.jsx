@@ -9,6 +9,7 @@ import styles from './ShipmentsPageClassic.module.css'
 import {
   X, Check, Pencil, Trash2, Download, FileText, Camera, Truck, PackageOpen, Car,
 } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Классический (оригинальный) визуальный дизайн раздела «Отгрузка» — часть
@@ -212,7 +213,7 @@ function RoutesView({ data, loading, error, onOpenLightbox, onOpenEdit, onDataUp
 
   const bulkDelete = async () => {
     const ids = [...selected]
-    if (!confirm(`Удалить ${ids.length} маршрут${ids.length === 1 ? '' : ids.length < 5 ? 'а' : 'ов'}? Это действие нельзя отменить.`)) return
+    if (!(await confirmDialog({ title: `Удалить ${ids.length} маршрут${ids.length === 1 ? '' : ids.length < 5 ? 'а' : 'ов'}?`, description: 'Это действие нельзя отменить.', confirmText: 'Удалить', danger: true }))) return
     setBulkMsg('Удаляю...')
     try {
       const res = await api.deleteRkRoutesBulk(ids)

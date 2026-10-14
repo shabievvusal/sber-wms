@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Play, Trash2 } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 function formatDamage(n) {
   if (n == null) return '—'
@@ -77,7 +78,7 @@ export default function ViolationsPage() {
   }
 
   const handleDelete = async (id, idx) => {
-    if (!window.confirm('Удалить нарушение?')) return
+    if (!(await confirmDialog({ title: 'Удалить нарушение?', description: 'Запись и прикреплённый файл будут удалены.', confirmText: 'Удалить', danger: true }))) return
     try {
       await api.deleteViolation(id)
       setViolations(v => v.filter(x => x.id !== id))

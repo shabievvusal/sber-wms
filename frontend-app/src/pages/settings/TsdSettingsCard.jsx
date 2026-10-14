@@ -8,6 +8,7 @@ import { EditableCell } from '@/components/ui/editable-cell'
 import { SettingCard, SettingRow } from './SettingCard'
 import { Empty, IconAction, theadCls, thCls, trCls, tableWrapCls } from './ui'
 import { Plus, ScanBarcode, Trash2, UserRoundPlus } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm'
 
 export function TsdSettingsCard() {
   const [totalCount, setTotalCount] = useState('0')
@@ -107,7 +108,7 @@ export function TsdManualEmployeesCard() {
   }
 
   const handleDelete = async row => {
-    if (!confirm(`Удалить «${row.fio}» из списка для ТСД?`)) return
+    if (!(await confirmDialog({ title: `Удалить «${row.fio}»?`, description: 'Сотрудник пропадёт из списка для выдачи ТСД.', confirmText: 'Удалить', danger: true }))) return
     try {
       const data = await api.deleteTsdManualEmployee(row.id)
       if (!data.ok) { toast.error('Не удалось удалить'); return }

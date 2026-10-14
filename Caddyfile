@@ -90,6 +90,10 @@
 	handle /api/empl/add-new {
 		reverse_proxy dotnet:5080
 	}
+	# Проверка учёток ТСД (вход в wmsin-pdt), см. AccountCheckService.cs
+	handle /api/empl/account-check* {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/employees {
 		reverse_proxy dotnet:5080
 	}
