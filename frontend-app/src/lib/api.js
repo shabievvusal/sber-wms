@@ -1,9 +1,13 @@
 // Минимальный API-слой для превью редизайна. Бьёт в тот же бэкенд (см. vite.config.js proxy),
 // намеренно НЕ импортирует ../../app/src/api/index.js — песочница должна оставаться независимой.
+import { isEmbedded } from '@/lib/embed'
+
 const credentials = 'include'
+// во встроенном в WMS режиме сервер ставит cookie входа для iframe (см. lib/embed.js)
+const embedHeaders = isEmbedded ? { 'X-Embed': '1' } : {}
 
 async function req(url, opts = {}) {
-  const r = await fetch(url, { credentials, ...opts })
+  const r = await fetch(url, { credentials, ...opts, headers: { ...embedHeaders, ...(opts.headers || {}) } })
   const text = await r.text()
   let data
   try { data = text ? JSON.parse(text) : null } catch {

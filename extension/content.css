@@ -1,0 +1,194 @@
+/* «СберЛогистика в WMS» — всё под #zlp-root, чтобы не задевать стили WMS
+   и не наследовать их. Цвета — как на robops.ru (сине-фиолетовый акцент). */
+
+#zlp-root, #zlp-root * {
+  box-sizing: border-box;
+  font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+#zlp-root {
+  --zlp-brand: #2563eb;
+  --zlp-brand-2: #7c3aed;
+  --zlp-ink: #0b0c0f;
+  --zlp-ink-2: #4b5060;
+  --zlp-muted: #6b7080;
+  --zlp-surface: #ffffff;
+  --zlp-surface-2: #f1f2f5;
+  --zlp-line: rgba(15, 18, 25, 0.1);
+  --zlp-shadow: 0 24px 64px -24px rgba(15, 18, 25, 0.35), 0 2px 6px rgba(15, 18, 25, 0.08);
+}
+
+/* ── Кнопка ── */
+#zlp-root .zlp-launcher {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--zlp-brand), var(--zlp-brand-2));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--zlp-shadow);
+  transition: transform .15s ease, opacity .15s ease;
+}
+#zlp-root .zlp-launcher:hover { transform: translateY(-1px); }
+#zlp-root .zlp-logo {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+#zlp-root.zlp-in-menu .zlp-launcher { display: none; }
+html.zlp-open #zlp-root .zlp-launcher { opacity: 0; pointer-events: none; }
+
+/* ── Меню разделов ── */
+#zlp-root .zlp-menu {
+  position: fixed;
+  left: 16px;
+  bottom: 64px;
+  z-index: 2147483001;
+  width: 260px;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 18px;
+  background: var(--zlp-surface);
+  color: var(--zlp-ink);
+  box-shadow: var(--zlp-shadow);
+}
+#zlp-root .zlp-menu[hidden] { display: none; }
+#zlp-root .zlp-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--zlp-brand);
+}
+#zlp-root .zlp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--zlp-ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+#zlp-root .zlp-item:hover { background: var(--zlp-surface-2); color: var(--zlp-ink); }
+#zlp-root .zlp-item.zlp-active { background: rgba(37, 99, 235, 0.1); color: var(--zlp-brand); }
+#zlp-root .zlp-item svg { flex: none; }
+#zlp-root .zlp-item-group { cursor: default; }
+#zlp-root .zlp-item-group:hover { background: transparent; color: var(--zlp-ink-2); }
+#zlp-root .zlp-sub {
+  padding: 6px 10px 6px 38px;
+  font-size: 13px;
+}
+
+/* ── Окно с разделом ── */
+#zlp-root .zlp-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482999;
+  display: flex;
+  flex-direction: column;
+  background: #f4f5f7;
+}
+#zlp-root .zlp-panel[hidden] { display: none; }
+#zlp-root .zlp-panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--zlp-line);
+  background: var(--zlp-surface);
+  color: var(--zlp-ink);
+}
+#zlp-root .zlp-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#zlp-root .zlp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 10px;
+  background: var(--zlp-surface);
+  color: var(--zlp-ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+#zlp-root .zlp-btn:hover { background: var(--zlp-surface-2); color: var(--zlp-ink); }
+#zlp-root .zlp-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  #zlp-root {
+    --zlp-ink: #f5f6f8;
+    --zlp-ink-2: #a8adbb;
+    --zlp-muted: #8b90a0;
+    --zlp-surface: #141416;
+    --zlp-surface-2: #1c1c20;
+    --zlp-line: rgba(255, 255, 255, 0.1);
+  }
+  #zlp-root .zlp-panel { background: #09090b; }
+}
+
+/* ── Окно раздела справа от меню WMS (когда пункты встроены в меню) ── */
+#zlp-root.zlp-in-menu .zlp-panel { left: var(--zlp-left, 0); }
+
+/* ── Наши пункты в меню WMS (копии пункта «Отчёты» с классами WMS) ── */
+[data-zlp] { user-select: none; }
+[data-zlp].zlp-child { padding-left: 12px !important; box-shadow: inset 2px 0 0 rgba(37, 99, 235, 0.18); }
+[data-zlp].zlp-child2 { padding-left: 24px !important; }
+[data-zlp].zlp-menu-subhead { opacity: 0.75; }
+[data-zlp] .zlp-chevron {
+  flex: none;
+  margin-left: auto;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+[data-zlp].zlp-group-open .zlp-chevron { transform: rotate(180deg); }
+[data-zlp].zlp-wms-active-group,
+[data-zlp].zlp-wms-active-group * { color: #2563eb !important; }
+[data-zlp].zlp-wms-active {
+  background: rgba(37, 99, 235, 0.1) !important;
+  box-shadow: inset 3px 0 0 #2563eb !important;
+}
+[data-zlp].zlp-wms-active,
+[data-zlp].zlp-wms-active * { color: #2563eb !important; }
+/* меню WMS свёрнуто до иконок — без стрелки и отступов */
+html.zlp-menu-narrow [data-zlp] .zlp-chevron { display: none; }
+html.zlp-menu-narrow [data-zlp].zlp-child { padding-left: 0 !important; box-shadow: none; }

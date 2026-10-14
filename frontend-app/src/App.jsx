@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
 import { EoAutoRefresh } from '@/lib/eoAutoRefresh'
 import { usePresence } from '@/lib/presence'
+import { isEmbedded, initEmbedBridge } from '@/lib/embed'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -90,6 +91,8 @@ function AppShell() {
   const [route, setRoute] = useState(parseHash)
   const [navOpen, setNavOpen] = useState(false)
   usePresence(!!user) // «Был в сети» в Настройках → Пользователи
+  // встроено в WMS расширением: разделы переключает меню WMS (см. lib/embed.js)
+  useEffect(() => initEmbedBridge({ onNavigate: p => setHash(p) }), [])
 
   // Гейт по модулю роли (1:1 с оригиналом — ModuleRoute в App.jsx) —
   // до этого проверка была ТОЛЬКО в голове у пользователя: роли/доступы
@@ -121,13 +124,13 @@ function AppShell() {
           это no-op (см. eoAutoRefresh.jsx). Здесь, а не на странице приёмки:
           обновлять должен корп. компьютер, где открыта другая страница. */}
       <EoAutoRefresh />
-      <Sidebar activePage={route.page} onNavigate={navigate} />
+      {!isEmbedded && <Sidebar activePage={route.page} onNavigate={navigate} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Мобильный топ-бар — вместо постоянного бокового меню (Sidebar
             скрыт до `md`, см. Sidebar.jsx). Гамбургер открывает тот же
             SidebarNav в выезжающей слева панели (MobileDrawer). */}
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-[var(--glass)] p-3 backdrop-blur-xl md:hidden print:hidden">
+        <div className={isEmbedded ? 'hidden' : 'sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-[var(--glass)] p-3 backdrop-blur-xl md:hidden print:hidden'}>
           <Button size="icon" variant="ghost" onClick={() => setNavOpen(true)} aria-label="Открыть меню">
             <Menu className="size-5" />
           </Button>
@@ -140,7 +143,7 @@ function AppShell() {
         </main>
       </div>
 
-      <MobileDrawer open={navOpen} onOpenChange={setNavOpen} activePage={route.page} onNavigate={navigate} />
+      {!isEmbedded && <MobileDrawer open={navOpen} onOpenChange={setNavOpen} activePage={route.page} onNavigate={navigate} />}
     </div>
   )
 }

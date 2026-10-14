@@ -22,6 +22,33 @@ public static class AuthEndpoints
         SameSite = SameSiteMode.Lax,
     };
 
+    // Вход из сайта, встроенного в WMS расширением (iframe на wwh.samokat.ru):
+    // Lax-cookie браузер во встроенное окно чужого сайта не отдаёт, поэтому
+    // там нужна SameSite=None. Partitioned (CHIPS) — cookie живёт отдельно
+    // «под» wwh.samokat.ru и не отправляется на robops.ru с других сайтов,
+    // так что защита от подделки запросов (CSRF) не ослабевает. Обычный вход
+    // на robops.ru по-прежнему с Lax.
+    private static readonly CookieOptions EmbedSessionCookieOptions = CreateEmbedCookieOptions();
+
+    private static CookieOptions CreateEmbedCookieOptions()
+    {
+        var o = new CookieOptions
+        {
+            HttpOnly = true,
+            Path = "/",
+            MaxAge = TimeSpan.FromDays(30),
+            SameSite = SameSiteMode.None,
+            Secure = true,
+        };
+        o.Extensions.Add("Partitioned");
+        return o;
+    }
+
+    private static bool IsEmbedRequest(HttpContext ctx) => ctx.Request.Headers["X-Embed"] == "1";
+
+    private static CookieOptions SessionCookieFor(HttpContext ctx) =>
+        IsEmbedRequest(ctx) ? EmbedSessionCookieOptions : SessionCookieOptions;
+
     public static void MapAuthEndpoints(this WebApplication app)
     {
         app.MapPost("/api/vs/auth/register", async (JsonElement body, AuthService auth) =>
@@ -68,7 +95,7 @@ public static class AuthEndpoints
                     await auth.RecordLoginAttemptAsync(login, true);
                     var sessionId = await auth.CreateSessionAsync(user, login!);
                     var modules = user.Modules ?? await auth.GetModulesForRoleAsync(user.Role);
-                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieOptions);
+                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieFor(ctx));
                     if (!user.AllowWithoutToken)
                     {
                         try
@@ -106,7 +133,7 @@ public static class AuthEndpoints
                     await auth.RecordLoginAttemptAsync(login, true);
                     var sessionId = await auth.CreateSessionAsync(user, login!);
                     var modules = user.Modules ?? await auth.GetModulesForRoleAsync(user.Role);
-                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieOptions);
+                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieFor(ctx));
                     return Results.Json(new
                     {
                         ok = true, role = user.Role, modules, actions = userActions, allowWithoutToken = true,
@@ -125,7 +152,7 @@ public static class AuthEndpoints
                     await auth.RecordLoginAttemptAsync(login, true);
                     var sessionId = await auth.CreateSessionAsync(user, login!);
                     var modules = user.Modules ?? await auth.GetModulesForRoleAsync(user.Role);
-                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieOptions);
+                    ctx.Response.Cookies.Append(AuthConstants.SessionCookieName, sessionId, SessionCookieFor(ctx));
                     return Results.Json(new
                     {
                         ok = true, role = user.Role, modules, actions = userActions,
@@ -192,7 +219,7 @@ public static class AuthEndpoints
             {
                 var sessionId = ctx.Request.Cookies[AuthConstants.SessionCookieName];
                 if (!string.IsNullOrEmpty(sessionId)) await auth.DestroySessionAsync(sessionId);
-                ctx.Response.Cookies.Delete(AuthConstants.SessionCookieName, new CookieOptions { Path = "/" });
+                ctx.Response.Cookies.Delete(AuthConstants.SessionCookieName, IsEmbedRequest(ctx) ? CreateEmbedCookieOptions() : new CookieOptions { Path = "/" });
                 return Results.Json(new { ok = true });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
