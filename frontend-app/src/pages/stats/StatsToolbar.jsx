@@ -23,7 +23,7 @@ export function StatsToolbar({
   const canRequest = actions.includes('request_fetch')
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
       <DatePicker value={dateStr} onChange={e => onDateChange(e.target.value)} max={today} />
 
       <div className="flex gap-1 rounded-md border bg-muted/30 p-0.5">

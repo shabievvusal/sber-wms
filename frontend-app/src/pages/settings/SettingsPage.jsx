@@ -62,7 +62,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Настройки</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
         <p className="text-sm text-muted-foreground">Пользователи, роли и служебные параметры</p>
       </div>
 
@@ -73,7 +73,7 @@ export default function SettingsPage() {
       )}
 
       {!visibleTabs.length ? (
-        <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-line bg-card shadow-card p-8 text-center text-sm text-muted-foreground">
           Для роли «{roleLabel}» в разделе «Настройки» нет доступных секций.
         </div>
       ) : (

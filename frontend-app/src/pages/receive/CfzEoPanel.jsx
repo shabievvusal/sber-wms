@@ -160,7 +160,7 @@ export function StepEoList({ route }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1 rounded-lg border bg-card p-3">
+      <div className="space-y-1 rounded-2xl border border-line bg-card shadow-card p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="font-semibold">{route.routeNumber || '—'}</div>
           {canRefreshFromWms && (

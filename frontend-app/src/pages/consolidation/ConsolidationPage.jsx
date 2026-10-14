@@ -201,7 +201,7 @@ export default function ConsolidationPage() {
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Жалобы на нарушения</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Жалобы на нарушения</h1>
         <p className="text-sm text-muted-foreground">Раздел исторически называется «Консолидация» — см. PLAN.md</p>
       </div>
 
@@ -229,7 +229,7 @@ export default function ConsolidationPage() {
       {exportOpen && <ExportReportDialog onOpenChange={setExportOpen} />}
 
       {/* Toolbar */}
-      <div className="space-y-3 rounded-lg border bg-card p-3">
+      <div className="space-y-3 rounded-2xl border border-line bg-card shadow-card p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="secondary" onClick={load}><RefreshCw className="size-3.5" /> Обновить</Button>
           <Button size="sm" variant="secondary" disabled={!!lookupAllText} onClick={handleLookupAll}>

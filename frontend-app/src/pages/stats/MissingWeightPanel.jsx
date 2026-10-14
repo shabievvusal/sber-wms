@@ -54,7 +54,7 @@ export function MissingWeightPanel() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
       <span className="text-sm">
         {running ? 'Сверка ВГХ выполняется...' : error ? error : items.length ? `Неучтённый вес: ${items.length} товаров` : 'Неучтённого веса не найдено'}
       </span>

@@ -262,7 +262,7 @@ export default function SupplyDetailPage({ row, onBack }) {
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="secondary" onClick={onBack}><ArrowLeft className="size-4" /> Назад</Button>
         <div>
-          <h1 className="text-lg font-semibold">{row.taskNumber} <span className="font-normal text-muted-foreground">· заказ {row.orderNumber}</span></h1>
+          <h1 className="text-xl font-semibold tracking-tight">{row.taskNumber} <span className="font-normal text-muted-foreground">· заказ {row.orderNumber}</span></h1>
           <p className="text-sm text-muted-foreground">{TYPE_LABELS[row.type]}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export default function SupplyDetailPage({ row, onBack }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <ProductsCard products={products} totals={totals} productSearch={productSearch} setProductSearch={setProductSearch} onOpenEo={() => setEoOpen(true)} eoCount={detail.products.reduce((n, p) => n + p.handlingUnitQuantity, 0)} />
 
-        <div className="space-y-3 rounded-lg border bg-card p-4">
+        <div className="space-y-3 rounded-2xl border border-line bg-card shadow-card p-4">
           <div className="font-semibold">Сведения</div>
           <SideField label="Поставщик" value={row.supplierName} />
           <SideField label="Ворота" value={row.gateNumber} />
@@ -297,7 +297,7 @@ export default function SupplyDetailPage({ row, onBack }) {
 
 function ProductsCard({ products, totals, productSearch, setProductSearch, onOpenEo, eoCount }) {
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-2xl border border-line bg-card shadow-card">
       <div className="flex flex-wrap items-center gap-2 border-b p-4">
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
  */
 export function SettingCard({ icon: Icon, title, subtitle, actions, accent, children, className }) {
   return (
-    <div className={cn('rounded-lg border bg-card', accent && 'border-l-4 border-l-warning', className)}>
+    <div className={cn('rounded-2xl border border-line bg-card shadow-card', accent && 'border-l-4 border-l-warning', className)}>
       <div className="flex flex-wrap items-center gap-3 border-b p-4">
         {Icon && (
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">

@@ -9,7 +9,7 @@ function Checkbox({ className, checked, ...props }) {
       data-slot="checkbox"
       checked={checked}
       className={cn(
-        'peer size-4 shrink-0 rounded-[4px] border border-input shadow-xs outline-none transition-shadow',
+        'peer size-4 shrink-0 rounded-[5px] border border-input bg-surface shadow-xs outline-none transition-shadow',
         'focus-visible:ring-ring/50 focus-visible:ring-[3px]',
         'data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary',
         'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground data-[state=indeterminate]:border-primary',

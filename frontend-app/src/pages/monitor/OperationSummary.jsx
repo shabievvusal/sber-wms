@@ -25,7 +25,7 @@ export function OperationSummary({ rows }) {
     .sort((a, b) => TYPES.reduce((s, t) => s + b[1][t] - a[1][t], 0))
 
   return (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
+    <div className="space-y-3 rounded-2xl border border-line bg-card shadow-card p-4">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm">В работе: <b className="text-base">{totalActive}</b></span>
         <div className="flex flex-wrap gap-1.5">

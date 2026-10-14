@@ -75,7 +75,7 @@ export default function ReceivePage({ initialId, initialSub }) {
         {step !== 'type' && (
           <Button size="icon" variant="ghost" onClick={goBack}><ArrowLeft className="size-4" /></Button>
         )}
-        <h1 className="text-lg font-semibold">{headerTitle}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{headerTitle}</h1>
         <span className="ml-auto text-sm text-muted-foreground">{currentUserName}</span>
       </div>
 

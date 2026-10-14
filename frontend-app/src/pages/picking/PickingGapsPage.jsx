@@ -251,13 +251,13 @@ export default function PickingGapsPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Пропуски в отборе</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Пропуски в отборе</h1>
         <p className="text-sm text-muted-foreground">
           Заказы «{SHIPMENT_ORDER_STATUS_LABELS.WAITING_FOR_PICKING}»/«{SHIPMENT_ORDER_STATUS_LABELS.PICKING}» с несобранными товарами — кто из сотрудников их вёл
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
         <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} placeholder="Период отгрузки" />
         <span className="text-xs text-muted-foreground">Температура:</span>
         {TEMP_OPTIONS.map(t => (

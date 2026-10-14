@@ -199,7 +199,7 @@ export default function KdkLayoutPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Зависшие задачи</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Зависшие задачи</h1>
         <p className="text-sm text-muted-foreground">КДК и штучный отбор: исполнитель, ТСД, последний пик и простой</p>
       </div>
 

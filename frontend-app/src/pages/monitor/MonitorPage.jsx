@@ -299,7 +299,7 @@ export default function MonitorPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Мониторинг смены</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Мониторинг смены</h1>
         <p className="text-sm text-muted-foreground">Перекличка и живая активность сотрудников на складе</p>
       </div>
 
@@ -309,7 +309,7 @@ export default function MonitorPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
         <div className="flex items-center gap-3">
           <Button onClick={() => setRollcallOpen(true)}><ClipboardList className="size-4" /> Перекличка</Button>
           {rollcallPresent.size > 0 && <span className="text-sm text-muted-foreground">{rollcallPresent.size} чел. на смене</span>}
@@ -323,7 +323,7 @@ export default function MonitorPage() {
       <SuggestionsSection suggestions={suggestions} onAdd={handleAddSuggestion} onAddAll={handleAddAllSuggestions} />
 
       {rollcallPresent.size === 0 ? (
-        <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-line bg-card shadow-card p-8 text-center text-sm text-muted-foreground">
           Перекличка не проведена.<br />
           Нажмите <strong className="text-foreground">«Перекличка»</strong>, чтобы отметить сотрудников на смене.
         </div>

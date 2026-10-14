@@ -57,7 +57,7 @@ export function StepSearch({ opType, onSelect }) {
         {routes === null && <Spinner label="Загрузка..." />}
         {error && <div className="text-sm text-destructive">{error}</div>}
         {routes !== null && !error && routes.length === 0 && (
-          <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">Маршруты не найдены</div>
+          <div className="rounded-2xl border border-line bg-card shadow-card p-6 text-center text-sm text-muted-foreground">Маршруты не найдены</div>
         )}
         {opType === 'eo_list' && !query.trim() && routes !== null && !error && (
           <div className="text-xs text-muted-foreground">Показаны маршруты за сегодня и вчера — остальные найдутся через поиск</div>
@@ -73,7 +73,7 @@ export function StepSearch({ opType, onSelect }) {
           return (
             <button
               key={r.routeId || i}
-              className="block w-full space-y-1 rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+              className="block w-full space-y-1 rounded-2xl border border-line bg-card shadow-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
               onClick={() => onSelect(r)}
             >
               <div className="flex flex-wrap items-center gap-2">

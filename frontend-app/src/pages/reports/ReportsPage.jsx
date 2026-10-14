@@ -15,7 +15,7 @@ export default function ReportsPage() {
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Отчёты</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Отчёты</h1>
       </div>
 
       <div className="flex items-center gap-1.5 rounded-md border bg-muted/30 p-1">

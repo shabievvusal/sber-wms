@@ -209,7 +209,7 @@ export default function KdkPlacementPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Раскладка КДК</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Раскладка КДК</h1>
         <p className="text-sm text-muted-foreground">Задачи раскладки по ЕО, стоящим на воротах: товар, штуки, вес и степы</p>
       </div>
 

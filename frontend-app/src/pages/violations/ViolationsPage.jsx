@@ -91,13 +91,13 @@ export default function ViolationsPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Нарушения</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Нарушения</h1>
         <span className="text-sm text-muted-foreground">{violations.length} записей</span>
       </div>
 
       {error && <div className="text-sm text-destructive">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border bg-card p-4">
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-2xl border border-line bg-card shadow-card p-4">
         <div className="flex flex-wrap gap-3">
           <Input className="min-w-0 flex-[2] basis-64" placeholder="Нарушение *" value={title} onChange={e => setTitle(e.target.value)} />
           <Input className="w-40 flex-1" type="number" min="0" placeholder="Ущерб (₽)" value={damage} onChange={e => setDamage(e.target.value)} />
@@ -123,7 +123,7 @@ export default function ViolationsPage() {
           {violations.map((v, idx) => {
             const isPreview = previewIdx === idx
             return (
-              <div key={v.id} className={`space-y-2 rounded-lg border bg-card p-3 ${isPreview ? 'border-primary' : ''}`}>
+              <div key={v.id} className={`space-y-2 rounded-2xl border border-line bg-card shadow-card p-3 ${isPreview ? 'border-primary' : ''}`}>
                 <button
                   type="button"
                   className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-muted"

@@ -118,18 +118,18 @@ export default function AggregateView({ rows, loading, error, keyField, keyLabel
   // мигания содержимым каждый раз.
   if (loading && !rows.length) {
     return (
-      <div className="rounded-lg border bg-card">
+      <div className="rounded-2xl border border-line bg-card shadow-card">
         <Spinner label="Загрузка..." />
       </div>
     )
   }
-  if (error) return <div className="rounded-lg border bg-card p-6 text-sm text-destructive">{error}</div>
-  if (!rows.length) return <div className="rounded-lg border bg-card p-10 text-center text-sm text-muted-foreground">{emptyLabel}</div>
+  if (error) return <div className="rounded-2xl border border-line bg-card shadow-card p-6 text-sm text-destructive">{error}</div>
+  if (!rows.length) return <div className="rounded-2xl border border-line bg-card shadow-card p-10 text-center text-sm text-muted-foreground">{emptyLabel}</div>
 
   const sortedRows = sortAggRows(rows, sort, keyField, metric)
 
   return (
-    <div className="relative rounded-lg border bg-card">
+    <div className="relative rounded-2xl border border-line bg-card shadow-card">
       <TopLoadingBar active={loading} />
 
       {/* Мобильные карточки — до md (768px) */}

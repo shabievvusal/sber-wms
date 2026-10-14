@@ -2,37 +2,45 @@ import { Package, ClipboardList, Hash, Scale, HardHat, Calendar } from 'lucide-r
 import { cn } from '@/lib/utils'
 import { fmtNum, fmtWeight, shiftLabel } from './format'
 
-function Tile({ Icon, label, value, accent }) {
+// Плитка показателя в стиле WMS (supervisor/common.tsx → Stat): цветной
+// значок · подпись, под ними крупное значение. Акцентная плитка — с
+// фирменным градиентом.
+function Tile({ Icon, label, value, color = 'var(--brand)', accent }) {
   return (
     <div className={cn(
-      'rounded-lg border bg-card p-5 text-center shadow-sm transition-shadow hover:shadow-md',
-      accent && 'border-success bg-success text-success-foreground',
+      'rounded-3xl border p-4 shadow-card transition-transform duration-200 hover:-translate-y-0.5',
+      accent ? 'bg-brand-gradient border-transparent text-white' : 'border-line bg-card',
     )}>
-      <Icon className={cn('mx-auto mb-1 size-5', accent ? 'text-success-foreground' : 'text-muted-foreground')} strokeWidth={1.75} />
-      <div className="text-[28px] font-bold leading-tight">{value}</div>
-      <div className={cn('text-xs', accent ? 'text-success-foreground/75' : 'text-muted-foreground')}>{label}</div>
+      <div className="flex items-center gap-2">
+        <span
+          className="grid size-7 shrink-0 place-items-center rounded-lg"
+          style={accent ? { background: 'rgba(255,255,255,0.18)', color: '#fff' } : { background: `color-mix(in oklab, ${color} 14%, transparent)`, color }}
+        >
+          <Icon size={15} strokeWidth={2.2} />
+        </span>
+        <span className={cn('line-clamp-2 text-[13px] font-medium leading-tight', accent ? 'text-white/85' : 'text-ink-2')} title={label}>{label}</span>
+      </div>
+      <div className="tabular mt-3 truncate text-[26px] font-semibold leading-tight tracking-tight">{value}</div>
     </div>
   )
 }
 
 // 8 KPI-плиток — перенесено из оригинала (StatsCards.jsx), только для
 // операции «Комплектация» (для остальных 3 операций скрыты, как и в оригинале).
-// Плотность/размеры (28px значение, 20px паддинг, залитая зелёным акцентная
-// плитка, иконка над значением) — как в оригинале, а не уменьшенный вариант.
 export function StatsCards({ summary, shift, dateStr }) {
   const hourly = summary?.hourly || []
   const storageOps = hourly.reduce((s, h) => s + (h.storageOps || 0), 0)
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
-      <Tile Icon={Package} label="Операций" value={fmtNum(summary?.totalOps)} />
-      <Tile Icon={ClipboardList} label="Задач (хранение)" value={fmtNum(storageOps)} />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
+      <Tile Icon={Package} label="Операций" value={fmtNum(summary?.totalOps)} color="#2a78d6" />
+      <Tile Icon={ClipboardList} label="Задач (хранение)" value={fmtNum(storageOps)} color="#eb6834" />
       <Tile Icon={Hash} label="Единиц товара" value={fmtNum(summary?.totalQty)} accent />
-      <Tile Icon={Scale} label="Вес (хранение)" value={fmtWeight(summary?.totalWeightStorageGrams)} />
-      <Tile Icon={Scale} label="Вес (КДК)" value={fmtWeight(summary?.totalWeightKdkGrams)} />
-      <Tile Icon={Scale} label="Вес итог" value={fmtWeight(summary?.totalWeightGrams)} />
-      <Tile Icon={HardHat} label="Сотрудников" value={fmtNum(summary?.executors?.length)} />
-      <Tile Icon={Calendar} label="Дата" value={<span className="text-base font-semibold">{shiftLabel(dateStr, shift)}</span>} />
+      <Tile Icon={Scale} label="Вес (хранение)" value={fmtWeight(summary?.totalWeightStorageGrams)} color="#1baf7a" />
+      <Tile Icon={Scale} label="Вес (КДК)" value={fmtWeight(summary?.totalWeightKdkGrams)} color="#2a78d6" />
+      <Tile Icon={Scale} label="Вес итог" value={fmtWeight(summary?.totalWeightGrams)} color="#7c3aed" />
+      <Tile Icon={HardHat} label="Сотрудников" value={fmtNum(summary?.executors?.length)} color="#eda100" />
+      <Tile Icon={Calendar} label="Смена" value={<span className="block truncate text-sm font-semibold leading-snug" title={shiftLabel(dateStr, shift)}>{shiftLabel(dateStr, shift)}</span>} color="#e87ba4" />
     </div>
   )
 }

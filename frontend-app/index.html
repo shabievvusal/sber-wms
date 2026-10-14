@@ -5,6 +5,14 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>СберЛогистика WMS</title>
+    <script>
+      // Тема до первой отрисовки — без вспышки светлого фона (см. src/lib/theme.js)
+      try {
+        var t = localStorage.getItem('zlp.theme')
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = t
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

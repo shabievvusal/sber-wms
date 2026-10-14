@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 
 function Table({ className, ...props }) {
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div className="relative w-full overflow-x-auto tabular">
       <table data-slot="table" className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )
@@ -18,7 +18,7 @@ function TableRow({ className, ...props }) {
   return (
     <tr
       data-slot="table-row"
-      className={cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', className)}
+      className={cn('border-b border-line transition-colors hover:bg-surface-2/70 data-[state=selected]:bg-brand-soft', className)}
       {...props}
     />
   )
@@ -28,7 +28,7 @@ function TableHead({ className, ...props }) {
     <th
       data-slot="table-head"
       className={cn(
-        'h-9 px-3 text-left align-middle font-medium text-muted-foreground whitespace-nowrap select-none',
+        'h-9 px-3 text-left align-middle text-xs font-medium uppercase tracking-wide text-muted-foreground whitespace-nowrap select-none',
         className
       )}
       {...props}

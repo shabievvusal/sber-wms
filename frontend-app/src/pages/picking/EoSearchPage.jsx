@@ -153,7 +153,7 @@ export default function EoSearchPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Поиск ЕО</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Поиск ЕО</h1>
         <p className="text-sm text-muted-foreground">Введите ШК продукта, чтобы найти его ЕО в сегодняшних поставках</p>
       </div>
 

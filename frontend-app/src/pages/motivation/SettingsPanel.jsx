@@ -41,7 +41,7 @@ export function SettingsPanel({ settings, canEdit, onSaved }) {
 
   const ro = !canEdit
   return (
-    <div className="space-y-4 rounded-lg border bg-card p-3">
+    <div className="space-y-4 rounded-2xl border border-line bg-card shadow-card p-3">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <div className="text-sm font-semibold">Чистое хранение</div>

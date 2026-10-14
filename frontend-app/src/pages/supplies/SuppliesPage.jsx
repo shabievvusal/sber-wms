@@ -397,13 +397,13 @@ export default function SuppliesPage({ initialId }) {
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Поставки</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Поставки</h1>
         <p className="text-sm text-muted-foreground">Приёмка входящих поставок — импорт, кросс-докинг, хранение</p>
       </div>
 
       {error && <div className="text-sm text-destructive">{error}</div>}
 
-      <div className="space-y-3 rounded-lg border bg-card p-3">
+      <div className="space-y-3 rounded-2xl border border-line bg-card shadow-card p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

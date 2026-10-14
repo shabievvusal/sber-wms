@@ -527,7 +527,7 @@ export default function TsdIssuePage() {
     <div className="mx-auto w-full max-w-[1100px] space-y-4 p-6">
       <style>{TSD_PRINT_CSS}</style>
 
-      <h1 className="text-xl font-semibold">Выдача ТСД</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Выдача ТСД</h1>
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">

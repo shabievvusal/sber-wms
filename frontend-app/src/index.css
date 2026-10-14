@@ -1,69 +1,95 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
-@custom-variant dark (&:is(.dark *));
+/* Тема выставляется атрибутом data-theme на <html> (см. lib/theme.js) — и для
+   «как в системе» тоже, поэтому dark:-утилиты работают во всех режимах. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 /*
- * Палитра СберЛогистики — перенесена как есть из существующего проекта
- * (../zlp-main-main/frontend/app/src/index.css), не generic-shadcn тема.
+ * Дизайн-система перенесена из проекта WMS (wms/web/src/index.css): нейтральные
+ * поверхности, сине-фиолетовый акцент, мягкие тени, Geist. Ниже — сами токены
+ * WMS, а затем привязка к именам shadcn (background/card/primary/...), которыми
+ * пользуются компоненты и страницы этого проекта.
  */
 :root {
-  --radius: 0.625rem;
+  color-scheme: light;
+  --radius: 0.75rem;
 
-  --sber-green:       #21A038;
-  --sber-green-dark:  #178030;
-  --sber-green-light: #E8F5EC;
-  --sber-green-mid:   #B8DEC2;
+  --page: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f1f2f5;
+  --surface-3: #e7e9ee;
+  --ink: #0b0c0f;
+  --ink-2: #4b5060;
+  --ink-3: #6b7080;
+  --line: rgba(15, 18, 25, 0.08);
+  --line-strong: rgba(15, 18, 25, 0.14);
+  --shadow: 0 1px 2px rgba(15, 18, 25, 0.04), 0 8px 24px -12px rgba(15, 18, 25, 0.12);
+  --shadow-lg: 0 24px 64px -24px rgba(15, 18, 25, 0.28);
+  --glass: rgba(255, 255, 255, 0.72);
 
-  --background: #F5F7FA;
-  --foreground: #1D1D1B;
-  --card: #FFFFFF;
-  --card-foreground: #1D1D1B;
-  --popover: #FFFFFF;
-  --popover-foreground: #1D1D1B;
-  --primary: var(--sber-green);
-  --primary-foreground: #FFFFFF;
-  --secondary: #EEF2F6;
-  --secondary-foreground: #1D1D1B;
-  --muted: #EEF2F6;
-  --muted-foreground: #6B7280;
-  --accent: var(--sber-green-light);
-  --accent-foreground: var(--sber-green-dark);
-  --destructive: #DC2626;
-  --destructive-foreground: #FFFFFF;
-  --success: var(--sber-green-dark);
-  --success-foreground: #FFFFFF;
-  --warning: #D97706;
-  --warning-foreground: #1D1D1B;
-  --border: #DDE2EA;
-  --input: #DDE2EA;
-  --ring: var(--sber-green);
+  --brand: #2563eb;
+  --brand-2: #7c3aed;
+  --brand-soft: rgba(37, 99, 235, 0.1);
+
+  --good: #16a34a;
+  --good-ink: #15803d;
+  --warn: #d97706;
+  --critical: #dc2626;
+
+  --background: var(--page);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--brand-soft);
+  --accent-foreground: var(--brand);
+  --destructive: var(--critical);
+  --destructive-foreground: #ffffff;
+  --success: var(--good-ink);
+  --success-foreground: #ffffff;
+  --warning: var(--warn);
+  --warning-foreground: #1d1d1b;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--brand);
 }
 
-.dark {
-  --background: #14171A;
-  --foreground: #F5F7FA;
-  --card: #1D2126;
-  --card-foreground: #F5F7FA;
-  --popover: #1D2126;
-  --popover-foreground: #F5F7FA;
-  --primary: var(--sber-green);
-  --primary-foreground: #FFFFFF;
-  --secondary: #262B31;
-  --secondary-foreground: #F5F7FA;
-  --muted: #262B31;
-  --muted-foreground: #9CA3AF;
-  --accent: #1E3324;
-  --accent-foreground: var(--sber-green);
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --success: var(--sber-green);
-  --success-foreground: #0B1F10;
-  --warning: #F59E0B;
-  --warning-foreground: #1D1D1B;
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 18%);
-  --ring: var(--sber-green);
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #09090b;
+  --surface: #141416;
+  --surface-2: #1c1c20;
+  --surface-3: #26262b;
+  --ink: #f5f6f8;
+  --ink-2: #a8adbb;
+  --ink-3: #8b90a0;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 64px -24px rgba(0, 0, 0, 0.8);
+  --glass: rgba(20, 20, 22, 0.7);
+
+  --brand: #3b82f6;
+  --brand-2: #8b5cf6;
+  --brand-soft: rgba(59, 130, 246, 0.16);
+
+  --good: #22c55e;
+  --good-ink: #4ade80;
+  --warn: #f59e0b;
+  --critical: #ef4444;
+
+  --success-foreground: #052e16;
+  --warning-foreground: #1d1d1b;
 }
 
 @theme inline {
@@ -90,6 +116,25 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-soft: var(--brand-soft);
+  --color-good: var(--good);
+
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Mono", monospace;
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -100,10 +145,62 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html, body {
+    min-height: 100%;
+  }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "cv11", "ss01";
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
+  ::selection {
+    background: var(--brand-soft);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Градиентная заливка для главных акцентов (как в WMS) */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+}
+.text-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.pulse-ring {
+  animation: pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.page-in {
+  animation: page-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring, .page-in { animation: none; }
+}
+
+@media print {
+  body { background: #fff; }
 }
 
 /* Инпуты с `list` (datalist-подсказки компаний в EmployeesCard/QuickAssignDialog)

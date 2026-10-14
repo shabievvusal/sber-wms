@@ -12,7 +12,7 @@ export function StepType({ onSelect }) {
       {TYPES.map(({ key, Icon, label, desc }) => (
         <button
           key={key}
-          className="flex items-center gap-4 rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-accent"
+          className="flex items-center gap-4 rounded-2xl border border-line bg-card shadow-card p-4 text-left transition-colors hover:border-primary hover:bg-accent"
           onClick={() => onSelect(key)}
         >
           <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">

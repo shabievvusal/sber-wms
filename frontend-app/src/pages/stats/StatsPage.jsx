@@ -628,7 +628,7 @@ export default function StatsPage() {
     <div className="mx-auto w-full max-w-[1400px] space-y-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Статистика</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Статистика</h1>
           <p className="text-sm text-muted-foreground">Сводка по смене: выработка, вес, простои и состав по компаниям</p>
         </div>
       </div>

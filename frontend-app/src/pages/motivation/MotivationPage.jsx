@@ -201,24 +201,24 @@ export default function MotivationPage() {
 
       {calc && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-lg border bg-card p-3">
+          <div className="rounded-2xl border border-line bg-card shadow-card p-3">
             <div className="text-xs text-muted-foreground">Людей в актах</div>
             <div className="text-xl font-semibold">{rows.length}</div>
             <div className="text-xs text-muted-foreground">{SHIFT_LABELS[shift]} · {date}</div>
           </div>
-          <div className="rounded-lg border bg-card p-3">
+          <div className="rounded-2xl border border-line bg-card shadow-card p-3">
             <div className="text-xs text-muted-foreground">Часов в акт</div>
             <div className="text-xl font-semibold">{fmtHours(totalHours)}</div>
             <div className="text-xs text-muted-foreground">из {fmtHours(rows.length * (calc.settings?.baseHours || 0))} при полной норме</div>
           </div>
-          <div className="rounded-lg border bg-card p-3">
+          <div className="rounded-2xl border border-line bg-card shadow-card p-3">
             <div className="text-xs text-muted-foreground">Срок подачи учёток</div>
             <div className="text-xl font-semibold">{fmtTime(calc.deadline)}</div>
             <div className="text-xs text-muted-foreground">
               {calc.settings?.strictDeadline ? 'после срока — 0 часов' : 'опоздание только отмечается'}
             </div>
           </div>
-          <div className="rounded-lg border bg-card p-3">
+          <div className="rounded-2xl border border-line bg-card shadow-card p-3">
             <div className="text-xs text-muted-foreground">Статусы</div>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
               {Object.entries(statusCounts).map(([status, count]) => (

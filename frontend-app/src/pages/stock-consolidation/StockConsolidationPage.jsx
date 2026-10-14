@@ -169,7 +169,7 @@ export default function StockConsolidationPage() {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Объединение остатков</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Объединение остатков</h1>
       </div>
 
       <Card>

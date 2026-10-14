@@ -1,15 +1,18 @@
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronLeft, ChevronRight, ChevronDown, UserCircle, LogOut, Combine, Award,
+  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/context/AuthContext'
 import { BUILTIN_ROLE_LABELS } from '@/pages/settings/constants'
 
 const LS_KEY = 'sidebar_collapsed'
+const spring = { type: 'spring', stiffness: 500, damping: 40 }
 
 // Тот же список разделов, что и в оригинальном Layout.jsx (components/layout/Layout.jsx) —
 // `page` заполнен только для страниц, которые уже перенесены в new zlp; остальные
@@ -78,7 +81,20 @@ export function findNavLabel(page) {
 // Список пунктов меню — общий для десктопного бокового меню и мобильного
 // выезжающего drawer'а (Sheet в App.jsx), чтобы не дублировать разметку и
 // логику сворачиваемой группы «Комплектация» в двух местах.
-export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
+// Оформление — как в WMS (supervisor/Layout.tsx): активный пункт подсвечен
+// «переезжающей» подложкой (motion layoutId). `layoutPrefix` различает
+// экземпляры меню, иначе подложка анимировалась бы между ними.
+const itemCls = (active, collapsed) => cn(
+  'relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors',
+  active ? 'text-foreground' : 'text-ink-2 hover:text-foreground',
+  collapsed && 'justify-center px-0',
+)
+
+function ActivePill({ layoutId }) {
+  return <motion.span layoutId={layoutId} transition={spring} className="absolute inset-0 rounded-xl bg-surface-2 ring-1 ring-line" />
+}
+
+export function SidebarNav({ activePage, onNavigate, collapsed = false, layoutPrefix = 'nav' }) {
   const { user } = useAuth()
   const userModules = user?.modules || []
   const visibleItems = NAV_ITEMS
@@ -99,8 +115,10 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
     return next
   })
 
+  const pillId = `${layoutPrefix}-active`
+
   return (
-    <nav className="flex flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden py-2">
+    <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-1">
       {visibleItems.map(({ key, Icon, label, page, children }) => {
         const active = page && page === activePage
         const disabled = !page && !children
@@ -118,18 +136,13 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
               if (isGroup) { collapsed ? onNavigate(children[0].page) : toggleGroup(key) }
               else if (page) onNavigate(page)
             }}
-            className={cn(
-              'group flex w-full items-center gap-2.5 border-l-[3px] border-l-transparent px-4 py-2 text-left text-[13px] font-medium text-muted-foreground transition-colors',
-              collapsed && 'justify-center px-0 py-2.5',
-              (!disabled || isGroup) && 'hover:bg-muted hover:text-foreground',
-              (active || groupActive) && 'border-l-primary bg-accent font-semibold text-accent-foreground',
-              disabled && !isGroup && 'cursor-default opacity-40',
-            )}
+            className={cn(itemCls(active || groupActive, collapsed), disabled && !isGroup && 'cursor-default opacity-40')}
           >
-            <Icon size={17} strokeWidth={1.75} className="shrink-0" />
-            {!collapsed && <span className="truncate">{label}</span>}
-            {!collapsed && disabled && !isGroup && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">скоро</span>}
-            {!collapsed && isGroup && <ChevronDown size={13} className={cn('ml-auto shrink-0 transition-transform', !isExpanded && '-rotate-90')} />}
+            {(active || (groupActive && (collapsed || !isExpanded))) && <ActivePill layoutId={pillId} />}
+            <Icon size={17} strokeWidth={active || groupActive ? 2.4 : 2} className="relative shrink-0" />
+            {!collapsed && <span className="relative truncate">{label}</span>}
+            {!collapsed && disabled && !isGroup && <span className="relative ml-auto shrink-0 text-[10px] text-muted-foreground">скоро</span>}
+            {!collapsed && isGroup && <ChevronDown size={15} className={cn('relative ml-auto shrink-0 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} />}
           </button>
         )
 
@@ -138,23 +151,34 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
         return (
           <div key={key}>
             {itemButton}
-            {!collapsed && isExpanded && children.map(child => {
-              const childActive = child.page === activePage
-              return (
-                <button
-                  key={child.key}
-                  type="button"
-                  onClick={() => onNavigate(child.page)}
-                  className={cn(
-                    'flex w-full items-center gap-2.5 border-l-[3px] border-l-transparent py-1.5 pl-9 pr-4 text-left text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                    childActive && 'border-l-primary bg-accent font-semibold text-accent-foreground',
-                  )}
+            <AnimatePresence initial={false}>
+              {!collapsed && isExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
                 >
-                  <child.Icon size={15} strokeWidth={1.75} className="shrink-0" />
-                  <span className="truncate">{child.label}</span>
-                </button>
-              )
-            })}
+                  <div className="ml-[21px] flex flex-col gap-0.5 border-l border-line py-0.5 pl-2">
+                    {children.map(child => {
+                      const childActive = child.page === activePage
+                      return (
+                        <button
+                          key={child.key}
+                          type="button"
+                          onClick={() => onNavigate(child.page)}
+                          className={cn(itemCls(childActive), 'py-1.5')}
+                        >
+                          {childActive && <ActivePill layoutId={pillId} />}
+                          <span className="relative truncate">{child.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )
       })}
@@ -162,49 +186,87 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false }) {
   )
 }
 
-// Пользователь + разлогин — реальная сессия (AuthContext), тот же паттерн
-// Popover, что и в FilterDropdown.jsx.
-function UserMenu({ collapsed }) {
-  const { user, logout } = useAuth()
-  const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role
-
+/** Логотип: градиентная плитка + название (как Brand в WMS). */
+export function Brand({ compact = false }) {
+  const { user } = useAuth()
+  const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role || 'WMS Мониторинг'
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-muted',
-            collapsed && 'flex-none justify-center',
-          )}
-        >
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-accent text-primary">
-            <UserCircle size={18} strokeWidth={1.75} />
-          </div>
-          {!collapsed && <span className="truncate text-xs font-medium">{user?.name || 'Без имени'}</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-56 p-1.5">
-        <div className="space-y-0.5 px-2 py-1.5">
-          <div className="truncate text-sm font-medium">{user?.name || 'Без имени'}</div>
+    <div className={cn('flex items-center gap-3', compact && 'justify-center')}>
+      <div className="bg-brand-gradient grid size-10 shrink-0 place-items-center rounded-2xl text-white shadow-card">
+        <Warehouse size={19} strokeWidth={2.2} />
+      </div>
+      {!compact && (
+        <div className="min-w-0 leading-tight">
+          <div className="truncate font-semibold tracking-tight">СберЛогистика</div>
           <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
         </div>
-        <div className="my-1 border-t" />
-        <button
-          type="button"
-          onClick={logout}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
-        >
-          <LogOut size={15} strokeWidth={1.75} />
-          Выйти из аккаунта
-        </button>
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
+  )
+}
+
+const initials = name => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
+
+/** Кто вошёл: инициалы, ФИО, роль и выход — как UserBlock в WMS. */
+function UserBlock({ collapsed }) {
+  const { user, logout } = useAuth()
+  const name = user?.name || 'Без имени'
+  const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role
+
+  const avatar = (
+    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-sm font-semibold text-brand">
+      {initials(user?.name)}
+    </span>
+  )
+
+  if (collapsed) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" title={name} className="mx-auto block rounded-xl transition-opacity hover:opacity-80">{avatar}</button>
+        </PopoverTrigger>
+        <PopoverContent align="end" side="right" className="w-60 p-1.5">
+          <div className="space-y-0.5 px-2 py-1.5">
+            <div className="truncate text-sm font-medium">{name}</div>
+            <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
+          </div>
+          <div className="my-1 border-t border-line" />
+          <div className="flex justify-center py-1"><ThemeToggle id="collapsed-theme" /></div>
+          <div className="my-1 border-t border-line" />
+          <button
+            type="button"
+            onClick={logout}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
+          >
+            <LogOut size={15} />
+            Выйти из аккаунта
+          </button>
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2.5">
+      {avatar}
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="truncate text-sm font-medium" title={name}>{name}</div>
+        <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
+      </div>
+      <button
+        type="button"
+        title="Выйти"
+        onClick={logout}
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-2 hover:text-destructive"
+      >
+        <LogOut size={15} />
+      </button>
+    </div>
   )
 }
 
 // Десктопное боковое меню — скрыто на мобильном (`hidden md:flex`, см.
-// App.jsx), там вместо него тонкий топ-бар с гамбургером, открывающим Sheet
+// App.jsx), там вместо него топ-бар с гамбургером, открывающим Sheet
 // с тем же SidebarNav внутри.
 export function Sidebar({ activePage, onNavigate }) {
   const [collapsed, setCollapsed] = useState(() => {
@@ -218,29 +280,31 @@ export function Sidebar({ activePage, onNavigate }) {
   })
 
   return (
-    <aside className={cn('sticky top-0 hidden h-screen shrink-0 flex-col border-r bg-card transition-[width] duration-200 md:flex', collapsed ? 'w-14' : 'w-[200px]')}>
-      <div className={cn('flex items-center gap-2.5 border-b p-4', collapsed && 'justify-center p-4')}>
-        <img src="/icon.png" alt="logo" className="size-8 shrink-0 object-contain" />
-        {!collapsed && (
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-bold leading-tight">СберЛогистика</div>
-            <div className="truncate text-[10px] text-muted-foreground">WMS Мониторинг</div>
-          </div>
-        )}
-      </div>
+    <aside
+      className={cn(
+        'sticky top-0 hidden h-screen shrink-0 flex-col gap-5 border-r border-line bg-surface py-5 transition-[width] duration-200 md:flex print:hidden',
+        collapsed ? 'w-[72px] px-3' : 'w-[248px] px-4',
+      )}
+    >
+      <div className="px-1"><Brand compact={collapsed} /></div>
 
-      <SidebarNav activePage={activePage} onNavigate={onNavigate} collapsed={collapsed} />
+      <SidebarNav activePage={activePage} onNavigate={onNavigate} collapsed={collapsed} layoutPrefix="sidebar" />
 
-      <div className={cn('flex items-center gap-1 border-t p-2', collapsed && 'flex-col')}>
-        <UserMenu collapsed={collapsed} />
-        <button
-          type="button"
-          onClick={toggle}
-          title={collapsed ? 'Развернуть' : 'Свернуть'}
-          className="flex size-[22px] shrink-0 items-center justify-center rounded-full border text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-primary"
-        >
-          {collapsed ? <ChevronRight size={13} strokeWidth={2.5} /> : <ChevronLeft size={13} strokeWidth={2.5} />}
-        </button>
+      <div className="space-y-3 px-1">
+        <div className={cn('flex items-center', collapsed ? 'justify-center' : 'justify-between')}>
+          {!collapsed && <ThemeToggle id="sidebar-theme" />}
+          <button
+            type="button"
+            onClick={toggle}
+            title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
+        <div className="border-t border-line pt-3">
+          <UserBlock collapsed={collapsed} />
+        </div>
       </div>
     </aside>
   )

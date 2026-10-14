@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { motion } from 'motion/react'
+import { Eye, EyeOff, LogIn, Warehouse } from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import * as api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 
-// 1-в-1 визуальный порт оригинального LoginForm.jsx (там CSS-модуль,
-// см. LoginForm.module.css) — тот же зелёный градиентный экран, белая
-// карточка, переключатель вкладок и стили полей/кнопки, что и в оригинале
-// (цвета — те же CSS-переменные --sber-green/--border/--muted-foreground
-// и т.д., уже заведённые в index.css этого проекта), просто без CSS-модулей.
+// Экран входа в стиле WMS (wms/web/src/supervisor/Auth.tsx): спокойный фон
+// страницы, карточка с крупным скруглением, градиентная кнопка, переключатель
+// темы в углу. Логика входа/регистрации — прежняя.
 
 function formatPhone(raw) {
   let digits = String(raw || '').replace(/\D/g, '')
@@ -32,12 +32,12 @@ function isPhoneComplete(formatted) {
   return formatted.replace(/\D/g, '').length === 11
 }
 
-const inputCls = 'w-full rounded-[6px] border-[1.5px] border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-[3px] focus:ring-[var(--sber-green-light)]'
+const inputCls = 'h-11 w-full rounded-xl border border-input bg-surface px-3.5 text-sm text-foreground shadow-card outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-[3px] focus:ring-ring/20'
 
 function FormGroup({ label, children }) {
   return (
     <div className="mb-4">
-      <label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">{label}</label>
+      <label className="mb-1 block text-sm text-muted-foreground">{label}</label>
       {children}
     </div>
   )
@@ -62,7 +62,7 @@ function PasswordInput({ value, onChange, placeholder, required, autoFocus }) {
         onClick={() => setShow(s => !s)}
         tabIndex={-1}
         aria-label={show ? 'Скрыть пароль' : 'Показать пароль'}
-        className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
       >
         {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
       </button>
@@ -87,7 +87,7 @@ function PhoneInput({ value, onChange, autoFocus, required }) {
 function ErrorBox({ children }) {
   if (!children) return null
   return (
-    <div className="mb-3 rounded-[6px] border border-[#fecaca] bg-[#fef2f2] px-3.5 py-2.5 text-[13px] text-destructive">
+    <div className="mb-3 rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
       {children}
     </div>
   )
@@ -98,7 +98,7 @@ function SubmitButton({ children, disabled }) {
     <button
       type="submit"
       disabled={disabled}
-      className="mt-1 min-h-[52px] w-full rounded-[10px] bg-primary text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-[var(--sber-green-dark)] disabled:cursor-not-allowed disabled:opacity-55"
+      className="bg-brand-gradient mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white shadow-card transition-opacity hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -136,7 +136,7 @@ function LoginTab() {
         <PasswordInput placeholder="Пароль от WMS или от сайта" value={password} onChange={e => setPassword(e.target.value)} required />
       </FormGroup>
       <ErrorBox>{error}</ErrorBox>
-      <SubmitButton disabled={loading}>{loading ? 'Вход...' : 'Войти'}</SubmitButton>
+      <SubmitButton disabled={loading}><LogIn size={16} />{loading ? 'Вход...' : 'Войти'}</SubmitButton>
     </form>
   )
 }
@@ -172,7 +172,7 @@ function RegisterTab() {
   if (done) {
     return (
       <div className="py-5 pb-2 text-center">
-        <div className="mx-auto mb-4 flex size-[52px] items-center justify-center rounded-full bg-[#dcfce7] text-2xl text-[#16a34a]">✓</div>
+        <div className="mx-auto mb-4 flex size-[52px] items-center justify-center rounded-2xl bg-success/12 text-2xl text-success">✓</div>
         <div className="mb-2 text-lg font-bold">Заявка отправлена</div>
         <div className="text-sm leading-relaxed text-muted-foreground">
           Доступ к сайту запрошен. Ожидайте одобрения администратора.
@@ -195,7 +195,7 @@ function RegisterTab() {
           Используется для синхронизации данных с WMS. Может не работать, если нет доступа к мониторингу.
         </div>
       </FormGroup>
-      <div className="my-4 h-px bg-border" />
+      <div className="my-4 h-px bg-line" />
       <FormGroup label="Пароль для сайта">
         <PasswordInput placeholder="Придумайте пароль" value={sitePassword} onChange={e => setSitePassword(e.target.value)} required />
       </FormGroup>
@@ -210,46 +210,37 @@ function RegisterTab() {
 
 export default function LoginPage() {
   const [tab, setTab] = useState('login')
+  const tabs = [{ value: 'login', label: 'Вход' }, { value: 'register', label: 'Регистрация' }]
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center p-4"
-      style={{ background: 'linear-gradient(135deg, var(--sber-green) 0%, var(--sber-green-dark) 100%)' }}
-    >
-      <div className="w-full max-w-[380px] rounded-2xl bg-card p-10 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
-        <div className="mb-7 flex items-center gap-3">
-          <img src="/icon.png" alt="logo" className="size-12 object-contain" />
+    <div className="relative grid min-h-screen place-items-center bg-background px-4 py-10">
+      <div className="absolute top-4 right-4"><ThemeToggle id="login-theme" /></div>
+      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 32 }} className="w-full max-w-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="bg-brand-gradient grid size-11 place-items-center rounded-2xl text-white shadow-card">
+            <Warehouse size={21} strokeWidth={2.2} />
+          </div>
           <div>
-            <div className="text-[17px] font-bold text-foreground">СберЛогистика WMS</div>
-            <div className="text-xs text-muted-foreground">Система мониторинга склада</div>
+            <div className="text-xl font-semibold tracking-tight">СберЛогистика WMS</div>
+            <div className="text-sm text-muted-foreground">Система мониторинга склада</div>
           </div>
         </div>
 
-        <div className="mb-6 flex gap-1 rounded-[10px] bg-muted p-1">
-          <button
-            type="button"
-            onClick={() => setTab('login')}
-            className={
-              'flex-1 rounded-lg py-2 text-sm font-medium transition-colors ' +
-              (tab === 'login' ? 'bg-card font-semibold text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.10)]' : 'text-muted-foreground')
-            }
-          >
-            Вход
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('register')}
-            className={
-              'flex-1 rounded-lg py-2 text-sm font-medium transition-colors ' +
-              (tab === 'register' ? 'bg-card font-semibold text-foreground shadow-[0_1px_4px_rgba(0,0,0,0.10)]' : 'text-muted-foreground')
-            }
-          >
-            Регистрация
-          </button>
-        </div>
+        <div className="rounded-3xl border border-line bg-card p-6 shadow-card">
+          <div className="mb-5 flex rounded-xl border border-line bg-surface-2 p-0.5">
+            {tabs.map(t => (
+              <button key={t.value} type="button" onClick={() => setTab(t.value)} className={`relative z-10 flex-1 rounded-[10px] py-2 text-sm font-medium transition-colors ${tab === t.value ? 'text-foreground' : 'text-muted-foreground hover:text-ink-2'}`}>
+                {tab === t.value && (
+                  <motion.span layoutId="login-tab" transition={{ type: 'spring', stiffness: 500, damping: 40 }} className="absolute inset-0 -z-10 rounded-[10px] bg-surface shadow-card" />
+                )}
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-        {tab === 'login' ? <LoginTab /> : <RegisterTab />}
-      </div>
+          {tab === 'login' ? <LoginTab /> : <RegisterTab />}
+        </div>
+      </motion.div>
     </div>
   )
 }

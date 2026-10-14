@@ -122,8 +122,8 @@ export default function ConsolidationFormPage() {
         <div className="text-xs text-muted-foreground">Консолидация</div>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <h1 className="text-lg font-semibold">Сообщить о нарушении</h1>
+      <div className="rounded-2xl border border-line bg-card shadow-card p-4">
+        <h1 className="text-xl font-semibold tracking-tight">Сообщить о нарушении</h1>
         <p className="mb-4 text-sm text-muted-foreground">Заполните форму и прикрепите фото</p>
 
         <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-3">

@@ -46,7 +46,7 @@ export function ImportPanel({ date, shift, companies, accountIndex, onSaved }) {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="rounded-2xl border border-line bg-card shadow-card p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Учётки от подрядчика</div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm">
