@@ -228,7 +228,7 @@ function SummaryLine({ label, value, warn }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
       <span className="text-muted-foreground">{label}:</span>
-      <span className={cn('font-medium tabular-nums', warn && 'text-warning-foreground')}>{value}</span>
+      <span className={cn('font-medium tabular-nums', warn && 'text-warning')}>{value}</span>
     </span>
   )
 }
@@ -463,7 +463,8 @@ export default function ShipmentsPage() {
   const [classic] = useState(() => {
     try { return localStorage.getItem(LS_SHIPMENTS_CLASSIC) === '1' } catch { return false }
   })
-  if (classic) return <ShipmentsPageClassic />
+  // классический вид нарисован только под светлую тему — в тёмной остаётся светлым
+  if (classic) return <div className="theme-light min-h-full bg-background"><ShipmentsPageClassic /></div>
 
   return <ShipmentsPageModern />
 }

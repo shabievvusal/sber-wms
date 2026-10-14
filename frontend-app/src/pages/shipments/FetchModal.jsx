@@ -61,7 +61,7 @@ export default function FetchModal({ open, onOpenChange, onDone }) {
         <DateRangePicker from={dateFrom} to={dateTo} onChange={({ from, to }) => { setDateFrom(from); setDateTo(to) }} className="w-full" />
 
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <span>Тянет данные напрямую из браузера пользователя в wwh.samokat.ru — единственное место, где в проекте остаётся JS-парсинг (см. PLAN.md).</span>
         </div>
 

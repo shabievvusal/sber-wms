@@ -13,13 +13,17 @@ const nameThCls = `${thCls} sticky left-0 z-[1] bg-card text-left`
 const nameTdCls = `${tdCls} sticky left-0 z-[1] bg-card text-left font-medium`
 const sortThCls = `${thCls} cursor-pointer select-none`
 
-// Тепловая шкала «По СЗ» — дословно из оригинала: плоские цвета на границах,
-// диагональный градиент в средней зоне (не проинтерполированный «промежуточный»
-// цвет), явный тёмный текст (эти ячейки всегда светлые вне зависимости от темы).
+// Тепловая шкала «По СЗ» (как в оригинале): красный ниже 50, диагональный
+// градиент красный→жёлтый в средней зоне, без подсветки выше 75. Цвета
+// полупрозрачные и текст — цвета темы: на белом выглядит как раньше, а в
+// тёмной теме ячейки не слепят белым и текст остаётся читаемым.
+const SZ_RED = 'color-mix(in oklab, #ef4444 28%, transparent)'
+const SZ_YELLOW = 'color-mix(in oklab, #eab308 32%, transparent)'
+const SZ_MID = `linear-gradient(135deg, ${SZ_RED} 0%, ${SZ_YELLOW} 100%)`
 function szCellStyle(v) {
-  if (v < 50) return { backgroundColor: '#fecaca', color: '#1d1d1b' }
-  if (v <= 75) return { background: 'linear-gradient(135deg,#fecaca 0%,#fef08a 100%)', color: '#1d1d1b' }
-  return { backgroundColor: '#fff', color: '#1d1d1b' }
+  if (v < 50) return { backgroundColor: SZ_RED }
+  if (v <= 75) return { background: SZ_MID }
+  return undefined
 }
 
 function zoneCellStyle(zoneKey) {
@@ -56,9 +60,9 @@ function Legend({ mode, zoneCatalog }) {
   if (mode === 'sz') {
     return (
       <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 border-b pb-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm" style={{ backgroundColor: '#fecaca' }} /> &lt;50 задач/ч</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm" style={{ background: 'linear-gradient(135deg,#fecaca,#fef08a)' }} /> 50–75 задач/ч</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm border" style={{ backgroundColor: '#fff' }} /> &gt;75 задач/ч</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm" style={{ backgroundColor: SZ_RED }} /> &lt;50 задач/ч</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm" style={{ background: SZ_MID }} /> 50–75 задач/ч</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3.5 w-[18px] rounded-sm border" /> &gt;75 задач/ч</span>
       </div>
     )
   }

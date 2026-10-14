@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { Pagination } from '@/components/ui/pagination'
 import { VS_MODULE_LABELS } from './constants'
 
 // Общие мелкие элементы карточек Настроек — чтобы таблицы и списки во всех
@@ -77,4 +78,26 @@ export function Field({ label, hint, children, className }) {
 /** Пустое состояние внутри карточки. */
 export function Empty({ children }) {
   return <div className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted-foreground">{children}</div>
+}
+
+/**
+ * Нижняя панель списка: «1–50 из 3000» и номера страниц. Пустая, если всё
+ * помещается на одну страницу.
+ */
+export function ListPager({ page, pageSize, total, onChange, className }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  if (totalPages <= 1) return null
+  const from = (page - 1) * pageSize + 1
+  const to = Math.min(total, page * pageSize)
+  return (
+    <div className={cn('flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-2.5', className)}>
+      <span className="tabular text-xs text-muted-foreground">{from.toLocaleString('ru-RU')}–{to.toLocaleString('ru-RU')} из {total.toLocaleString('ru-RU')}</span>
+      <Pagination page={page} totalPages={totalPages} onChange={onChange} />
+    </div>
+  )
+}
+
+/** Текущая страница с поправкой, если список стал короче (удаление, фильтр). */
+export function clampPage(page, total, pageSize) {
+  return Math.min(Math.max(1, page), Math.max(1, Math.ceil(total / pageSize)))
 }

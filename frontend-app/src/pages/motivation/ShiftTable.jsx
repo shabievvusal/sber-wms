@@ -122,7 +122,7 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
                     {hasStats ? fmtNum(r.kdkWeightKg) : '—'}
                     {r.missingWeightItems > 0 && (
                       <span title={`Отборов без веса в справочнике: ${r.missingWeightItems}. Их вес оценён по среднему весу отбора (${fmtNum(r.estimatedWeightKg)} кг) и уже входит в вес. Загрузите ВГХ в Настройках, чтобы вес был точным.`}>
-                        <AlertTriangle className="ml-1 inline size-3.5 text-warning-foreground" />
+                        <AlertTriangle className="ml-1 inline size-3.5 text-warning" />
                       </span>
                     )}
                   </TableCell>

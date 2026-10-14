@@ -248,7 +248,7 @@ export default function KdkLayoutPage() {
                     <span>Остаток: <span className="text-foreground">{row.pieces == null ? '—' : fmtNum(row.pieces)}</span></span>
                   </div>
                   {row.lastActionAt && (
-                    <div className={cn('text-xs', row.idle ? 'font-semibold text-warning-foreground' : 'text-muted-foreground')}>
+                    <div className={cn('text-xs', row.idle ? 'font-semibold text-warning' : 'text-muted-foreground')}>
                       Последнее действие: {formatTime(row.lastActionAt)} · простой {fmtAgo(row.lastActionAt)}
                     </div>
                   )}
@@ -279,8 +279,8 @@ export default function KdkLayoutPage() {
                       <TableCell title={row.executor}>{shortFio(row.executor)}</TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
                       <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
-                      <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
-                      <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning-foreground' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
+                      <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
+                      <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
                     </TableRow>
                   ))}
                   {!sorted.length && (

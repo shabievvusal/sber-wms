@@ -566,7 +566,7 @@ export default function TsdIssuePage() {
               focusScan()
             }}
           >
-            <div className={cn('flex size-24 items-center justify-center rounded-full', pendingTsd ? 'bg-warning/20 text-warning-foreground' : 'bg-success/15 text-success')}>
+            <div className={cn('flex size-24 items-center justify-center rounded-full', pendingTsd ? 'bg-warning/20 text-warning' : 'bg-success/15 text-success')}>
               <ScanLine size={56} strokeWidth={1.6} />
             </div>
             <div className="text-lg font-semibold">{pendingTsd ? 'Сканируйте QR сотрудника' : 'Сканируйте ТСД'}</div>
@@ -829,7 +829,7 @@ export default function TsdIssuePage() {
                     <span>ТСД: {ev.tsd}</span>
                     <span>{formatDateTime(ev.at)}</span>
                   </div>
-                  {ev.note && <div className="mt-0.5 text-xs text-warning-foreground">{ev.note}</div>}
+                  {ev.note && <div className="mt-0.5 text-xs text-warning">{ev.note}</div>}
                 </div>
               ))}
               {!filteredHistory.length && (

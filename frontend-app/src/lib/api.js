@@ -433,10 +433,6 @@ export async function saveEmployeesAll(employees) {
   })
 }
 
-export async function upgradeFioIds() {
-  return req('/api/empl/upgrade-fio-ids', { method: 'POST' })
-}
-
 export async function findUnregisteredEmployees() {
   return req('/api/empl/find-unregistered')
 }

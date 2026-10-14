@@ -93,7 +93,7 @@ export function ImportPanel({ date, shift, companies, accountIndex, onSaved }) {
                     <td className="px-2 py-1">
                       {!p.accountText && <span className="text-destructive">нет учётки</span>}
                       {p.accountText && p.matched && <span>{p.executorName} <span className="text-muted-foreground">({p.executorId})</span></span>}
-                      {p.accountText && !p.matched && <span className="text-warning-foreground">«{p.executorName}» — будет искаться по имени в WMS</span>}
+                      {p.accountText && !p.matched && <span className="text-warning">«{p.executorName}» — будет искаться по имени в WMS</span>}
                     </td>
                     <td className="px-2 py-1 text-muted-foreground">{ROLE_LABELS[p.role]}</td>
                   </tr>

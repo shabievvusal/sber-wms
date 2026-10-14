@@ -656,8 +656,8 @@ export default function StatsPage() {
       {newEmployees.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-sm font-semibold text-warning-foreground">Новые сотрудники из WMS ({newEmployees.length}):</div>
-            <div className="text-sm text-warning-foreground/90">{newEmployees.map(e => e.fio).join(', ')}</div>
+            <div className="text-sm font-semibold text-warning">Новые сотрудники из WMS ({newEmployees.length}):</div>
+            <div className="text-sm text-warning/90">{newEmployees.map(e => e.fio).join(', ')}</div>
           </div>
           <div className="flex shrink-0 gap-2">
             <Button size="sm" onClick={handleAddNewEmployees}>Добавить в список</Button>

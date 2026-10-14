@@ -159,6 +159,7 @@ public static class AuthEndpoints
                 var actions = user != null ? (user.Actions ?? AuthConstants.GetActionsForRole(user.Role)) : new List<string>();
                 return Results.Json(new
                 {
+                    login = session.Login,
                     name = user?.Name,
                     role = session.Role,
                     modules,
@@ -259,12 +260,13 @@ public static class AuthEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
 
-        app.MapPut("/api/vs/admin/users", async (JsonElement body, AuthService auth) =>
+        app.MapPut("/api/vs/admin/users", async (HttpContext ctx, JsonElement body, AuthService auth) =>
         {
             try
             {
                 var login = GetString(body, "login");
                 if (string.IsNullOrEmpty(login?.Trim())) return Results.Json(new { error = "Укажите логин (номер телефона или буквенный)" }, statusCode: 400);
+                if (await DeniedDeveloperChange(ctx, auth, login)) return Results.Json(new { error = "Разработчика может менять только разработчик" }, statusCode: 403);
                 var payload = new AuthService.SaveUserPayload();
                 if (body.TryGetProperty("name", out var nameEl)) { payload.NameSet = true; payload.Name = nameEl.ValueKind == JsonValueKind.String ? nameEl.GetString() : null; }
                 if (body.TryGetProperty("role", out var roleEl)) { payload.RoleSet = true; payload.Role = roleEl.ValueKind == JsonValueKind.String ? roleEl.GetString() : null; }
@@ -282,16 +284,26 @@ public static class AuthEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
 
-        app.MapDelete("/api/vs/admin/users/{login}", async (string login, AuthService auth) =>
+        app.MapDelete("/api/vs/admin/users/{login}", async (HttpContext ctx, string login, AuthService auth) =>
         {
             try
             {
                 if (string.IsNullOrEmpty(login.Trim())) return Results.Json(new { error = "Укажите логин" }, statusCode: 400);
+                if (await DeniedDeveloperChange(ctx, auth, login)) return Results.Json(new { error = "Разработчика может удалить только разработчик" }, statusCode: 403);
                 await auth.RemoveUserAsync(login);
                 return Results.Json(new { ok = true });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+    }
+
+    // Пользователя из VS_DEVELOPER_LOGINS (см. AuthService.IsDeveloperLogin)
+    // правит и удаляет только другой разработчик, не администратор.
+    private static async Task<bool> DeniedDeveloperChange(HttpContext ctx, AuthService auth, string? targetLogin)
+    {
+        if (!AuthService.IsDeveloperLogin(targetLogin)) return false;
+        var session = await auth.GetSessionAsync(ctx.Request.Cookies[AuthConstants.SessionCookieName]);
+        return session?.Role != "developer";
     }
 
     private static string? GetString(JsonElement body, string prop) =>

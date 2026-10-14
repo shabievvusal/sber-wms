@@ -28,8 +28,12 @@ export const BUILTIN_ROLE_LABELS = {
   supervisor: 'Начальник смены', manager: 'Менеджер',
 }
 
+// Роль «разработчик» в списки выбора не входит (выдаётся только на сервере,
+// переменной VS_DEVELOPER_LOGINS) — но подписывать её нужно везде.
+export const ROLE_LABELS = { ...BUILTIN_ROLE_LABELS, developer: 'Разработчик' }
+
 export function rolesToLabelMap(roles) {
-  const map = {}
+  const map = { ...ROLE_LABELS }
   for (const r of roles) map[r.key] = r.label
   return map
 }

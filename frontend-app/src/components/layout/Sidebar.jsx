@@ -10,7 +10,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/context/AuthContext'
-import { BUILTIN_ROLE_LABELS } from '@/pages/settings/constants'
+import { ROLE_LABELS } from '@/pages/settings/constants'
 
 const LS_KEY = 'sidebar_collapsed'
 const spring = { type: 'spring', stiffness: 500, damping: 40 }
@@ -190,7 +190,7 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false, layoutPr
 /** Логотип: градиентная плитка + название (как Brand в WMS). */
 export function Brand({ compact = false }) {
   const { user } = useAuth()
-  const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role || 'WMS Мониторинг'
+  const roleLabel = ROLE_LABELS[user?.role] || user?.role || 'WMS Мониторинг'
   return (
     <div className={cn('flex items-center gap-3', compact && 'justify-center')}>
       <div className="bg-brand-gradient grid size-10 shrink-0 place-items-center rounded-2xl text-white shadow-card">
@@ -212,7 +212,7 @@ const initials = name => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).
 function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', themeId = 'collapsed-theme' }) {
   const { user, logout } = useAuth()
   const name = user?.name || 'Без имени'
-  const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role
+  const roleLabel = ROLE_LABELS[user?.role] || user?.role
 
   const avatar = (
     <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-sm font-semibold text-brand">

@@ -81,6 +81,27 @@ public class AuthService
 
     public static bool IsLetterLogin(string? login) => Regex.IsMatch(login?.Trim() ?? "", @"[a-zA-Zа-яА-ЯёЁ]");
 
+    // ─── Роль «разработчик» ─────────────────────────────────────────────────
+    // В список ролей (BuiltinRoles) не входит намеренно: её нельзя выдать или
+    // отобрать через Настройки, иначе любой администратор мог бы сделать
+    // разработчиком кого угодно. Разработчики задаются на сервере переменной
+    // окружения VS_DEVELOPER_LOGINS (номера/логины через запятую, в .env) и
+    // получают роль при каждом входе — независимо от роли, сохранённой в
+    // vs_users. Меняется перезапуском контейнера dotnet.
+    private static readonly HashSet<string> DeveloperLogins = (Environment.GetEnvironmentVariable("VS_DEVELOPER_LOGINS") ?? "")
+        .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(DeveloperKey)
+        .Where(k => k != "")
+        .ToHashSet();
+
+    private static string DeveloperKey(string? login) =>
+        IsLetterLogin(login) ? (login ?? "").Trim().ToLowerInvariant() : NormalizeLogin(login);
+
+    public static bool IsDeveloperLogin(string? login) => DeveloperLogins.Contains(DeveloperKey(login));
+
+    private async Task<string> EffectiveRoleAsync(AuthVsUser u) =>
+        IsDeveloperLogin(u.Login) ? "developer" : await ResolveRoleAsync(u.Role);
+
     private static bool UserLoginMatch(AuthVsUser u, string login, string normalized, string trimmedLogin)
     {
         if (!string.IsNullOrEmpty(u.PasswordHash))
@@ -281,7 +302,7 @@ public class AuthService
                 : NormalizeLogin(u.Login) is var uLogin && !string.IsNullOrEmpty(uLogin) && (uLogin == normalized || u.Login == login);
             if (!match) continue;
 
-            var role = await ResolveRoleAsync(u.Role);
+            var role = await EffectiveRoleAsync(u);
             var modules = await ResolveModulesAsync(role, u.Modules);
             var actions = u.Actions != null ? u.Actions.Where(a => AuthConstants.AllActions.Contains(a)).ToList() : AuthConstants.GetActionsForRole(role);
             return new AuthVsUser
@@ -311,7 +332,7 @@ public class AuthService
         {
             var login = u.Login.Trim();
             if (login == "") continue;
-            var role = await ResolveRoleAsync(u.Role);
+            var role = await EffectiveRoleAsync(u);
             var modules = await ResolveModulesAsync(role, u.Modules);
             var loginKey = IsLetterLogin(login) ? login : (CanonicalPhone(login) ?? login);
             logins.TryGetValue(loginKey, out var rec);

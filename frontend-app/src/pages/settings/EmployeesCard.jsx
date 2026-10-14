@@ -11,35 +11,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { QuickAssignDialog } from './QuickAssignDialog'
+import { ListPager, clampPage } from './ui'
 import {
-  Users, Upload, Download, X, Search, Plus, MoreHorizontal, ScanSearch, Link2, Trash2, Undo2, Save, AlertTriangle, Pencil,
+  Users, Download, X, Search, MoreHorizontal, ScanSearch, Trash2, Undo2, Save, AlertTriangle, Pencil,
 } from 'lucide-react'
 
 // Список сотрудников (Настройки → Сотрудники).
 //
 // Почему так устроено:
 //  • Фильтр «замораживается»: какие строки видны, считается только при смене
-//    поиска/компании или состава списка (загрузка, добавление, удаление,
-//    импорт), а НЕ при правке полей. Раньше фильтр пересчитывался на каждую
+//    поиска/компании или состава списка (загрузка, удаление, назначение
+//    компании), а НЕ при правке полей. Раньше фильтр пересчитывался на каждую
 //    букву по редактируемым полям, и сотрудник исчезал из выдачи прямо во
 //    время правки.
 //  • Строки дешёвые: ячейка — это текст, поле ввода появляется только в той
 //    ячейке, которую сейчас правят; строки мемоизированы, правка одной не
-//    перерисовывает остальные; список выводится порциями по мере прокрутки,
-//    и рисуется только одна раскладка (таблица или карточки). Раньше на
+//    перерисовывает остальные; список разбит на страницы, и рисуется только
+//    одна раскладка (таблица или карточки). Раньше на
 //    каждого сотрудника было 8 полей ввода (таблица + скрытые карточки), и
 //    каждая буква перерисовывала весь список — подвисала вся страница.
+//  • Добавить сотрудника вручную, загрузить список из CSV и «привязать UUID»
+//    нельзя (решение пользователя): без ID исполнителя из WMS человеку в
+//    списке делать нечего, а сервер такие строки всё равно не сохраняет.
+//    Сотрудники попадают сюда сами из статистики WMS («Найти новых в сменах»).
 
-const CHUNK = 80
+const PAGE_SIZE = 50
 const ALL = '__all__'
 const NONE = '__none__'
 
 function titleCaseFio(str) {
   return (str || '').replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
 }
-
-let idCounter = 0
-const nextId = () => `_new_${++idCounter}`
 
 const snapshotKey = r => `${r.fio}\u0001${r.company}\u0001${r.phone || ''}\u0001${r.password || ''}`
 const initials = fio => (fio || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
@@ -79,18 +81,16 @@ function CompanyBadge({ company }) {
   )
 }
 
-const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete, autoEdit }) {
+const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete }) {
   return (
-    <tr className={cn('group border-b border-line last:border-0 transition-colors hover:bg-surface-2/40', state === 'new' && 'bg-brand-soft/40', state === 'dirty' && 'bg-warning/5')}>
+    <tr className={cn('group border-b border-line last:border-0 transition-colors hover:bg-surface-2/40', state === 'dirty' && 'bg-warning/5')}>
       <td className="py-1.5 pr-1 pl-3">
         <div className="flex items-center gap-2.5">
           <span className="relative grid size-8 shrink-0 place-items-center rounded-xl bg-brand-soft text-xs font-semibold text-brand">
             {initials(row.fio)}
-            {state !== 'clean' && (
-              <span className={cn('absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-card', state === 'new' ? 'bg-brand' : 'bg-warning')} title={state === 'new' ? 'Новый' : 'Изменён'} />
-            )}
+            {state === 'dirty' && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-warning ring-2 ring-card" title="Изменён" />}
           </span>
-          <EditableCell value={row.fio} placeholder="ФИО" className="flex-1 font-medium" autoEdit={autoEdit} onCommit={v => onChange(row._id, 'fio', v)} />
+          <EditableCell value={row.fio} placeholder="ФИО" className="flex-1 font-medium" onCommit={v => onChange(row._id, 'fio', v)} />
         </div>
       </td>
       <td className="px-1 py-1.5">
@@ -121,11 +121,11 @@ const MobileRow = memo(function MobileRow({ row, state, onOpen }) {
     <button
       type="button"
       onClick={() => onOpen(row._id)}
-      className={cn('flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left last:border-0 active:bg-surface-2', state === 'new' && 'bg-brand-soft/40', state === 'dirty' && 'bg-warning/5')}
+      className={cn('flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left last:border-0 active:bg-surface-2', state === 'dirty' && 'bg-warning/5')}
     >
       <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-sm font-semibold text-brand">
         {initials(row.fio)}
-        {state !== 'clean' && <span className={cn('absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-card', state === 'new' ? 'bg-brand' : 'bg-warning')} />}
+        {state === 'dirty' && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-warning ring-2 ring-card" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{row.fio || <span className="text-muted-foreground">Без ФИО</span>}</span>
@@ -167,10 +167,12 @@ function MobileEditDialog({ row, onChange, onDelete, onClose }) {
   )
 }
 
-function MenuItem({ icon: Icon, children, onClick, disabled, asLabel, ...rest }) {
-  const cls = 'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50'
-  if (asLabel) return <label className={cls}><Icon className="size-4 text-muted-foreground" />{children}{rest.input}</label>
-  return <button type="button" className={cls} onClick={onClick} disabled={disabled}><Icon className="size-4 text-muted-foreground" />{children}</button>
+function MenuItem({ icon: Icon, children, onClick, disabled }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50">
+      <Icon className="size-4 text-muted-foreground" />{children}
+    </button>
+  )
 }
 
 export function EmployeesCard() {
@@ -185,23 +187,19 @@ export function EmployeesCard() {
   const [localSaved, setLocalSaved] = useState(() => new Set())
   const [scanResult, setScanResult] = useState(null)
   const [scanning, setScanning] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showAllUnassigned, setShowAllUnassigned] = useState(false)
   const [editingMobile, setEditingMobile] = useState(null)
-  const [limit, setLimit] = useState(CHUNK)
+  const [page, setPage] = useState(1)
   // Состав списка (не содержимое полей): по нему пересчитывается фильтр
   const [structVersion, setStructVersion] = useState(0)
   const bump = () => setStructVersion(v => v + 1)
-  // Только что добавленные вручную — видны всегда, даже вне фильтра
-  const [pinned, setPinned] = useState(() => new Set())
-  const [autoEditId, setAutoEditId] = useState(null)
 
   const rowsRef = useRef(rows)
   rowsRef.current = rows
   const origRef = useRef({ rows: [], keys: new Map() })
-  const sentinelRef = useRef(null)
+  const listTopRef = useRef(null)
 
   const setOriginal = list => {
     origRef.current = { rows: list, keys: new Map(list.map(r => [r._id, snapshotKey(r)])) }
@@ -212,11 +210,10 @@ export function EmployeesCard() {
     return withMinDuration(async () => {
       try {
         const res = await api.getEmployees()
-        const list = (res.employees || []).map(e => ({ fio: titleCaseFio(e.fio), company: e.company || '', phone: e.phone || '', password: e.password || '', executorId: e.executorId || null, _id: e.executorId || nextId() }))
+        const list = (res.employees || []).filter(e => e.executorId).map(e => ({ fio: titleCaseFio(e.fio), company: e.company || '', phone: e.phone || '', password: e.password || '', executorId: e.executorId, _id: e.executorId }))
         setAllCompanies(res.companies || [])
         setRows(list)
         setOriginal(list)
-        setPinned(new Set())
         setLoadError('')
       } catch (err) {
         setAllCompanies([])
@@ -239,22 +236,14 @@ export function EmployeesCard() {
   const rowState = useMemo(() => {
     const keys = origRef.current.keys
     const m = new Map()
-    for (const r of rows) m.set(r._id, !keys.has(r._id) ? 'new' : keys.get(r._id) !== snapshotKey(r) ? 'dirty' : 'clean')
+    for (const r of rows) m.set(r._id, keys.get(r._id) !== snapshotKey(r) ? 'dirty' : 'clean')
     return m
   }, [rows])
   const changes = useMemo(() => {
-    let added = 0, edited = 0, noId = 0
-    const ids = new Set()
-    for (const r of rows) {
-      ids.add(r._id)
-      const s = rowState.get(r._id)
-      if (s === 'new') added++
-      else if (s === 'dirty') edited++
-      if (!r.executorId && r.fio.trim()) noId++
-    }
-    let removed = 0
-    for (const id of origRef.current.keys.keys()) if (!ids.has(id)) removed++
-    return { added, edited, removed, noId, total: added + edited + removed }
+    let edited = 0
+    for (const r of rows) if (rowState.get(r._id) === 'dirty') edited++
+    const removed = Math.max(0, origRef.current.rows.length - rows.length)
+    return { edited, removed, total: edited + removed }
   }, [rows, rowState])
 
   // ─── Фильтр (замороженный, см. комментарий в начале файла) ──────────────
@@ -263,14 +252,14 @@ export function EmployeesCard() {
   const visibleIds = useMemo(() => {
     const out = []
     for (const r of rowsRef.current) {
-      if (pinned.has(r._id)) continue
       if (companyFilter === NONE && r.company) continue
       if (companyFilter !== ALL && companyFilter !== NONE && r.company !== companyFilter) continue
       if (q && !(r.fio.toLowerCase().includes(q) || r.company.toLowerCase().includes(q) || String(r.phone || '').toLowerCase().includes(q))) continue
       out.push(r._id)
     }
-    return [...rowsRef.current.filter(r => pinned.has(r._id)).map(r => r._id), ...out]
-  }, [q, companyFilter, structVersion, pinned])
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, companyFilter, structVersion])
 
   const companyCounts = useMemo(() => {
     const m = new Map()
@@ -285,20 +274,18 @@ export function EmployeesCard() {
 
   const rowsById = useMemo(() => new Map(rows.map(r => [r._id, r])), [rows])
   const visibleRows = useMemo(() => visibleIds.map(id => rowsById.get(id)).filter(Boolean), [visibleIds, rowsById])
-  const shownRows = visibleRows.slice(0, limit)
+  // страница не «вываливается» за конец, если список стал короче (удаление)
+  const curPage = clampPage(page, visibleRows.length, PAGE_SIZE)
+  const shownRows = visibleRows.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE)
 
-  useEffect(() => { setLimit(CHUNK) }, [q, companyFilter])
+  useEffect(() => { setPage(1) }, [q, companyFilter])
 
-  // Подгрузка следующей порции при прокрутке к концу
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || shownRows.length >= visibleRows.length) return
-    const io = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) setLimit(l => l + CHUNK)
-    }, { rootMargin: '600px' })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [shownRows.length, visibleRows.length])
+  const goToPage = p => {
+    setPage(p)
+    // к началу списка — иначе после перехода видна середина новой страницы
+    const el = listTopRef.current
+    if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
 
   const noCompanyEmployees = useMemo(() => {
     if (!scanResult) return []
@@ -312,27 +299,13 @@ export function EmployeesCard() {
 
   const handleDeleteRow = useCallback(_id => {
     setRows(prev => prev.filter(r => r._id !== _id))
-    setPinned(prev => { if (!prev.has(_id)) return prev; const n = new Set(prev); n.delete(_id); return n })
     bump()
   }, [])
 
   const handleOpenMobile = useCallback(_id => setEditingMobile(_id), [])
 
-  const handleAddRow = () => {
-    const id = nextId()
-    setRows(prev => [{ fio: '', company: companyFilter !== ALL && companyFilter !== NONE ? companyFilter : '', phone: '', password: '', executorId: null, _id: id }, ...prev])
-    setPinned(prev => new Set(prev).add(id))
-    bump()
-    if (isDesktop) {
-      // поле ФИО новой строки сразу открыто на ввод — только при появлении строки
-      setAutoEditId(id)
-      setTimeout(() => setAutoEditId(null), 0)
-    } else setEditingMobile(id)
-  }
-
   const handleDiscard = () => {
     setRows(origRef.current.rows)
-    setPinned(new Set())
     bump()
     toast.info('Изменения отменены')
   }
@@ -347,7 +320,7 @@ export function EmployeesCard() {
         const exists = list.some(r => r.executorId === executorId)
         return exists
           ? list.map(r => (r.executorId === executorId ? { ...r, fio, company } : r))
-          : [{ fio, company, phone: '', password: '', executorId, _id: executorId || nextId() }, ...list]
+          : [{ fio, company, phone: '', password: '', executorId, _id: executorId }, ...list]
       }
       // запись уже на сервере — она же и «исходная», чтобы не считаться несохранённой
       setOriginal(apply(origRef.current.rows))
@@ -356,31 +329,6 @@ export function EmployeesCard() {
     } catch (err) {
       toast.error('Ошибка: ' + err.message)
     }
-  }
-
-  const handleImportCsv = e => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setMenuOpen(false)
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target.result || ''
-      const csv = text.startsWith('﻿') ? text.slice(1) : text
-      const sep = csv.includes(';') ? ';' : ','
-      const imported = []
-      for (const line of csv.split('\n')) {
-        const trimmed = line.trim()
-        if (!trimmed) continue
-        const cols = trimmed.split(sep).map(c => c.trim().replace(/^"|"$/g, ''))
-        if (cols[0]) imported.push({ fio: titleCaseFio(cols[0]), company: cols[1] || '', phone: cols[2] || '', password: cols[3] || '', executorId: null, _id: nextId() })
-      }
-      setRows(imported)
-      setPinned(new Set())
-      bump()
-      toast.info('Импортировано ' + imported.length + ' строк')
-    }
-    reader.readAsText(file, 'utf-8')
-    e.target.value = ''
   }
 
   const handleExportCsv = () => {
@@ -396,12 +344,11 @@ export function EmployeesCard() {
   }
 
   const handleSave = async () => {
-    // Сервер сохраняет список ЦЕЛИКОМ (очищает таблицу и пишет заново) и
-    // принимает только строки с ID исполнителя — без ID строки пропадут.
+    // Сервер сохраняет список ЦЕЛИКОМ (очищает таблицу и пишет заново).
     const all = rows.filter(r => r.fio.trim() && r.executorId).map(r => ({ fio: r.fio, company: r.company, phone: r.phone || '', password: r.password || '', executorId: r.executorId }))
     const before = origRef.current.rows.filter(r => r.executorId).length
     if (before > 0 && all.length === 0) {
-      toast.error('Сохранение остановлено: в списке нет ни одного сотрудника с ID исполнителя — сохранение стёрло бы весь список на сервере')
+      toast.error('Сохранение остановлено: в списке не осталось сотрудников — сохранение стёрло бы весь список на сервере')
       return
     }
     if (before > 20 && all.length < before / 2 &&
@@ -411,29 +358,15 @@ export function EmployeesCard() {
       const res = await api.saveEmployeesAll(all)
       if (!res.ok) { toast.error('Ошибка: ' + res.error); return }
       toast.success(`Сохранено ${all.length} сотрудников`)
-      // на сервере теперь ровно то, что отправили — строки без ID туда не попали
+      // на сервере теперь ровно то, что отправили
       const saved = rows.filter(r => r.executorId && r.fio.trim())
       setOriginal(saved)
       setRows(saved)
-      setPinned(new Set())
       bump()
     } catch (err) {
       toast.error('Ошибка: ' + err.message)
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleUpgradeIds = async () => {
-    setMenuOpen(false)
-    setUpgrading(true)
-    try {
-      const data = await api.upgradeFioIds()
-      toast.success(data.upgraded > 0 ? `Обновлено UUID: ${data.upgraded}` : 'Все записи уже с реальными UUID')
-    } catch (err) {
-      toast.error('Ошибка: ' + err.message)
-    } finally {
-      setUpgrading(false)
     }
   }
 
@@ -462,7 +395,7 @@ export function EmployeesCard() {
   }, [allCompanies, companyCounts])
 
   const subtitle = loadError
-    || (loading ? 'Загрузка...' : rows.length ? `${rows.length} сотрудников · ${companies.length} компаний` : 'Список пуст — добавьте вручную или загрузите CSV')
+    || (loading ? 'Загрузка...' : rows.length ? `${rows.length} сотрудников · ${companies.length} компаний` : 'Список пуст — сотрудники появятся из статистики WMS')
 
   const chips = [
     { value: ALL, label: 'Все', count: rowsRef.current.length },
@@ -523,7 +456,7 @@ export function EmployeesCard() {
         </div>
       )}
 
-      {/* Панель: поиск, добавить, прочие действия */}
+      {/* Панель: поиск и прочие действия */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative w-full min-w-0 sm:w-auto sm:max-w-sm sm:flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -534,17 +467,13 @@ export function EmployeesCard() {
             </button>
           )}
         </div>
-        <Button variant="outline" onClick={handleAddRow}><Plus className="size-4" /> Добавить</Button>
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="icon" title="Ещё действия"><MoreHorizontal className="size-4" /></Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-1.5">
-            <MenuItem icon={Upload} asLabel input={<input type="file" accept=".csv" className="hidden" onChange={handleImportCsv} />}>Загрузить из CSV</MenuItem>
-            <MenuItem icon={Download} onClick={handleExportCsv}>Выгрузить в CSV</MenuItem>
-            <div className="my-1 border-t border-line" />
             <MenuItem icon={ScanSearch} onClick={handleScan} disabled={scanning}>{scanning ? 'Ищу в сменах…' : 'Найти новых в сменах'}</MenuItem>
-            <MenuItem icon={Link2} onClick={handleUpgradeIds} disabled={upgrading}>{upgrading ? 'Привязка…' : 'Привязать UUID'}</MenuItem>
+            <MenuItem icon={Download} onClick={handleExportCsv}>Выгрузить в CSV</MenuItem>
           </PopoverContent>
         </Popover>
         {scanResult !== null && scanResult.length === 0 && (
@@ -579,7 +508,7 @@ export function EmployeesCard() {
       {loading ? (
         <Spinner label="Загрузка сотрудников..." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-line">
+        <div ref={listTopRef} className="scroll-mt-20 overflow-hidden rounded-2xl border border-line">
           {visibleRows.length ? (
             isDesktop ? (
               <table className="w-full table-fixed text-sm">
@@ -601,7 +530,7 @@ export function EmployeesCard() {
                 </thead>
                 <tbody>
                   {shownRows.map(r => (
-                    <DesktopRow key={r._id} row={r} state={rowState.get(r._id)} onChange={handleRowChange} onDelete={handleDeleteRow} autoEdit={r._id === autoEditId} />
+                    <DesktopRow key={r._id} row={r} state={rowState.get(r._id)} onChange={handleRowChange} onDelete={handleDeleteRow} />
                   ))}
                 </tbody>
               </table>
@@ -612,14 +541,10 @@ export function EmployeesCard() {
             )
           ) : (
             <div className="p-10 text-center text-sm text-muted-foreground">
-              {rows.length ? 'Никого не нашлось — измените поиск или фильтр' : 'Нет сотрудников — добавьте вручную или загрузите CSV'}
+              {rows.length ? 'Никого не нашлось — измените поиск или фильтр' : 'Сотрудников пока нет — они появятся из статистики WMS'}
             </div>
           )}
-          {shownRows.length < visibleRows.length && (
-            <div ref={sentinelRef} className="border-t border-line p-3 text-center text-xs text-muted-foreground">
-              Показано {shownRows.length} из {visibleRows.length}…
-            </div>
-          )}
+          <ListPager page={curPage} pageSize={PAGE_SIZE} total={visibleRows.length} onChange={goToPage} />
         </div>
       )}
 
@@ -631,13 +556,8 @@ export function EmployeesCard() {
             <div className="min-w-0 flex-1 text-sm">
               <span className="font-medium">Несохранённые изменения</span>
               <span className="text-muted-foreground">
-                {[changes.added && `добавлено ${changes.added}`, changes.edited && `изменено ${changes.edited}`, changes.removed && `удалено ${changes.removed}`].filter(Boolean).map(s => ' · ' + s).join('')}
+                {[changes.edited && `изменено ${changes.edited}`, changes.removed && `удалено ${changes.removed}`].filter(Boolean).map(s => ' · ' + s).join('')}
               </span>
-              {changes.noId > 0 && (
-                <div className="mt-0.5 text-xs text-warning">
-                  {changes.noId} без ID исполнителя — не сохранятся (появятся сами, когда сотрудник выйдет в смену)
-                </div>
-              )}
             </div>
             <Button variant="ghost" onClick={handleDiscard} disabled={saving}><Undo2 className="size-4" /> Отменить</Button>
             <Button onClick={handleSave} disabled={saving}><Save className="size-4" /> {saving ? 'Сохранение…' : 'Сохранить'}</Button>

@@ -198,7 +198,9 @@ export default function HourlyReport() {
           у неё нет (как и в оригинале у подобных плотных отчётов); упрощаем
           по минимуму — панель ручного ввода уходит под таблицу вместо сжатия
           сбоку. */}
-      <div className="flex flex-col items-stretch gap-0 md:flex-row md:items-start">
+      {/* Отчёт нарисован как лист Excel (белые ячейки, жёлтые шапки) — в тёмной
+          теме он остаётся светлым «листом», иначе светлый текст терялся на белом. */}
+      <div className="theme-light m-4 flex flex-col items-stretch gap-0 overflow-hidden rounded-2xl border border-line bg-white shadow-card md:flex-row md:items-start">
         <div className="overflow-x-auto p-5">
           <table className="border-collapse font-sans text-[13px]">
             <colgroup>

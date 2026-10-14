@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import * as api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { rolesOrBuiltin, BUILTIN_ROLE_LABELS } from './constants'
+import { rolesOrBuiltin, ROLE_LABELS } from './constants'
 import { EmployeesCard } from './EmployeesCard'
 import { MyModulesCard } from './MyModulesCard'
 import { PendingCard } from './PendingCard'
@@ -57,7 +57,7 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.role])
 
-  const roleLabel = BUILTIN_ROLE_LABELS[currentUser?.role] || currentUser?.role
+  const roleLabel = ROLE_LABELS[currentUser?.role] || currentUser?.role
 
   return (
     <div className="mx-auto w-full space-y-4 p-6">

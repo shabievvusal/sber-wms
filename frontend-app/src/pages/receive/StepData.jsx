@@ -111,7 +111,7 @@ export function StepData({ opType, route, onDone, byName }) {
           <div className="text-sm text-success">Отгружено РК: {route.shippedRK}</div>
         )}
         {opType === 'receive' && driverDebt?.rokhlyaDebt > 0 && (
-          <div className="text-sm text-warning-foreground">
+          <div className="text-sm text-warning">
             Долг рохлей: {driverDebt.rokhlyaDebt} шт.
             {driverDebt.debtSince && ` · с ${fmtDate(driverDebt.debtSince.date)} (${driverDebt.debtSince.routeNumber})`}
           </div>

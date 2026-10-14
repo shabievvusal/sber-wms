@@ -9,8 +9,11 @@ import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { EditUserDialog } from './EditUserDialog'
 import { rolesToLabelMap, rolesOrBuiltin } from './constants'
-import { Avatar, IconAction, ModuleChips } from './ui'
+import { Avatar, IconAction, ListPager, ModuleChips, clampPage } from './ui'
 import { KeyRound, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
+
+const PAGE_SIZE = 20
+const phone10 = v => String(v || '').replace(/\D/g, '').slice(-10)
 
 function fmtDateTime(iso) {
   if (!iso) return null
@@ -23,6 +26,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   const [loading, setLoading] = useState(true)
   const [editUser, setEditUser] = useState(null) // null closed, {} new, {...} edit
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
   const load = () => {
     setLoading(true)
@@ -54,6 +58,10 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
     (u.name || '').toLowerCase().includes(q) ||
     (roleLabelsMap[u.role] || '').toLowerCase().includes(q))
 
+  const curPage = clampPage(page, filtered.length, PAGE_SIZE)
+  const shown = filtered.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE)
+  const isMe = u => !!currentUser?.login && (u.login === currentUser.login || (phone10(u.login).length === 10 && phone10(u.login) === phone10(currentUser.login)))
+
   const handleSaved = updatedUser => {
     setUsers(prev => {
       const exists = prev.some(u => u.login === updatedUser.login)
@@ -72,7 +80,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
     >
       <div className="relative px-2 pt-1 pb-2">
         <Search className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Поиск по номеру, ФИО, роли" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input className="pl-9" placeholder="Поиск по номеру, ФИО, роли" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
       </div>
 
       {loading ? (
@@ -81,10 +89,11 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
         <div className="p-6 text-center text-sm text-muted-foreground">{users.length ? 'Никого не нашлось' : 'Пока никто не входил'}</div>
       ) : (
         <ul>
-          {filtered.map(u => {
+          {shown.map(u => {
             const roleText = u.role ? (roleLabelsMap[u.role] || u.role) : null
             const success = fmtDateTime(u.lastSuccessAt)
-            const protectedAdmin = u.role === 'admin' && currentUser?.role !== 'developer' && currentUser?.login !== u.login
+            // админов защищаем от других админов, разработчиков — от всех, кроме разработчиков
+            const protectedAdmin = (u.role === 'admin' || u.role === 'developer') && currentUser?.role !== 'developer' && !isMe(u)
             return (
               <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50', !u.hasAccess && 'opacity-75')}>
                 <Avatar name={u.name || u.login} className="size-9" />
@@ -121,6 +130,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
           })}
         </ul>
       )}
+      <ListPager page={curPage} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} className="mt-1" />
 
       {editUser !== null && (
         <EditUserDialog
