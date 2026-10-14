@@ -363,11 +363,18 @@ export function EmployeesCard() {
     }
   }
 
+  // Выгружаются те, кто сейчас виден: с учётом фильтра компании и поиска
+  // (если ничего не выбрано — весь список). Правки, ещё не сохранённые на
+  // сервере, тоже попадают в файл — что на экране, то и в Excel.
   const handleExportXlsx = async () => {
     setMenuOpen(false)
-    if (!rows.length) { toast.error('Нет данных для выгрузки'); return }
+    if (!visibleRows.length) { toast.error('Нет сотрудников для выгрузки'); return }
+    const parts = []
+    if (companyFilter === NONE) parts.push('без компании')
+    else if (companyFilter !== ALL) parts.push(companyFilter)
+    if (q) parts.push(`поиск ${q}`)
     try {
-      await exportEmployeesXlsx(rows)
+      await exportEmployeesXlsx(visibleRows, { fileSuffix: parts.join(' ') })
     } catch (err) {
       toast.error('Не удалось сформировать файл: ' + err.message)
     }
@@ -507,7 +514,14 @@ export function EmployeesCard() {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-1.5">
             <MenuItem icon={ScanSearch} onClick={handleScan} disabled={scanning}>{scanning ? 'Ищу в сменах…' : 'Найти новых в сменах'}</MenuItem>
-            <MenuItem icon={Download} onClick={handleExportXlsx}>Выгрузить в Excel</MenuItem>
+            <MenuItem icon={Download} onClick={handleExportXlsx}>
+              <span className="min-w-0 flex-1">
+                Выгрузить в Excel
+                <span className="block text-xs text-muted-foreground">
+                  {companyFilter === ALL && !q ? `весь список · ${visibleRows.length}` : `по фильтру · ${visibleRows.length}`}
+                </span>
+              </span>
+            </MenuItem>
           </PopoverContent>
         </Popover>
         {scanResult !== null && scanResult.length === 0 && (

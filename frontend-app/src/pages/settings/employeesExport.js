@@ -19,8 +19,9 @@ const text = v => String(v ?? '').replace(/[\r\n]+/g, ' ').trim()
 
 /**
  * @param {{ fio: string, company: string, phone?: string, password?: string }[]} rows
+ * @param {{ fileSuffix?: string }} [opts] — пометка в имени файла (выбранный фильтр)
  */
-export async function exportEmployeesXlsx(rows) {
+export async function exportEmployeesXlsx(rows, { fileSuffix = '' } = {}) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
   wb.created = new Date()
@@ -79,7 +80,9 @@ export async function exportEmployeesXlsx(rows) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `сотрудники_${new Date().toISOString().slice(0, 10)}.xlsx`
+  // символы, недопустимые в имени файла Windows, заменяем пробелом
+  const suffix = fileSuffix ? '_' + fileSuffix.replace(/[\\/:*?"<>|]+/g, ' ').trim().replace(/\s+/g, '_') : ''
+  a.download = `сотрудники${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
