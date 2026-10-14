@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { QuickAssignDialog } from './QuickAssignDialog'
+import { exportEmployeesXlsx } from './employeesExport'
 import { ListPager, clampPage } from './ui'
 import {
   Users, Download, X, Search, MoreHorizontal, ScanSearch, Trash2, Undo2, Save, UserPlus, Pencil,
@@ -39,8 +40,10 @@ const PAGE_SIZE = 50
 const ALL = '__all__'
 const NONE = '__none__'
 
+// «ИВАНОВ иван» → «Иванов Иван». Заглавной делается первая БУКВА слова, а не
+// первый символ: из WMS бывают ФИО с мусором в начале («=Ракеш», «-Иван»).
 function titleCaseFio(str) {
-  return (str || '').replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+  return (str || '').replace(/\S+/g, w => w.toLowerCase().replace(/[a-zа-яё]/i, c => c.toUpperCase()))
 }
 
 const snapshotKey = r => `${r.fio}\u0001${r.company}\u0001${r.phone || ''}\u0001${r.password || ''}`
@@ -360,27 +363,16 @@ export function EmployeesCard() {
     }
   }
 
-  const handleExportCsv = () => {
+  const handleExportXlsx = async () => {
     setMenuOpen(false)
-    if (!rows.length) { toast.error('Нет данных для экспорта'); return }
-    // Компания; ФИО; Номер телефона; Пароль — с заголовком, по компаниям
-    // (без компании — в конце), внутри компании по ФИО. BOM — чтобы Excel
-    // открыл кириллицу без «кракозябр».
-    const NO_COMPANY = 'Без компании'
-    const clean = v => String(v || '').replace(/[\r\n;]/g, ' ').trim()
-    const sorted = [...rows].sort((a, b) =>
-      (!a.company - !b.company) || a.company.localeCompare(b.company, 'ru') || a.fio.localeCompare(b.fio, 'ru'))
-    const lines = [
-      ['Компания', 'ФИО', 'Номер телефона', 'Пароль'],
-      ...sorted.map(r => [clean(r.company) || NO_COMPANY, clean(r.fio), clean(r.phone), clean(r.password)]),
-    ]
-    const csv = lines.map(l => l.join(';')).join('\r\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `сотрудники_${new Date().toISOString().slice(0, 10)}.csv`; a.click()
-    URL.revokeObjectURL(url)
+    if (!rows.length) { toast.error('Нет данных для выгрузки'); return }
+    try {
+      await exportEmployeesXlsx(rows)
+    } catch (err) {
+      toast.error('Не удалось сформировать файл: ' + err.message)
+    }
   }
+
 
   const handleSave = async () => {
     // Сервер сохраняет список ЦЕЛИКОМ (очищает таблицу и пишет заново).
@@ -515,7 +507,7 @@ export function EmployeesCard() {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-1.5">
             <MenuItem icon={ScanSearch} onClick={handleScan} disabled={scanning}>{scanning ? 'Ищу в сменах…' : 'Найти новых в сменах'}</MenuItem>
-            <MenuItem icon={Download} onClick={handleExportCsv}>Выгрузить в CSV</MenuItem>
+            <MenuItem icon={Download} onClick={handleExportXlsx}>Выгрузить в Excel</MenuItem>
           </PopoverContent>
         </Popover>
         {scanResult !== null && scanResult.length === 0 && (
