@@ -16,9 +16,22 @@ export function readTheme() {
   }
 }
 
+// На время смены темы CSS-переходы выключены (класс theme-switching, см.
+// index.css): иначе каждый элемент с transition-colors (строки таблиц,
+// кнопки — на «Статистике» их сотни) анимирует смену цвета, и браузер
+// несколько кадров подряд пересчитывает стили всей страницы — переключение
+// заметно тормозило (замер: ~420 мс подвисаний против одного кадра ~60 мс).
+// Чуть позже, когда новые цвета уже применены, переходы возвращаются.
 function apply(theme) {
   const resolved = theme === 'system' ? (media().matches ? 'dark' : 'light') : theme
-  document.documentElement.dataset.theme = resolved
+  const root = document.documentElement
+  if (root.dataset.theme === resolved) return
+  root.classList.add('theme-switching')
+  root.dataset.theme = resolved
+  // возвращаем переходы не сразу: это ещё один пересчёт стилей всей страницы,
+  // пусть он не идёт вплотную к первому и не мешает анимации переключателя
+  clearTimeout(apply.timer)
+  apply.timer = setTimeout(() => root.classList.remove('theme-switching'), 300)
 }
 
 export function useTheme() {

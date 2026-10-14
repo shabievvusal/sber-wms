@@ -13,7 +13,7 @@ import { SettingCard } from './SettingCard'
 import { QuickAssignDialog } from './QuickAssignDialog'
 import { ListPager, clampPage } from './ui'
 import {
-  Users, Download, X, Search, MoreHorizontal, ScanSearch, Trash2, Undo2, Save, AlertTriangle, Pencil,
+  Users, Download, X, Search, MoreHorizontal, ScanSearch, Trash2, Undo2, Save, UserPlus, Pencil,
 } from 'lucide-react'
 
 // Список сотрудников (Настройки → Сотрудники).
@@ -190,6 +190,7 @@ export function EmployeesCard() {
   const [saving, setSaving] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showAllUnassigned, setShowAllUnassigned] = useState(false)
+  const [addingFound, setAddingFound] = useState(false)
   const [editingMobile, setEditingMobile] = useState(null)
   const [page, setPage] = useState(1)
   // Состав списка (не содержимое полей): по нему пересчитывается фильтр
@@ -331,15 +332,53 @@ export function EmployeesCard() {
     }
   }
 
+  // Найденные в сменах (их нет в списке) — сразу в список без компании, чтобы
+  // уведомление не висело постоянно; компанию можно назначить позже прямо в
+  // таблице (фильтр «Без компании»). Пишется сразу на сервер (/api/empl/add-new),
+  // как и назначение компании по одному.
+  const handleAddAllFound = async () => {
+    const list = noCompanyEmployees
+    if (!list.length) return
+    setAddingFound(true)
+    try {
+      const res = await api.addNewEmployees(list.map(e => ({ executorId: e.executorId, fio: titleCaseFio(e.fio) })))
+      if (res && res.ok === false) { toast.error('Ошибка: ' + (res.error || 'не удалось добавить')); return }
+      const newRows = list.map(e => ({ fio: titleCaseFio(e.fio), company: '', phone: '', password: '', executorId: e.executorId, _id: e.executorId }))
+      const apply = cur => {
+        const ids = new Set(cur.map(r => r._id))
+        return [...newRows.filter(r => !ids.has(r._id)), ...cur]
+      }
+      setOriginal(apply(origRef.current.rows))
+      setRows(apply)
+      bump()
+      setLocalSaved(prev => new Set([...prev, ...list.map(e => `id:${e.executorId}`)]))
+      toast.success(`Добавлено в список: ${res?.added ?? list.length} · компанию можно назначить в фильтре «Без компании»`)
+    } catch (err) {
+      toast.error('Ошибка: ' + err.message)
+    } finally {
+      setAddingFound(false)
+    }
+  }
+
   const handleExportCsv = () => {
     setMenuOpen(false)
     if (!rows.length) { toast.error('Нет данных для экспорта'); return }
-    const clean = v => String(v || '').replace(/[\r\n;]/g, ' ')
-    const csv = rows.map(r => [clean(r.fio), clean(r.company), clean(r.phone), clean(r.password)].join(';')).join('\r\n')
+    // Компания; ФИО; Номер телефона; Пароль — с заголовком, по компаниям
+    // (без компании — в конце), внутри компании по ФИО. BOM — чтобы Excel
+    // открыл кириллицу без «кракозябр».
+    const NO_COMPANY = 'Без компании'
+    const clean = v => String(v || '').replace(/[\r\n;]/g, ' ').trim()
+    const sorted = [...rows].sort((a, b) =>
+      (!a.company - !b.company) || a.company.localeCompare(b.company, 'ru') || a.fio.localeCompare(b.fio, 'ru'))
+    const lines = [
+      ['Компания', 'ФИО', 'Номер телефона', 'Пароль'],
+      ...sorted.map(r => [clean(r.company) || NO_COMPANY, clean(r.fio), clean(r.phone), clean(r.password)]),
+    ]
+    const csv = lines.map(l => l.join(';')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = 'employees.csv'; a.click()
+    a.href = url; a.download = `сотрудники_${new Date().toISOString().slice(0, 10)}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -391,7 +430,7 @@ export function EmployeesCard() {
   const companies = useMemo(() => {
     const set = new Set(allCompanies)
     for (const c of companyCounts.m.keys()) set.add(c)
-    return [...set].sort((a, b) => a.localeCompare(b, 'ru'))
+    return [...set].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }))
   }, [allCompanies, companyCounts])
 
   const subtitle = loadError
@@ -423,16 +462,19 @@ export function EmployeesCard() {
         {companies.map(c => <option key={c} value={c} />)}
       </datalist>
 
-      {/* Найдены в сменах, но без компании */}
+      {/* Найдены в сменах, но их нет в списке */}
       {noCompanyEmployees.length > 0 && (
         <div className="mb-4 rounded-2xl border border-warning/30 bg-warning/[0.06] p-3.5">
-          <div className="mb-2.5 flex items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning"><AlertTriangle className="size-4" /></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">{noCompanyEmployees.length} без компании</div>
-              <div className="text-xs text-muted-foreground">Встречаются в сменах, но не привязаны к компании. Нажмите на сотрудника, чтобы назначить.</div>
+          <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning"><UserPlus className="size-4" /></span>
+            <div className="min-w-0 flex-1 basis-64">
+              <div className="text-sm font-semibold">Новые из смен: {noCompanyEmployees.length}</div>
+              <div className="text-xs text-muted-foreground">Работали в сменах, но их нет в списке. Нажмите на человека, чтобы сразу указать компанию, или добавьте всех без компании.</div>
             </div>
-            <button type="button" className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-surface-2 hover:text-foreground" title="Скрыть" onClick={() => setScanResult(null)}>
+            <Button size="sm" variant="outline" onClick={handleAddAllFound} disabled={addingFound}>
+              <UserPlus className="size-3.5" /> {addingFound ? 'Добавляю…' : `Добавить всех без компании (${noCompanyEmployees.length})`}
+            </Button>
+            <button type="button" className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-surface-2 hover:text-foreground" title="Скрыть до следующего открытия" onClick={() => setScanResult(null)}>
               <X className="size-4" />
             </button>
           </div>
@@ -442,9 +484,9 @@ export function EmployeesCard() {
                 key={e.executorId}
                 type="button"
                 className="rounded-full border border-line bg-card px-3 py-1 text-xs font-medium shadow-card transition-colors hover:border-brand hover:text-brand"
-                onClick={() => setQuickAssign({ fio: e.fio, executorId: e.executorId })}
+                onClick={() => setQuickAssign({ fio: titleCaseFio(e.fio), executorId: e.executorId })}
               >
-                {e.fio}
+                {titleCaseFio(e.fio)}
               </button>
             ))}
             {noCompanyEmployees.length > unassignedShown.length && (
@@ -483,7 +525,7 @@ export function EmployeesCard() {
 
       {/* Фильтр по компаниям */}
       {chips.length > 2 && (
-        <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {chips.map(o => {
             const active = companyFilter === o.value
             return (
@@ -492,13 +534,13 @@ export function EmployeesCard() {
                 type="button"
                 onClick={() => setCompanyFilter(o.value)}
                 className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  'inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
                   active ? 'border-transparent bg-foreground text-background' : 'border-line bg-card text-ink-2 hover:text-foreground',
                 )}
               >
-                {o.color && <span className="size-1.5 rounded-full" style={{ background: o.color }} />}
-                {o.label}
-                <span className={cn('tabular', active ? 'opacity-70' : 'text-muted-foreground')}>{o.count}</span>
+                {o.color && <span className="size-1.5 shrink-0 rounded-full" style={{ background: o.color }} />}
+                <span className="truncate" title={o.label}>{o.label}</span>
+                <span className={cn('tabular shrink-0', active ? 'opacity-70' : 'text-muted-foreground')}>{o.count}</span>
               </button>
             )
           })}

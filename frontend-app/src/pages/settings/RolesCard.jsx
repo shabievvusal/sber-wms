@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { SettingCard } from './SettingCard'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
-import { ALL_MODULES, VS_MODULE_LABELS } from './constants'
+import { ALL_MODULES, VS_MODULE_LABELS, knownModules } from './constants'
+import { RolesMatrix } from './RolesMatrix'
+import { cn } from '@/lib/utils'
 import { Field, IconAction, ModuleChips } from './ui'
-import { Lock, Pencil, Plus, Search, Shield, Trash2 } from 'lucide-react'
+import { Grid3x3, List, Lock, Pencil, Plus, Search, Shield, Trash2 } from 'lucide-react'
 
 /** Окно создания/правки роли. role = null → новая. */
 function RoleDialog({ role, onClose, onSaved }) {
@@ -27,8 +29,8 @@ function RoleDialog({ role, onClose, onSaved }) {
     if (!label.trim()) { toast.error('Введите название роли'); return }
     setSaving(true)
     try {
-      if (isNew) await api.addVsAdminRole('', label.trim(), [...modules])
-      else await api.updateVsAdminRole(role.key, label.trim(), [...modules])
+      if (isNew) await api.addVsAdminRole('', label.trim(), knownModules([...modules]))
+      else await api.updateVsAdminRole(role.key, label.trim(), knownModules([...modules]))
       toast.success(isNew ? 'Роль добавлена' : 'Роль обновлена')
       onSaved()
     } catch (err) {
@@ -72,6 +74,10 @@ function RoleDialog({ role, onClose, onSaved }) {
 export function RolesCard({ roles, onChanged }) {
   const [dialog, setDialog] = useState(null) // null — закрыто, { role: null } — новая, { role } — правка
   const [search, setSearch] = useState('')
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem('settings_roles_view') || 'matrix' } catch { return 'matrix' }
+  })
+  const changeView = v => { setView(v); try { localStorage.setItem('settings_roles_view', v) } catch { /* ignore */ } }
 
   const handleDelete = async r => {
     if (!confirm(`Удалить роль «${r.label}»?`)) return
@@ -89,11 +95,29 @@ export function RolesCard({ roles, onChanged }) {
     <SettingCard
       icon={Shield}
       title="Роли"
-      subtitle="Набор разделов, который получает пользователь с этой ролью"
-      actions={<Button size="sm" variant="outline" onClick={() => setDialog({ role: null })}><Plus className="size-3.5" /> Новая роль</Button>}
-      bodyClassName="p-2"
+      subtitle={view === 'matrix' ? 'Матрица доступа: клик по клетке — раздел у роли, по заголовку — у всех своих ролей' : 'Набор разделов, который получает пользователь с этой ролью'}
+      actions={
+        <>
+          <div className="inline-flex rounded-xl border border-line bg-surface-2 p-0.5">
+            {[{ v: 'matrix', label: 'Матрица', Icon: Grid3x3 }, { v: 'list', label: 'Список', Icon: List }].map(({ v, label, Icon }) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => changeView(v)}
+                className={cn('inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-xs font-medium transition-colors', view === v ? 'bg-surface text-foreground shadow-card' : 'text-muted-foreground hover:text-ink-2')}
+              >
+                <Icon className="size-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setDialog({ role: null })}><Plus className="size-3.5" /> Новая роль</Button>
+        </>
+      }
+      bodyClassName={view === 'matrix' ? 'p-4' : 'p-2'}
     >
       {dialog && <RoleDialog role={dialog.role} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); onChanged(null) }} />}
+
+      {view === 'matrix' ? <RolesMatrix roles={roles} onSaved={() => onChanged(null)} /> : (<>
 
       {roles.length > 6 && (
         <div className="relative px-2 pt-1 pb-2">
@@ -127,6 +151,7 @@ export function RolesCard({ roles, onChanged }) {
         ))}
         {!filtered.length && <li className="p-6 text-center text-sm text-muted-foreground">Ничего не найдено</li>}
       </ul>
+      </>)}
     </SettingCard>
   )
 }

@@ -1,18 +1,21 @@
 // Перенесено как есть из оригинала (frontend/app/src/pages/settings/SettingsPage.jsx) —
 // это справочники прав доступа, а не вёрстка, менять нечего.
 
+// Только разделы, которые реально есть во фронтенде (пункты меню + две
+// «киоск»-формы), в порядке меню. Бэкенд знает ещё несколько старых ключей
+// (data, analysis, docs, shift_plan) — их страниц нет, в списках не показываем.
 export const VS_MODULE_LABELS = {
-  stats: 'Статистика', data: 'Данные', monitor: 'Мониторинг',
-  consolidation: 'Консолидация',
-  settings: 'Настройки', shipments: 'Отгрузка',
+  stats: 'Статистика', monitor: 'Мониторинг', motivation: 'Мотивация',
+  tsd: 'Выдача ТСД', consolidation: 'Консолидация', picking: 'Комплектация',
+  shipments: 'Отгрузка', supplies: 'Поставки', reports: 'Отчёты',
+  stock_consolidation: 'Объединение остатков', violations: 'Нарушения',
+  settings: 'Настройки',
   receive: 'Форма отгрузки', consolidation_form: 'Форма консолидации',
-  reports: 'Отчёты', supplies: 'Поставки',
-  picking: 'Комплектация',
-  tsd: 'Выдача ТСД', violations: 'Нарушения',
-  stock_consolidation: 'Объединение остатков',
-  motivation: 'Мотивация',
 }
 export const ALL_MODULES = Object.keys(VS_MODULE_LABELS)
+
+/** Убирает старые ключи разделов (их нет во фронтенде) и упорядочивает как в меню. */
+export const knownModules = list => ALL_MODULES.filter(m => (list || []).includes(m))
 
 export const VS_ACTION_LABELS = {
   fetch_data: 'Обновить данные',

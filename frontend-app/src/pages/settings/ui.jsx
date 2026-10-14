@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { Pagination } from '@/components/ui/pagination'
-import { VS_MODULE_LABELS } from './constants'
+import { VS_MODULE_LABELS, knownModules } from './constants'
 
 // Общие мелкие элементы карточек Настроек — чтобы таблицы и списки во всех
 // вкладках выглядели одинаково (как список сотрудников).
@@ -49,8 +49,10 @@ export function Avatar({ name, className }) {
 }
 
 /** Модули роли/пользователя: первые несколько чипами, остальные — «+N». */
-export function ModuleChips({ modules, max = 3, labels = VS_MODULE_LABELS }) {
-  if (!modules?.length) return <span className="text-xs text-muted-foreground">нет разделов</span>
+export function ModuleChips({ modules: raw, max = 3, labels = VS_MODULE_LABELS }) {
+  // старые ключи разделов (их нет во фронтенде) не показываем
+  const modules = labels === VS_MODULE_LABELS ? knownModules(raw) : (raw || [])
+  if (!modules.length) return <span className="text-xs text-muted-foreground">нет разделов</span>
   const shown = modules.slice(0, max)
   const rest = modules.length - shown.length
   const all = modules.map(m => labels[m] || m).join(', ')

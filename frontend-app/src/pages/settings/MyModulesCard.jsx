@@ -4,7 +4,7 @@ import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { SettingCard } from './SettingCard'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
-import { ALL_MODULES, VS_MODULE_LABELS } from './constants'
+import { ALL_MODULES, VS_MODULE_LABELS, knownModules } from './constants'
 import { LayoutGrid, Save } from 'lucide-react'
 
 const sameSet = (a, b) => a.size === b.size && [...a].every(x => b.has(x))
@@ -25,7 +25,7 @@ export function MyModulesCard({ currentUser }) {
     if (!currentUser?.login) return
     setSaving(true)
     try {
-      await api.putVsAdminUser(currentUser.login, { modules: [...selected] })
+      await api.putVsAdminUser(currentUser.login, { modules: knownModules([...selected]) })
       setSaved(new Set(selected))
       toast.success('Разделы обновлены')
     } catch (err) {

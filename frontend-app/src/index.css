@@ -204,6 +204,14 @@
   animation: page-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Смена темы — мгновенно, без анимации цветов у сотен элементов (см. lib/theme.js) */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pulse-ring, .page-in { animation: none; }
 }

@@ -172,6 +172,20 @@ public static class AuthEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
+        // Сигнал «я на сайте» — раз в минуту, пока вкладка открыта и видна (см.
+        // AuthService.TouchPresenceAsync). Заодно продлевает сессию.
+        app.MapPost("/api/vs/auth/ping", async (HttpContext ctx, AuthService auth) =>
+        {
+            try
+            {
+                var session = await auth.GetSessionAsync(ctx.Request.Cookies[AuthConstants.SessionCookieName]);
+                if (session == null) return Results.Json(new { error = "Сессия не найдена или истекла" }, statusCode: 401);
+                await auth.TouchPresenceAsync(session.Login);
+                return Results.Json(new { ok = true });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        });
+
         app.MapPost("/api/vs/auth/logout", async (HttpContext ctx, AuthService auth) =>
         {
             try

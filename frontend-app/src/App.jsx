@@ -8,6 +8,7 @@ import LoginPage from '@/components/layout/LoginPage'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
 import { EoAutoRefresh } from '@/lib/eoAutoRefresh'
+import { usePresence } from '@/lib/presence'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -86,6 +87,7 @@ function AppShell() {
   const { user } = useAuth()
   const [route, setRoute] = useState(parseHash)
   const [navOpen, setNavOpen] = useState(false)
+  usePresence(!!user) // «Был в сети» в Настройках → Пользователи
 
   // Гейт по модулю роли (1:1 с оригиналом — ModuleRoute в App.jsx) —
   // до этого проверка была ТОЛЬКО в голове у пользователя: роли/доступы

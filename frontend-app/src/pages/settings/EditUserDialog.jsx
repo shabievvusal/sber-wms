@@ -9,7 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
-import { ALL_MODULES, VS_MODULE_LABELS, ALL_ACTIONS, VS_ACTION_LABELS } from './constants'
+import { ALL_MODULES, VS_MODULE_LABELS, ALL_ACTIONS, VS_ACTION_LABELS, knownModules } from './constants'
 import { Field } from './ui'
 
 function Section({ title, hint, children }) {
@@ -62,7 +62,7 @@ export function EditUserDialog({ user, open, onOpenChange, roles, emplCompanies 
     if (!trimmedLogin) { toast.error('Введите логин (номер)'); return }
     const companyIds = role === 'manager' ? companies.split(/[,;]/).map(x => x.trim()).filter(Boolean) : []
     const payload = {
-      name: name.trim(), role, modules: [...modules], actions: [...actions],
+      name: name.trim(), role, modules: knownModules([...modules]), actions: [...actions],
       companyIds, visibleCompanies: [...visibleCompanies], allowWithoutToken, selfOnly,
     }
     if (password.trim()) payload.password = password.trim()

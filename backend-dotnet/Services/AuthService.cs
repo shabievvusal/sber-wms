@@ -327,6 +327,7 @@ public class AuthService
     {
         var users = await LoadVsUsersAsync();
         var logins = await LoadLoginsAsync();
+        var presence = await LoadPresenceAsync();
         var byLogin = new Dictionary<string, Dictionary<string, object?>>();
         foreach (var u in users)
         {
@@ -353,6 +354,7 @@ public class AuthService
                 ["hasPassword"] = !string.IsNullOrEmpty(u.PasswordHash),
                 ["lastAttemptAt"] = rec?.LastAttemptAt,
                 ["lastSuccessAt"] = rec?.LastSuccessAt,
+                ["lastSeenAt"] = PresenceIso(presence, login),
                 ["hasAccess"] = true,
             };
         }
@@ -368,11 +370,74 @@ public class AuthService
                 ["modules"] = new List<string>(),
                 ["lastAttemptAt"] = rec.LastAttemptAt,
                 ["lastSuccessAt"] = rec.LastSuccessAt,
+                ["lastSeenAt"] = PresenceIso(presence, login),
                 ["hasAccess"] = false,
             };
         }
         return byLogin.Values.OrderBy(v => (string?)v["login"] ?? "", StringComparer.Ordinal).ToList();
     }
+
+    // ─── Присутствие («был в сети») ─────────────────────────────────────────
+    // Сайт, пока открыт и вкладка видна, раз в минуту шлёт POST
+    // /api/vs/auth/ping — здесь запоминается время последнего сигнала по
+    // логину. Отдельная таблица, а не vs_sessions.last_active_at: сессия
+    // удаляется при выходе (вместе с отметкой), а большая часть запросов
+    // сайта идёт в Node и last_active_at не обновляет вовсе.
+    private static volatile bool _presenceReady;
+
+    private static string PresenceKey(string? login)
+    {
+        var t = (login ?? "").Trim();
+        return IsLetterLogin(t) ? t.ToLowerInvariant() : (CanonicalPhone(t) ?? t);
+    }
+
+    private static async Task EnsurePresenceTableAsync(NpgsqlConnection conn)
+    {
+        if (_presenceReady) return;
+        await using var cmd = new NpgsqlCommand(
+            "CREATE TABLE IF NOT EXISTS vs_presence (login TEXT PRIMARY KEY, last_seen_at BIGINT NOT NULL)", conn);
+        await cmd.ExecuteNonQueryAsync();
+        _presenceReady = true;
+    }
+
+    public async Task TouchPresenceAsync(string? login)
+    {
+        var key = PresenceKey(login);
+        if (key == "") return;
+        await using var conn = await OpenAsync();
+        await EnsurePresenceTableAsync(conn);
+        await using var cmd = new NpgsqlCommand(@"
+            INSERT INTO vs_presence (login, last_seen_at) VALUES ($1, $2)
+            ON CONFLICT (login) DO UPDATE SET last_seen_at = GREATEST(vs_presence.last_seen_at, EXCLUDED.last_seen_at)", conn);
+        cmd.Parameters.AddWithValue(key);
+        cmd.Parameters.AddWithValue(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>Логин → время последнего сигнала (мс). Для тех, кто не заходил
+    /// с момента появления отметок, — последняя активность их живых сессий.</summary>
+    private async Task<Dictionary<string, long>> LoadPresenceAsync()
+    {
+        var map = new Dictionary<string, long>();
+        void Put(string? login, long ms)
+        {
+            var key = PresenceKey(login);
+            if (key == "" || ms <= 0) return;
+            if (!map.TryGetValue(key, out var cur) || ms > cur) map[key] = ms;
+        }
+        await using var conn = await OpenAsync();
+        await EnsurePresenceTableAsync(conn);
+        await using (var cmd = new NpgsqlCommand("SELECT login, last_seen_at FROM vs_presence", conn))
+        await using (var r = await cmd.ExecuteReaderAsync())
+            while (await r.ReadAsync()) Put(r.GetString(0), r.GetInt64(1));
+        await using (var cmd = new NpgsqlCommand("SELECT login, MAX(GREATEST(COALESCE(last_active_at, 0), COALESCE(created_at, 0))) FROM vs_sessions GROUP BY login", conn))
+        await using (var r = await cmd.ExecuteReaderAsync())
+            while (await r.ReadAsync()) if (!r.IsDBNull(0) && !r.IsDBNull(1)) Put(r.GetString(0), r.GetInt64(1));
+        return map;
+    }
+
+    private static string? PresenceIso(Dictionary<string, long> presence, string login) =>
+        presence.TryGetValue(PresenceKey(login), out var ms) ? DateTimeOffset.FromUnixTimeMilliseconds(ms).ToString("o") : null;
 
     public class SaveUserPayload
     {

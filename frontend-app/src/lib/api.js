@@ -38,6 +38,12 @@ export async function getVsMe() {
   return r.json()
 }
 
+// Сигнал «я на сайте» для «Был в сети» (см. lib/presence.js). Ошибки не важны:
+// не дошёл один сигнал — дойдёт следующий через минуту.
+export async function pingPresence() {
+  try { await fetch('/api/vs/auth/ping', { method: 'POST', credentials }) } catch { /* сеть */ }
+}
+
 export async function logoutVs() {
   return req('/api/vs/auth/logout', { method: 'POST' })
 }
