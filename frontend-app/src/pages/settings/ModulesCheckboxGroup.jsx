@@ -1,19 +1,46 @@
-import { Checkbox } from '@/components/ui/checkbox'
+import { Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
- * Группа чекбоксов «модули» / «действия» — повторяется в VsUserEditModal,
- * RolesCard (добавление/редактирование), MyModulesCard оригинала. Один
- * компонент вместо трёх копий одной и той же разметки.
+ * Выбор модулей / действий — чипы-переключатели вместо сетки чекбоксов
+ * (MyModulesCard, RolesCard, EditUserDialog). Сверху — счётчик и
+ * «Все / Снять», если передан onSetAll.
  */
-export function ModulesCheckboxGroup({ items, labels, selected, onToggle, columns = true }) {
+export function ModulesCheckboxGroup({ items, labels, selected, onToggle, onSetAll }) {
   return (
-    <div className={columns ? 'grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3' : 'flex flex-wrap gap-x-4 gap-y-2'}>
-      {items.map(key => (
-        <label key={key} className="flex items-center gap-2 text-sm font-normal">
-          <Checkbox checked={selected.has(key)} onCheckedChange={() => onToggle(key)} />
-          {labels[key] || key}
-        </label>
-      ))}
+    <div className="space-y-2">
+      {onSetAll && (
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-muted-foreground">Выбрано {items.filter(k => selected.has(k)).length} из {items.length}</span>
+          <button type="button" className="font-medium text-brand hover:underline" onClick={() => onSetAll(true)}>Все</button>
+          <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline" onClick={() => onSetAll(false)}>Снять</button>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {items.map(key => {
+          const on = selected.has(key)
+          return (
+            <button
+              key={key}
+              type="button"
+              role="checkbox"
+              aria-checked={on}
+              onClick={() => onToggle(key)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors',
+                on
+                  ? 'border-transparent bg-brand-soft font-medium text-brand'
+                  : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:text-foreground',
+              )}
+            >
+              <span className={cn('grid size-4 place-items-center rounded-full transition-colors', on ? 'bg-brand text-white' : 'border border-line-strong')}>
+                {on && <Check className="size-3" strokeWidth={3} />}
+              </span>
+              {labels[key] || key}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

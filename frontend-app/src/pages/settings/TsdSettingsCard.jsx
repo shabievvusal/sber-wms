@@ -4,16 +4,19 @@ import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { EditableCell } from '@/components/ui/editable-cell'
 import { SettingCard, SettingRow } from './SettingCard'
-import { ScanBarcode, X } from 'lucide-react'
+import { Empty, IconAction, theadCls, thCls, trCls, tableWrapCls } from './ui'
+import { Plus, ScanBarcode, Trash2, UserRoundPlus } from 'lucide-react'
 
 export function TsdSettingsCard() {
   const [totalCount, setTotalCount] = useState('0')
+  const [savedCount, setSavedCount] = useState('0')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     api.getTsdSettings()
-      .then(data => setTotalCount(String(data?.totalCount ?? 0)))
+      .then(data => { const v = String(data?.totalCount ?? 0); setTotalCount(v); setSavedCount(v) })
       .catch(() => {})
   }, [])
 
@@ -22,7 +25,8 @@ export function TsdSettingsCard() {
     try {
       await withMinDuration(async () => {
         const data = await api.updateTsdSettings(totalCount)
-        setTotalCount(String(data?.totalCount ?? totalCount))
+        const v = String(data?.totalCount ?? totalCount)
+        setTotalCount(v); setSavedCount(v)
       })
       toast.success('Количество ТСД сохранено')
     } catch (err) {
@@ -33,13 +37,15 @@ export function TsdSettingsCard() {
   }
 
   return (
-    <SettingCard icon={ScanBarcode} title="ТСД" subtitle="Общее количество рабочих устройств">
-      <SettingRow label="Рабочих ТСД" desc="Используется для расчёта остатка в разделе выдачи ТСД">
-        <Input className="w-28" type="number" min="0" value={totalCount} onChange={e => setTotalCount(e.target.value)} />
+    <SettingCard icon={ScanBarcode} title="ТСД" subtitle="Парк терминалов для раздела «Выдача ТСД»">
+      <SettingRow label="Рабочих ТСД" desc="Из этого числа считается остаток при выдаче">
+        <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); handleSave() }}>
+          <Input className="tabular w-24 text-right" type="number" min="0" value={totalCount} onChange={e => setTotalCount(e.target.value)} />
+          <Button type="submit" size="sm" variant={totalCount !== savedCount ? 'default' : 'outline'} disabled={saving || totalCount === savedCount}>
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </Button>
+        </form>
       </SettingRow>
-      <div className="pt-3">
-        <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Сохранение...' : 'Сохранить'}</Button>
-      </div>
     </SettingCard>
   )
 }
@@ -85,11 +91,11 @@ export function TsdManualEmployeesCard() {
     }
   }
 
-  const handleFieldBlur = async (row, field, value) => {
+  const handleCommit = async (row, field, value) => {
     const trimmed = value.trim()
     if (trimmed === row[field]) return
+    if (field === 'fio' && !trimmed) { toast.error('ФИО не может быть пустым'); return }
     const patch = { fio: row.fio, company: row.company, [field]: trimmed }
-    if (field === 'fio' && !trimmed) { toast.error('ФИО не может быть пустым'); load(); return }
     try {
       const data = await api.updateTsdManualEmployee(row.id, patch.fio, patch.company)
       if (!data.ok) { toast.error('Ошибка: ' + data.error); load(); return }
@@ -101,6 +107,7 @@ export function TsdManualEmployeesCard() {
   }
 
   const handleDelete = async row => {
+    if (!confirm(`Удалить «${row.fio}» из списка для ТСД?`)) return
     try {
       const data = await api.deleteTsdManualEmployee(row.id)
       if (!data.ok) { toast.error('Не удалось удалить'); return }
@@ -112,53 +119,45 @@ export function TsdManualEmployeesCard() {
 
   return (
     <SettingCard
-      icon={ScanBarcode}
+      icon={UserRoundPlus}
       title="Сотрудники без ID (для ТСД)"
-      subtitle="Не появляются в статистике WMS — добавляются вручную только для выдачи ТСД"
+      subtitle="Не появляются в статистике WMS — заводятся вручную только для выдачи ТСД. Изменения сохраняются сразу."
     >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Input className="h-8 w-56" placeholder="ФИО" value={newFio} onChange={e => setNewFio(e.target.value)} />
-        <Input className="h-8 w-44" placeholder="Компания" value={newCompany} onChange={e => setNewCompany(e.target.value)} />
-        <Button size="sm" onClick={handleAdd} disabled={adding}>{adding ? 'Добавление...' : '+ Добавить'}</Button>
-      </div>
+      <form className="mb-4 flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); handleAdd() }}>
+        <Input className="min-w-0 flex-1 basis-56" placeholder="ФИО" value={newFio} onChange={e => setNewFio(e.target.value)} />
+        <Input className="min-w-0 flex-1 basis-44" placeholder="Компания (необязательно)" value={newCompany} onChange={e => setNewCompany(e.target.value)} />
+        <Button type="submit" variant="outline" disabled={adding || !newFio.trim()}><Plus className="size-4" /> {adding ? 'Добавление…' : 'Добавить'}</Button>
+      </form>
 
       {loading ? (
-        <div className="text-sm text-muted-foreground">Загрузка...</div>
+        <div className="text-sm text-muted-foreground">Загрузка…</div>
       ) : rows.length === 0 ? (
-        <div className="text-sm text-muted-foreground">Список пуст</div>
+        <Empty>Список пуст</Empty>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="p-2 text-left font-medium">ФИО</th>
-                <th className="p-2 text-left font-medium">Компания</th>
-                <th className="w-10" />
+        <div className={tableWrapCls}>
+          <table className="w-full table-fixed text-sm">
+            <colgroup><col className="w-[55%]" /><col /><col className="w-12" /></colgroup>
+            <thead className={theadCls}>
+              <tr className="border-b border-line">
+                <th className={thCls}>ФИО</th>
+                <th className={thCls}>Компания</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
-                <TsdManualEmployeeRow key={row.id} row={row} onFieldBlur={handleFieldBlur} onDelete={() => handleDelete(row)} />
+                <tr key={row.id} className={trCls}>
+                  <td className="px-1 py-1.5"><EditableCell value={row.fio} placeholder="ФИО" className="font-medium" onCommit={v => handleCommit(row, 'fio', v)} /></td>
+                  <td className="px-1 py-1.5"><EditableCell value={row.company || ''} placeholder="без компании" onCommit={v => handleCommit(row, 'company', v)} /></td>
+                  <td className="py-1.5 pr-2 text-right">
+                    <IconAction icon={Trash2} title="Удалить" tone="danger" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => handleDelete(row)} />
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
     </SettingCard>
-  )
-}
-
-function TsdManualEmployeeRow({ row, onFieldBlur, onDelete }) {
-  const [fio, setFio] = useState(row.fio)
-  const [company, setCompany] = useState(row.company)
-
-  return (
-    <tr className="border-b last:border-0">
-      <td className="p-1.5"><Input className="h-8" value={fio} onChange={e => setFio(e.target.value)} onBlur={() => onFieldBlur(row, 'fio', fio)} /></td>
-      <td className="p-1.5"><Input className="h-8" value={company} onChange={e => setCompany(e.target.value)} onBlur={() => onFieldBlur(row, 'company', company)} /></td>
-      <td className="p-1.5 text-right">
-        <Button size="icon" variant="ghost" onClick={onDelete} title="Удалить"><X className="size-3.5" /></Button>
-      </td>
-    </tr>
   )
 }

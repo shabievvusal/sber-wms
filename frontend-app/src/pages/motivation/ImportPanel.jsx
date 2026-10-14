@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { nowTimeStr, parsePeopleText, toReceivedIso, ROLE_LABELS } from './format'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -51,17 +52,17 @@ export function ImportPanel({ date, shift, companies, accountIndex, onSaved }) {
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Компания</span>
-          <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
+          <Select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
             <option value="">— выберите —</option>
             {companies.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Что в строке</span>
-          <select className={selectClass} value={mode} onChange={e => setMode(e.target.value)}>
+          <Select className={selectClass} value={mode} onChange={e => setMode(e.target.value)}>
             <option value="accounts">Только учётки (ФИО — из учётки)</option>
             <option value="people">ФИО из акта ; учётка</option>
-          </select>
+          </Select>
         </label>
         <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Список получен в</span>

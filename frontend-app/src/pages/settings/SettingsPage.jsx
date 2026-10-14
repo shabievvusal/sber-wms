@@ -60,14 +60,14 @@ export default function SettingsPage() {
   const roleLabel = BUILTIN_ROLE_LABELS[currentUser?.role] || currentUser?.role
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
         <p className="text-sm text-muted-foreground">Пользователи, роли и служебные параметры</p>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+        <div className="flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/[0.06] px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -78,7 +78,7 @@ export default function SettingsPage() {
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="max-w-full overflow-x-auto">
             {visibleTabs.map(({ key, label, Icon }) => (
               <TabsTrigger key={key} value={key} className="gap-1.5"><Icon className="size-3.5" /> {label}</TabsTrigger>
             ))}
@@ -102,10 +102,13 @@ export default function SettingsPage() {
 
           <TabsContent value="system" className="space-y-4">
             <AutoFetchCard isAdmin={currentUser?.role === 'admin'} />
-            <ShipmentsDesignCard />
-            <TsdSettingsCard />
+            {/* небольшие карточки — по две в ряд на широком экране */}
+            <div className="grid items-start gap-4 xl:grid-cols-2">
+              <TsdSettingsCard />
+              <ShipmentsDesignCard />
+              <ProductWeightsCard />
+            </div>
             <TsdManualEmployeesCard />
-            <ProductWeightsCard />
             <ZonesSettingsCard />
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
           </TabsContent>

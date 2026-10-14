@@ -25,7 +25,8 @@ import {
   buildFullZoneCatalog, buildRollingRange, buildZoneCatalog, computeWorkedMinutesInShift, getCurrentShiftInfo,
   getDueFullRefreshTime, getElapsedShiftMinutes, getShiftHours, isKdkZoneKey, normalizeAutoFetchSettings, todayStr, zoneColor,
 } from './format'
-import { Download } from 'lucide-react'
+import { Download, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const API_SUMMARY_BY_OP = {
   selection: (dateStr, shift, idleThresholdMinutes) => api.getDateSummaryFull(dateStr, { shift, idleThresholdMinutes }),
@@ -107,19 +108,26 @@ export default function StatsPage() {
   useEffect(() => { try { localStorage.setItem(LS_IDLE_THRESHOLD, String(idleThresholdMinutes)) } catch { /* ignore */ } }, [idleThresholdMinutes])
   useEffect(() => { try { localStorage.setItem(LS_ALLOWED_IDLE, String(allowedIdleMinutes)) } catch { /* ignore */ } }, [allowedIdleMinutes])
 
+  // Номер последнего запроса: если дату/смену переключили быстрее, чем
+  // пришёл ответ, ответ по старому выбору игнорируется — иначе он мог
+  // перезаписать уже загруженную статистику за новую дату.
+  const summaryReqRef = useRef(0)
   const loadSummary = useCallback(async ({ silent = false } = {}) => {
+    const reqId = ++summaryReqRef.current
     if (!silent) setLoading(true)
     await withMinDuration(async () => {
       try {
         const data = await API_SUMMARY_BY_OP[operation](dateStr, shift, idleThresholdMinutes)
+        if (reqId !== summaryReqRef.current) return
         setSummary(data)
         setError('')
       } catch (err) {
+        if (reqId !== summaryReqRef.current) return
         setSummary(null)
         setError(err.message || 'Не удалось загрузить статистику')
       }
     })
-    setLoading(false)
+    if (reqId === summaryReqRef.current) setLoading(false)
   }, [dateStr, shift, operation, idleThresholdMinutes])
 
   useEffect(() => { loadSummary() }, [dateStr, shift, operation]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -621,11 +629,21 @@ export default function StatsPage() {
   }
 
   if (loading && !summary) {
-    return <div className="mx-auto w-full max-w-[1400px] p-6"><Spinner label="Загрузка статистики..." /></div>
+    return <div className="mx-auto w-full p-6"><Spinner label="Загрузка статистики..." /></div>
   }
 
+  // Перезагрузка при смене даты/смены/операции: старые цифры остаются на
+  // месте (без прыжков вёрстки), но приглушены, а сверху — плашка с тем,
+  // что именно грузится.
+  const reloading = loading && !!summary
+  const busyCls = cn('transition-opacity duration-200', reloading && 'pointer-events-none select-none opacity-40')
+  const [ly, lm, ld] = (dateStr || '').split('-').map(Number)
+  const loadingLabel = ly
+    ? `${new Date(ly, lm - 1, ld).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} · ${shift === 'day' ? 'день' : 'ночь'}`
+    : ''
+
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Статистика</h1>
@@ -656,19 +674,21 @@ export default function StatsPage() {
         onFetchHourFromChange={setFetchHourFrom} onFetchHourToChange={setFetchHourTo}
         lastUpdated={status?.lastRun} engineNote={engineNote} autoFetchEnabled={autoFetchEnabled}
         onFetch={handleFetch} onRequestFetch={handleRequestFetch} onRecheck={handleRecheck} fetching={fetching}
-        actions={actions}
+        actions={actions} loading={reloading}
       />
 
-      {!isOperationStats && <StatsCards summary={summary} shift={shift} dateStr={dateStr} />}
+      {!isOperationStats && <StatsCards summary={summary} shift={shift} dateStr={dateStr} loading={reloading} />}
 
       {!isOperationStats && <MissingWeightPanel />}
 
       <CompanyFilter companies={companies} value={filterCompany} onChange={setFilterCompany} />
 
       {!isOperationStats && (
-        <StatsCard title="Сводка по компаниям">
-          <CompanySummaryTable companySummary={summary?.companySummary} filterCompany={filterCompany} />
-        </StatsCard>
+        <div className={busyCls} aria-busy={reloading}>
+          <StatsCard title="Сводка по компаниям">
+            <CompanySummaryTable companySummary={summary?.companySummary} filterCompany={filterCompany} />
+          </StatsCard>
+        </div>
       )}
 
       {!isOperationStats && (
@@ -677,9 +697,11 @@ export default function StatsPage() {
         </StatsCard>
       )}
 
-      <StatsCard title="Пики по часам">
-        <HourlyChart hourly={chartHourly} />
-      </StatsCard>
+      <div className={busyCls} aria-busy={reloading}>
+        <StatsCard title="Пики по часам">
+          <HourlyChart hourly={chartHourly} />
+        </StatsCard>
+      </div>
 
       <StatsCard
         title="Сотрудники по часам"
@@ -713,13 +735,23 @@ export default function StatsPage() {
         {effectiveHeMode === 'monthly' ? (
           <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} zoneCatalog={dayZoneCatalog} />
         ) : (
+          <div className={busyCls} aria-busy={reloading}>
           <HourlyEmployeeTable
             mode={effectiveHeMode} hours={hours} rows={mergedEmployeeRows} isOperationStats={isOperationStats}
             operation={operation} shift={shift} dateStr={dateStr}
             allowedIdleMinutes={allowedIdleMinutes}
           />
+          </div>
         )}
       </StatsCard>
+      {reloading && (
+        <div className="pointer-events-none sticky bottom-6 z-30 flex h-0 items-end justify-center" role="status" aria-live="polite">
+          <span className="page-in inline-flex h-10 items-center gap-2.5 rounded-full border border-line bg-[var(--glass)] px-4 text-sm font-medium shadow-float backdrop-blur-xl">
+            <Loader2 className="size-4 animate-spin text-brand" />
+            Загружаю статистику{loadingLabel ? ` за ${loadingLabel}` : ''}…
+          </span>
+        </div>
+      )}
     </div>
   )
 }

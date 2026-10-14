@@ -89,7 +89,7 @@ export default function ViolationsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Нарушения</h1>
         <span className="text-sm text-muted-foreground">{violations.length} записей</span>

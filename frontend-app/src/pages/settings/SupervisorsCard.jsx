@@ -4,15 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingCard } from './SettingCard'
 import { getSupervisors, saveSupervisors } from '@/pages/docs/builders'
-import { UserCog, X } from 'lucide-react'
+import { Avatar, Empty } from './ui'
+import { Plus, UserCog, X } from 'lucide-react'
 
-// Список «Начальники смен» для раздела «Документы» — уже управлялся прямо
-// внутри DocsPage.jsx (шестерёнка настроек рядом с полем «Начальник смены
-// (составил)»), но только оттуда. Пользователь попросил (2026-07-15) ту же
-// возможность добавить в Настройки → Документы — тот же localStorage-ключ
-// (`memos_supervisors`, общий с ConsolidationPage.jsx), просто ещё одна
-// точка входа к тому же списку: правки здесь сразу видны и в DocsPage.jsx,
-// и наоборот.
+// Список «Начальники смен» — тот же localStorage-ключ (`memos_supervisors`),
+// что и у выпадающего поля «Начальник смены (составил)» в служебных записках
+// (ConsolidationPage.jsx): правки здесь сразу видны там.
 export function SupervisorsCard() {
   const [supervisors, setSupervisors] = useState(() => getSupervisors())
   const [input, setInput] = useState('')
@@ -36,29 +33,31 @@ export function SupervisorsCard() {
   }
 
   return (
-    <SettingCard icon={UserCog} title="Начальники смен" subtitle="Список для выпадающего поля «Начальник смены (составил)» в разделе «Документы»">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Input
-          className="h-8 w-56"
-          placeholder="Иванов И.И."
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSupervisor() } }}
-        />
-        <Button size="sm" onClick={addSupervisor}>+ Добавить</Button>
-      </div>
+    <SettingCard icon={UserCog} title="Начальники смен" subtitle="Варианты для поля «Начальник смены (составил)» в служебных записках">
+      <form className="mb-4 flex gap-2" onSubmit={e => { e.preventDefault(); addSupervisor() }}>
+        <Input className="max-w-xs" placeholder="Иванов И.И." value={input} onChange={e => setInput(e.target.value)} />
+        <Button type="submit" variant="outline" disabled={!input.trim()}><Plus className="size-4" /> Добавить</Button>
+      </form>
 
       {supervisors.length === 0 ? (
-        <div className="text-sm text-muted-foreground">Список пуст</div>
+        <Empty>Список пуст — добавьте первого начальника смены</Empty>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <div className="flex flex-wrap gap-2">
           {supervisors.map((name, i) => (
-            <li key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
-              <span>{name}</span>
-              <Button size="icon" variant="ghost" onClick={() => removeSupervisor(i)} title="Удалить"><X className="size-3.5" /></Button>
-            </li>
+            <span key={name + i} className="group inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-1 pl-1 text-sm shadow-card">
+              <Avatar name={name} className="size-6 rounded-full text-[10px]" />
+              {name}
+              <button
+                type="button"
+                onClick={() => removeSupervisor(i)}
+                title="Убрать из списка"
+                className="grid size-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </button>
+            </span>
           ))}
-        </ul>
+        </div>
       )}
     </SettingCard>
   )

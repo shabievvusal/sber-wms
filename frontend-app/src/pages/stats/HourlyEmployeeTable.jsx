@@ -5,6 +5,7 @@ import {
   buildZoneCatalog, computeWorkedMinutesInShift, fmtNum, fmtWeight, formatTime,
   getElapsedShiftMinutes, hourRangeLabel, isKdkZoneKey, shortFio, zoneColor, zoneLabel,
 } from './format'
+import { Select } from '@/components/ui/select'
 
 const thCls = 'h-8 border px-2 text-center text-[11px] whitespace-nowrap'
 const tdCls = 'border px-2 py-1.5 text-center text-[13px] whitespace-nowrap'
@@ -171,22 +172,22 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
       {!showIdlesCol && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-xs text-muted-foreground">Час / зона:</span>
-          <select
+          <Select
             className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
             value={filterHour}
             onChange={e => setFilterHour(e.target.value === '' ? '' : Number(e.target.value))}
           >
             <option value="">Все часы</option>
             {hours.map(h => <option key={h} value={h}>{hourRangeLabel(h)}</option>)}
-          </select>
-          <select
+          </Select>
+          <Select
             className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
             value={filterZone}
             onChange={e => setFilterZone(e.target.value)}
           >
             <option value="">Все зоны</option>
             {zoneCatalog.map(z => <option key={z.key} value={z.key}>{z.label}</option>)}
-          </select>
+          </Select>
           {hourOnlyActive && (
             <button type="button" className="text-xs font-medium text-primary" onClick={() => { setFilterHour(''); setFilterZone('') }}>
               Сбросить

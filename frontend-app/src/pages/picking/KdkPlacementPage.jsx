@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { fmtNum, fmtKg, mapLimit } from './format'
 import { unwrapValue, summarizePblTask } from './pblTask'
 import { RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -207,7 +208,7 @@ export default function KdkPlacementPage() {
     : 'Данные не загружены'
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Раскладка КДК</h1>
         <p className="text-sm text-muted-foreground">Задачи раскладки по ЕО, стоящим на воротах: товар, штуки, вес и степы</p>
@@ -220,12 +221,12 @@ export default function KdkPlacementPage() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <select className={selectClass} value={gateId} onChange={e => setGateId(e.target.value)}>
+        <Select className={selectClass} value={gateId} onChange={e => setGateId(e.target.value)}>
           <option value="">Все ворота{zones.length ? ` (${zones.reduce((n, z) => n + (z.handlingUnitsCount || 0), 0)} ЕО)` : ''}</option>
           {zones.map(zone => (
             <option key={zone.gateId} value={zone.gateId}>{zone.name} ({fmtNum(zone.handlingUnitsCount)} ЕО)</option>
           ))}
-        </select>
+        </Select>
         <Input className="w-56" placeholder="ЕО, товар, поставщик" value={search} onChange={e => setSearch(e.target.value)} />
         <Button onClick={load} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}

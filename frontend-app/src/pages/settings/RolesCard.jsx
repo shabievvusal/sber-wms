@@ -3,171 +3,130 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { SettingCard } from './SettingCard'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
 import { ALL_MODULES, VS_MODULE_LABELS } from './constants'
-import { Theater, X } from 'lucide-react'
+import { Field, IconAction, ModuleChips } from './ui'
+import { Lock, Pencil, Plus, Search, Shield, Trash2 } from 'lucide-react'
 
-function toggleInSet(setFn, key) {
-  setFn(prev => {
+/** Окно создания/правки роли. role = null → новая. */
+function RoleDialog({ role, onClose, onSaved }) {
+  const isNew = !role
+  const [label, setLabel] = useState(role?.label || '')
+  const [modules, setModules] = useState(() => new Set(role?.modules || []))
+  const [saving, setSaving] = useState(false)
+
+  const toggle = m => setModules(prev => {
     const next = new Set(prev)
-    next.has(key) ? next.delete(key) : next.add(key)
+    next.has(m) ? next.delete(m) : next.add(m)
     return next
   })
+
+  const save = async () => {
+    if (!label.trim()) { toast.error('Введите название роли'); return }
+    setSaving(true)
+    try {
+      if (isNew) await api.addVsAdminRole('', label.trim(), [...modules])
+      else await api.updateVsAdminRole(role.key, label.trim(), [...modules])
+      toast.success(isNew ? 'Роль добавлена' : 'Роль обновлена')
+      onSaved()
+    } catch (err) {
+      toast.error('Ошибка: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{isNew ? 'Новая роль' : 'Изменить роль'}</DialogTitle>
+          <DialogDescription>{isNew ? 'Название и разделы, доступные пользователям с этой ролью' : `Ключ: ${role.key}`}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <Field label="Название">
+            <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="Например, Кладовщик" autoFocus />
+          </Field>
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Разделы</div>
+            <ModulesCheckboxGroup
+              items={ALL_MODULES}
+              labels={VS_MODULE_LABELS}
+              selected={modules}
+              onToggle={toggle}
+              onSetAll={all => setModules(all ? new Set(ALL_MODULES) : new Set())}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button onClick={save} disabled={saving}>{saving ? 'Сохранение…' : isNew ? 'Создать роль' : 'Сохранить'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export function RolesCard({ roles, onChanged }) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [newLabel, setNewLabel] = useState('')
-  const [newModules, setNewModules] = useState(() => new Set())
-  const [editKey, setEditKey] = useState(null)
-  const [editLabel, setEditLabel] = useState('')
-  const [editModules, setEditModules] = useState(() => new Set())
+  const [dialog, setDialog] = useState(null) // null — закрыто, { role: null } — новая, { role } — правка
   const [search, setSearch] = useState('')
 
-  const handleAdd = async () => {
-    if (!newLabel.trim()) { toast.error('Введите название роли'); return }
+  const handleDelete = async r => {
+    if (!confirm(`Удалить роль «${r.label}»?`)) return
     try {
-      await api.addVsAdminRole('', newLabel.trim(), [...newModules])
-      toast.success('Роль добавлена')
-      setShowAdd(false); setNewLabel(''); setNewModules(new Set())
-      onChanged(null)
-    } catch (err) { toast.error('Ошибка: ' + err.message) }
-  }
-
-  const handleUpdate = async () => {
-    try {
-      await api.updateVsAdminRole(editKey, editLabel.trim(), [...editModules])
-      toast.success('Роль обновлена')
-      onChanged(null)
-      setEditKey(null)
-    } catch (err) { toast.error('Ошибка: ' + err.message) }
-  }
-
-  const handleDelete = async key => {
-    if (!confirm('Удалить роль?')) return
-    try {
-      await api.deleteVsAdminRole(key)
+      await api.deleteVsAdminRole(r.key)
       toast.success('Роль удалена')
       onChanged(null)
     } catch (err) { toast.error('Ошибка: ' + err.message) }
   }
-
-  const startEdit = r => { setEditKey(r.key); setEditLabel(r.label); setEditModules(new Set(r.modules || [])) }
 
   const q = search.trim().toLowerCase()
   const filtered = roles.filter(r => !q || r.key.includes(q) || r.label.toLowerCase().includes(q))
 
   return (
     <SettingCard
-      icon={Theater}
+      icon={Shield}
       title="Роли"
-      subtitle="Встроенные и кастомные роли с правами на модули"
-      actions={<Button size="sm" onClick={() => setShowAdd(v => !v)}>+ Новая роль</Button>}
+      subtitle="Набор разделов, который получает пользователь с этой ролью"
+      actions={<Button size="sm" variant="outline" onClick={() => setDialog({ role: null })}><Plus className="size-3.5" /> Новая роль</Button>}
+      bodyClassName="p-2"
     >
-      <Input className="mb-3" placeholder="Поиск по ключу или названию..." value={search} onChange={e => setSearch(e.target.value)} />
+      {dialog && <RoleDialog role={dialog.role} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); onChanged(null) }} />}
 
-      {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/30 p-4">
-          <div className="font-medium">Новая роль</div>
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Название</span>
-            <Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Кладовщик" autoFocus />
-          </label>
-          <div className="space-y-1.5 text-sm">
-            <span className="font-medium">Модули</span>
-            <ModulesCheckboxGroup items={ALL_MODULES} labels={VS_MODULE_LABELS} selected={newModules} onToggle={m => toggleInSet(setNewModules, m)} />
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleAdd}>Добавить</Button>
-            <Button size="sm" variant="secondary" onClick={() => { setShowAdd(false); setNewLabel(''); setNewModules(new Set()) }}>Отмена</Button>
-          </div>
+      {roles.length > 6 && (
+        <div className="relative px-2 pt-1 pb-2">
+          <Search className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-9" placeholder="Поиск роли" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       )}
 
-      {/* Мобильные карточки — до md (768px). Строка редактирования становится
-          вертикальной мини-формой вместо строки с инпутом и чекбоксами. */}
-      <div className="divide-y rounded-md border md:hidden">
-        {filtered.map(r => editKey === r.key ? (
-          <div key={r.key} className="space-y-2 p-3 text-sm">
-            <div className="text-xs text-muted-foreground">{r.key}</div>
-            <Input className="h-8" value={editLabel} onChange={e => setEditLabel(e.target.value)} />
-            <ModulesCheckboxGroup items={ALL_MODULES} labels={VS_MODULE_LABELS} selected={editModules} onToggle={m => toggleInSet(setEditModules, m)} />
-            <div className="flex gap-1.5">
-              <Button size="sm" onClick={handleUpdate}>Сохранить</Button>
-              <Button size="icon" variant="ghost" onClick={() => setEditKey(null)}><X className="size-3.5" /></Button>
+      <ul>
+        {filtered.map(r => (
+          <li key={r.key} className="group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50">
+            <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${r.builtin ? 'bg-surface-2 text-ink-2' : 'bg-brand-soft text-brand'}`}>
+              {r.builtin ? <Lock className="size-4" /> : <Shield className="size-4" />}
+            </span>
+            <div className="min-w-0 basis-44">
+              <div className="truncate text-sm font-medium">{r.label}</div>
+              <div className="truncate font-mono text-xs text-muted-foreground">{r.key}{r.builtin ? ' · встроенная' : ''}</div>
             </div>
-          </div>
-        ) : (
-          <div key={r.key} className="space-y-1.5 p-3 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className={r.builtin ? 'font-semibold' : 'font-medium'}>{r.label}</span>
-              {r.builtin && <Badge variant="secondary">встроенная</Badge>}
+            <div className="min-w-0 flex-1 basis-60">
+              <ModuleChips modules={r.modules} max={4} />
             </div>
-            <div className="text-xs text-muted-foreground">{r.key}</div>
-            <div className="truncate text-xs text-muted-foreground" title={r.modules?.map(m => VS_MODULE_LABELS[m] || m).join(', ')}>
-              {r.modules?.length ? r.modules.map(m => VS_MODULE_LABELS[m] || m).join(', ') : '—'}
+            <div className="flex w-[72px] shrink-0 justify-end gap-0.5">
+              {!r.builtin && (
+                <>
+                  <IconAction icon={Pencil} title="Изменить роль" tone="brand" onClick={() => setDialog({ role: r })} />
+                  <IconAction icon={Trash2} title="Удалить роль" tone="danger" onClick={() => handleDelete(r)} />
+                </>
+              )}
             </div>
-            {!r.builtin && (
-              <div className="flex gap-1.5 pt-0.5">
-                <Button size="sm" variant="outline" onClick={() => startEdit(r)}>Изменить</Button>
-                <Button size="sm" variant="destructive" onClick={() => handleDelete(r.key)}>Удалить</Button>
-              </div>
-            )}
-          </div>
+          </li>
         ))}
-      </div>
-
-      {/* Десктопная таблица — от md и шире */}
-      <div className="hidden overflow-x-auto rounded-md border md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Ключ</TableHead>
-              <TableHead>Название</TableHead>
-              <TableHead>Модули</TableHead>
-              <TableHead className="text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map(r => editKey === r.key ? (
-              <TableRow key={r.key}>
-                <TableCell className="text-xs text-muted-foreground">{r.key}</TableCell>
-                <TableCell><Input className="h-8" value={editLabel} onChange={e => setEditLabel(e.target.value)} /></TableCell>
-                <TableCell>
-                  <ModulesCheckboxGroup items={ALL_MODULES} labels={VS_MODULE_LABELS} selected={editModules} onToggle={m => toggleInSet(setEditModules, m)} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <Button size="sm" onClick={handleUpdate}>Сохранить</Button>
-                    <Button size="icon" variant="ghost" onClick={() => setEditKey(null)}><X className="size-3.5" /></Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              <TableRow key={r.key}>
-                <TableCell className="text-xs text-muted-foreground">{r.key}</TableCell>
-                <TableCell className={r.builtin ? 'font-semibold' : ''}>
-                  {r.label} {r.builtin && <Badge variant="secondary" className="ml-1">встроенная</Badge>}
-                </TableCell>
-                <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={r.modules?.map(m => VS_MODULE_LABELS[m] || m).join(', ')}>
-                  {r.modules?.length ? r.modules.map(m => VS_MODULE_LABELS[m] || m).join(', ') : '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  {!r.builtin && (
-                    <div className="flex justify-end gap-1.5">
-                      <Button size="sm" variant="outline" onClick={() => startEdit(r)}>Изменить</Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDelete(r.key)}>Удалить</Button>
-                    </div>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+        {!filtered.length && <li className="p-6 text-center text-sm text-muted-foreground">Ничего не найдено</li>}
+      </ul>
     </SettingCard>
   )
 }

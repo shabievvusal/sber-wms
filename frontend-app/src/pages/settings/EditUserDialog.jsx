@@ -3,12 +3,38 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { Select } from '@/components/ui/select'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { ModulesCheckboxGroup } from './ModulesCheckboxGroup'
 import { ALL_MODULES, VS_MODULE_LABELS, ALL_ACTIONS, VS_ACTION_LABELS } from './constants'
+import { Field } from './ui'
+
+function Section({ title, hint, children }) {
+  return (
+    <section className="space-y-3 border-t border-line pt-4 first:border-0 first:pt-0">
+      <div>
+        <div className="text-sm font-semibold">{title}</div>
+        {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function SwitchRow({ label, desc, checked, onChange }) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-4">
+      <span className="min-w-0">
+        <span className="block text-sm">{label}</span>
+        {desc && <span className="block text-xs text-muted-foreground">{desc}</span>}
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </label>
+  )
+}
 
 /** Порты VsUserEditModal оригинала — те же поля, тот же payload на putVsAdminUser. */
 export function EditUserDialog({ user, open, onOpenChange, roles, emplCompanies = [], onSaved }) {
@@ -53,76 +79,69 @@ export function EditUserDialog({ user, open, onOpenChange, roles, emplCompanies 
     }
   }
 
+  const companyLabels = Object.fromEntries(emplCompanies.map(c => [c, c]))
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isNew ? 'Добавить пользователя' : 'Права и модули'}</DialogTitle>
-          <DialogDescription>{isNew ? 'Логин — номер телефона в формате 79161234567' : login}</DialogDescription>
+          <DialogTitle>{isNew ? 'Новый пользователь' : (name || login)}</DialogTitle>
+          <DialogDescription>{isNew ? 'Логин — номер телефона в формате 79161234567' : `Логин ${login}`}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Логин (номер телефона)</span>
-            <Input value={login} onChange={e => setLogin(e.target.value)} disabled={!isNew} placeholder="79161234567" />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">ФИО</span>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Иванов Иван Иванович" />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Роль</span>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              value={role} onChange={e => setRole(e.target.value)}
-            >
-              {roles.map(r => <option key={r.key} value={r.key}>{r.label}{r.builtin ? '' : ' *'}</option>)}
-            </select>
-          </label>
-          {role === 'manager' && (
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">Компании (через запятую)</span>
-              <Input value={companies} onChange={e => setCompanies(e.target.value)} placeholder="ООО Компания, ИП Иванов" />
-            </label>
-          )}
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Пароль (оставьте пустым, чтобы не менять)</span>
-            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Новый пароль..." />
-          </label>
-          <label className="flex items-center gap-2 text-sm font-normal">
-            <Checkbox checked={allowWithoutToken} onCheckedChange={() => setAllowWithoutToken(v => !v)} />
-            Разрешить вход без токена WMS
-          </label>
-          <label className="flex items-center gap-2 text-sm font-normal">
-            <Checkbox checked={selfOnly} onCheckedChange={() => setSelfOnly(v => !v)} />
-            Видит только свои данные
-          </label>
-          {emplCompanies.length > 0 && (
-            <div className="space-y-1 text-sm">
-              <span className="font-medium">Видимые компании <span className="font-normal text-muted-foreground">(если не выбрано — все)</span></span>
-              <div className="space-y-1.5 pt-1">
-                {emplCompanies.map(c => (
-                  <label key={c} className="flex items-center gap-2 font-normal">
-                    <Checkbox checked={visibleCompanies.has(c)} onCheckedChange={() => toggleSet(setVisibleCompanies, c)} />
-                    {c}
-                  </label>
-                ))}
-              </div>
+        <div className="space-y-5">
+          <Section title="Учётная запись">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Логин (номер телефона)">
+                <Input value={login} onChange={e => setLogin(e.target.value)} disabled={!isNew} placeholder="79161234567" />
+              </Field>
+              <Field label="ФИО">
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Иванов Иван Иванович" />
+              </Field>
+              <Field label="Роль">
+                <Select className="w-full" value={role} onChange={e => setRole(e.target.value)}>
+                  {roles.map(r => <option key={r.key} value={r.key}>{r.label}{r.builtin ? '' : ' *'}</option>)}
+                </Select>
+              </Field>
+              <Field label="Пароль" hint="Оставьте пустым, чтобы не менять">
+                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Новый пароль" />
+              </Field>
+              {role === 'manager' && (
+                <Field label="Компании менеджера" hint="Через запятую" className="sm:col-span-2">
+                  <Input value={companies} onChange={e => setCompanies(e.target.value)} placeholder="ООО Компания, ИП Иванов" />
+                </Field>
+              )}
             </div>
+            <div className="space-y-3 rounded-2xl bg-surface-2/60 p-3.5">
+              <SwitchRow label="Вход без токена WMS" desc="Можно войти только с паролем сайта" checked={allowWithoutToken} onChange={setAllowWithoutToken} />
+              <SwitchRow label="Только свои данные" desc="Видит статистику только по себе" checked={selfOnly} onChange={setSelfOnly} />
+            </div>
+          </Section>
+
+          <Section title="Разделы">
+            <ModulesCheckboxGroup
+              items={ALL_MODULES}
+              labels={VS_MODULE_LABELS}
+              selected={modules}
+              onToggle={m => toggleSet(setModules, m)}
+              onSetAll={all => setModules(all ? new Set(ALL_MODULES) : new Set())}
+            />
+          </Section>
+
+          <Section title="Действия">
+            <ModulesCheckboxGroup items={ALL_ACTIONS} labels={VS_ACTION_LABELS} selected={actions} onToggle={a => toggleSet(setActions, a)} />
+          </Section>
+
+          {emplCompanies.length > 0 && (
+            <Section title="Видимые компании" hint="Если ничего не выбрано — видны все">
+              <ModulesCheckboxGroup items={emplCompanies} labels={companyLabels} selected={visibleCompanies} onToggle={c => toggleSet(setVisibleCompanies, c)} />
+            </Section>
           )}
-          <div className="space-y-1.5 text-sm">
-            <span className="font-medium">Модули</span>
-            <ModulesCheckboxGroup items={ALL_MODULES} labels={VS_MODULE_LABELS} selected={modules} onToggle={m => toggleSet(setModules, m)} />
-          </div>
-          <div className="space-y-1.5 text-sm">
-            <span className="font-medium">Действия</span>
-            <ModulesCheckboxGroup items={ALL_ACTIONS} labels={VS_ACTION_LABELS} selected={actions} onToggle={a => toggleSet(setActions, a)} columns={false} />
-          </div>
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>Отмена</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? 'Сохранение...' : 'Сохранить'}</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

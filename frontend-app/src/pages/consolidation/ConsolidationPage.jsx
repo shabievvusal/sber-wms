@@ -18,6 +18,7 @@ import { ExportReportDialog } from './ExportReportDialog'
 import { printServiceNotes } from './printServiceNote'
 import { setHash } from '@/lib/hashRoute'
 import { RefreshCw, Search, Printer, Download, ExternalLink } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const COMPLAINTS_PER_PAGE = 30
 const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
@@ -199,7 +200,7 @@ export default function ConsolidationPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Жалобы на нарушения</h1>
         <p className="text-sm text-muted-foreground">Раздел исторически называется «Консолидация» — см. PLAN.md</p>
@@ -242,10 +243,10 @@ export default function ConsolidationPage() {
           </Button>
           <div className="ml-auto flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground whitespace-nowrap">Начальник смены:</span>
-            <select className={selectClass} value={supervisor} onChange={e => setSupervisor(e.target.value)}>
+            <Select className={selectClass} value={supervisor} onChange={e => setSupervisor(e.target.value)}>
               <option value="">— Выберите —</option>
               {getSupervisorOptions().map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -275,17 +276,17 @@ export default function ConsolidationPage() {
 
         <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Компания:</span>
-          <select className={selectClass} value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setViolatorPersonFilter(''); setPage(1) }}>
+          <Select className={selectClass} value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setViolatorPersonFilter(''); setPage(1) }}>
             <option value="">Все</option>
             {companyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </Select>
           {companyFilter && (
             <>
               <span className="text-xs text-muted-foreground whitespace-nowrap">Нарушитель:</span>
-              <select className={selectClass} value={violatorPersonFilter} onChange={e => { setViolatorPersonFilter(e.target.value); setPage(1) }}>
+              <Select className={selectClass} value={violatorPersonFilter} onChange={e => { setViolatorPersonFilter(e.target.value); setPage(1) }}>
                 <option value="">Все</option>
                 {violatorOptions.map(({ fio, count }) => <option key={fio} value={fio}>{fio} ({count})</option>)}
-              </select>
+              </Select>
             </>
           )}
           {(companyFilter || violatorPersonFilter) && (

@@ -623,7 +623,7 @@ function ShipmentsPageModern() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[2400px] p-6 space-y-4">
+    <div className="mx-auto w-full p-6 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

@@ -235,7 +235,7 @@ export default function SupplyDetailPage({ row, onBack }) {
 
   if (!row || !detail) {
     return (
-      <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+      <div className="mx-auto w-full space-y-4 p-6">
         <Button variant="secondary" onClick={onBack}><ArrowLeft className="size-4" /> Назад</Button>
         {error && <div className="text-sm text-destructive">{error}</div>}
         {!error && <div className="p-8 text-center text-sm text-muted-foreground">{row ? 'Загрузка...' : 'Поставка не найдена'}</div>}
@@ -255,7 +255,7 @@ export default function SupplyDetailPage({ row, onBack }) {
   }), { planned: 0, actual: 0, units: 0 })
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       {eoOpen && <EoPanel products={detail.products} remainingMap={error ? null : remainingMap} onOpenChange={setEoOpen} />}
       {executorsOpen && <ExecutorsPanel users={respUsers || []} onOpenChange={setExecutorsOpen} />}
 

@@ -8,6 +8,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { Upload, Download, ChevronDown, ChevronRight, TriangleAlert, ArrowRight } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const PAGE_SIZE = 25
 
@@ -167,7 +168,7 @@ export default function StockConsolidationPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Объединение остатков</h1>
       </div>
@@ -208,12 +209,12 @@ export default function StockConsolidationPage() {
             <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Температурный режим
             </label>
-            <select
+            <Select
               value={temperature} onChange={e => setTemperature(e.target.value)}
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
             >
               {TEMPERATURE_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
-            </select>
+            </Select>
           </div>
 
           <Button size="sm" disabled={loading} onClick={handleSubmit}>

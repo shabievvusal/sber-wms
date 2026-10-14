@@ -113,7 +113,7 @@ export function AutoFetchCard({ isAdmin }) {
           ? `Обновляются сами каждые ${EO_MINUTES} мин, пока включено автообновление — ${fmtLastRun(eoLastRun)}`
           : 'Нужна активная WMS-сессия на этом устройстве — обновлять может только браузер с WMS-токеном'}
       >
-        <Button size="sm" variant="secondary" onClick={handleEoRefresh} disabled={!hasWmsToken || eoRefreshing}>
+        <Button size="sm" variant="outline" onClick={handleEoRefresh} disabled={!hasWmsToken || eoRefreshing}>
           <RefreshCw className={`size-3.5 ${eoRefreshing ? 'animate-spin' : ''}`} />
           {eoRefreshing
             ? (eoProgress ? `Обновление... ${eoProgress.done + 1}/${eoProgress.total}` : 'Обновление...')
@@ -126,14 +126,14 @@ export function AutoFetchCard({ isAdmin }) {
       >
         <div className="flex items-center gap-2">
           <Input
-            className="w-40"
+            className="tabular w-40"
             value={timesText}
             onChange={e => setTimesText(e.target.value)}
             placeholder="09:10, 21:10"
             disabled={!isAdmin || saving}
           />
           {isAdmin && (
-            <Button size="sm" variant="secondary" onClick={handleSave} disabled={saving}>
+            <Button size="sm" variant="outline" onClick={handleSave} disabled={saving}>
               {saving ? 'Сохранение...' : 'Сохранить'}
             </Button>
           )}

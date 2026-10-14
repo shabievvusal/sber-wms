@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { DEFAULT_STATUSES, STATUS_LABELS, TEMP_LABELS, TEMP_OPTIONS, ZONE_OPTIONS } from './constants'
 import { fmtDay, fmtKg, fmtLiters, fmtNum, userName, dateToApiFrom, dateToApiTo, selectedOrAll } from './format'
 import { RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const PAGE_SIZE = 100
 
@@ -103,7 +104,7 @@ export default function PieceSelectionPage() {
   }, [filtered, sort])
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Штучный отбор</h1>
         <p className="text-sm text-muted-foreground">Задания комплектации по штучному отбору</p>
@@ -118,18 +119,18 @@ export default function PieceSelectionPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Input className="w-56" placeholder="Поиск по ЦФЗ" value={search} onChange={e => setSearch(e.target.value)} />
         <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} placeholder="Период" />
-        <select className={selectClass} value={status} onChange={e => setStatus(e.target.value)}>
+        <Select className={selectClass} value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">Все статусы</option>
           {DEFAULT_STATUSES.map(v => <option key={v} value={v}>{STATUS_LABELS[v] || v}</option>)}
-        </select>
-        <select className={selectClass} value={zoneId} onChange={e => setZoneId(e.target.value)}>
+        </Select>
+        <Select className={selectClass} value={zoneId} onChange={e => setZoneId(e.target.value)}>
           <option value="">Все зоны</option>
           {ZONE_OPTIONS.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-        </select>
-        <select className={selectClass} value={temperatureMode} onChange={e => setTemperatureMode(e.target.value)}>
+        </Select>
+        <Select className={selectClass} value={temperatureMode} onChange={e => setTemperatureMode(e.target.value)}>
           <option value="">Все температуры</option>
           {TEMP_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
+        </Select>
         <Button onClick={load} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}
         </Button>

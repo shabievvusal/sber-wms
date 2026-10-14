@@ -4,6 +4,7 @@ import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
 
@@ -62,27 +63,27 @@ export function EditComplaintDialog({ complaint, onOpenChange, onSaved }) {
         <div className="space-y-3">
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Компания</span>
-            <select className={selectClass} value={company} onChange={e => { setCompany(e.target.value); setViolator('') }}>
+            <Select className={selectClass} value={company} onChange={e => { setCompany(e.target.value); setViolator('') }}>
               <option value="">— Выберите компанию —</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </Select>
           </label>
 
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Сотрудник (нарушитель)</span>
-            <select className={selectClass} value={violator} onChange={e => setViolator(e.target.value)}>
+            <Select className={selectClass} value={violator} onChange={e => setViolator(e.target.value)}>
               <option value="">— Выберите сотрудника —</option>
               {employeesForCompany.map(e => <option key={e.fio} value={e.fio}>{e.fio}</option>)}
-            </select>
+            </Select>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-1 text-sm">
               <span className="font-medium">Где выполнял задачу</span>
-              <select className={selectClass} value={taskArea} onChange={e => setTaskArea(e.target.value)}>
+              <Select className={selectClass} value={taskArea} onChange={e => setTaskArea(e.target.value)}>
                 <option value="storage">В хранении</option>
                 <option value="kdk">В КДК</option>
-              </select>
+              </Select>
             </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium">Место</span>

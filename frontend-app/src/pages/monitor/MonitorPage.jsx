@@ -290,14 +290,14 @@ export default function MonitorPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-[1200px] p-6">
+      <div className="mx-auto w-full p-6">
         <Spinner label="Загрузка мониторинга..." />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Мониторинг смены</h1>
         <p className="text-sm text-muted-foreground">Перекличка и живая активность сотрудников на складе</p>

@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/components
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 const thCls = 'h-8 px-2 text-[11px]'
@@ -198,20 +199,20 @@ export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] })
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Период:</span>
         <DateRangePicker className="h-8" from={dateFrom} to={dateTo} onChange={({ from, to }) => { setDateFrom(from); setDateTo(to) }} />
-        <select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
+        <Select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
           <option value="">Все смены</option>
           <option value="day">День (9–21)</option>
           <option value="night">Ночь (21–9)</option>
-        </select>
+        </Select>
         {!isOperationStats && (
-          <select
+          <Select
             className={selectClass}
             style={selectedZone ? { backgroundColor: selectedZone.light, color: selectedZone.text, borderColor: selectedZone.light } : undefined}
             value={zone} onChange={e => setZone(e.target.value)}
           >
             <option value="">Все зоны</option>
             {zoneCatalog.map(z => <option key={z.key} value={z.key}>{z.label}</option>)}
-          </select>
+          </Select>
         )}
         <Button size="sm" variant="secondary" onClick={load} disabled={loading || !dateFrom || !dateTo}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}

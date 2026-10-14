@@ -10,6 +10,7 @@ import {
   todayStr, fmt, fmtPct, loadManual, DEFAULT_PROC_NAMES, FIXED_PROC_NAMES,
   loadProcData, buildHourlyRows, calcRkStats, inboundWindow, shiftWindow, parseMonitoringStats,
 } from './format'
+import { Select } from '@/components/ui/select'
 
 // Перенесено «точь-в-точь» с оригинала (frontend/app/src/pages/reports/HourlyReport.jsx)
 // по прямому запросу пользователя — та же 9-колоночная таблица-ведомость с
@@ -176,13 +177,13 @@ export default function HourlyReport() {
         {availableHours.length > 0 && (
           <div className="flex flex-col gap-[3px]">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">До</label>
-            <select
+            <Select
               value={upToHour} onChange={e => setUpToHour(e.target.value)}
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
             >
               <option value="">Все</option>
               {availableHours.map(h => <option key={h} value={h}>{h}</option>)}
-            </select>
+            </Select>
           </div>
         )}
         {loading && <span className="pb-1 text-xs text-muted-foreground">Загрузка...</span>}

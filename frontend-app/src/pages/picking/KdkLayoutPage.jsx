@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { IDLE_LIMIT_MS, ZONE_OPTIONS, TEMP_OPTIONS } from './constants'
 import { fmtAgo, fmtNum, formatTime, shortFio, userName, dateToApiFrom, dateToApiTo, mapLimit } from './format'
 import { RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -197,7 +198,7 @@ export default function KdkLayoutPage() {
   }, [filteredRows, sort])
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Зависшие задачи</h1>
         <p className="text-sm text-muted-foreground">КДК и штучный отбор: исполнитель, ТСД, последний пик и простой</p>
@@ -213,15 +214,15 @@ export default function KdkLayoutPage() {
         <Button onClick={load} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Обновить'}
         </Button>
-        <select className={selectClass} value={operationFilter} onChange={e => setOperationFilter(e.target.value)}>
+        <Select className={selectClass} value={operationFilter} onChange={e => setOperationFilter(e.target.value)}>
           <option value="">Все операции</option>
           {operations.map(v => <option key={v} value={v}>{v}</option>)}
-        </select>
-        <select className={selectClass} value={idleFilter} onChange={e => setIdleFilter(e.target.value)}>
+        </Select>
+        <Select className={selectClass} value={idleFilter} onChange={e => setIdleFilter(e.target.value)}>
           <option value="">Весь простой</option>
           <option value="idle">Больше 5 минут</option>
           <option value="active">До 5 минут</option>
-        </select>
+        </Select>
         <Input className="w-56" placeholder="Исполнитель, ЕО" value={query} onChange={e => setQuery(e.target.value)} />
         <span className="ml-auto text-sm text-muted-foreground">{lastUpdated ? `Обновлено: ${formatTime(lastUpdated)}` : 'Данные не загружены'}</span>
       </div>

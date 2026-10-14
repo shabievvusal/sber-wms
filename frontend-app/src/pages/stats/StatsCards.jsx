@@ -5,7 +5,7 @@ import { fmtNum, fmtWeight, shiftLabel } from './format'
 // Плитка показателя в стиле WMS (supervisor/common.tsx → Stat): цветной
 // значок · подпись, под ними крупное значение. Акцентная плитка — с
 // фирменным градиентом.
-function Tile({ Icon, label, value, color = 'var(--brand)', accent }) {
+function Tile({ Icon, label, value, color = 'var(--brand)', accent, loading }) {
   return (
     <div className={cn(
       'rounded-3xl border p-4 shadow-card transition-transform duration-200 hover:-translate-y-0.5',
@@ -20,26 +20,28 @@ function Tile({ Icon, label, value, color = 'var(--brand)', accent }) {
         </span>
         <span className={cn('line-clamp-2 text-[13px] font-medium leading-tight', accent ? 'text-white/85' : 'text-ink-2')} title={label}>{label}</span>
       </div>
-      <div className="tabular mt-3 truncate text-[26px] font-semibold leading-tight tracking-tight">{value}</div>
+      {loading
+        ? <div className={cn('mt-3 h-[32px] w-2/3 animate-pulse rounded-lg', accent ? 'bg-white/25' : 'bg-surface-2')} />
+        : <div className="tabular mt-3 truncate text-[26px] font-semibold leading-tight tracking-tight">{value}</div>}
     </div>
   )
 }
 
 // 8 KPI-плиток — перенесено из оригинала (StatsCards.jsx), только для
 // операции «Комплектация» (для остальных 3 операций скрыты, как и в оригинале).
-export function StatsCards({ summary, shift, dateStr }) {
+export function StatsCards({ summary, shift, dateStr, loading }) {
   const hourly = summary?.hourly || []
   const storageOps = hourly.reduce((s, h) => s + (h.storageOps || 0), 0)
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
-      <Tile Icon={Package} label="Операций" value={fmtNum(summary?.totalOps)} color="#2a78d6" />
-      <Tile Icon={ClipboardList} label="Задач (хранение)" value={fmtNum(storageOps)} color="#eb6834" />
-      <Tile Icon={Hash} label="Единиц товара" value={fmtNum(summary?.totalQty)} accent />
-      <Tile Icon={Scale} label="Вес (хранение)" value={fmtWeight(summary?.totalWeightStorageGrams)} color="#1baf7a" />
-      <Tile Icon={Scale} label="Вес (КДК)" value={fmtWeight(summary?.totalWeightKdkGrams)} color="#2a78d6" />
-      <Tile Icon={Scale} label="Вес итог" value={fmtWeight(summary?.totalWeightGrams)} color="#7c3aed" />
-      <Tile Icon={HardHat} label="Сотрудников" value={fmtNum(summary?.executors?.length)} color="#eda100" />
+      <Tile loading={loading} Icon={Package} label="Операций" value={fmtNum(summary?.totalOps)} color="#2a78d6" />
+      <Tile loading={loading} Icon={ClipboardList} label="Задач (хранение)" value={fmtNum(storageOps)} color="#eb6834" />
+      <Tile loading={loading} Icon={Hash} label="Единиц товара" value={fmtNum(summary?.totalQty)} accent />
+      <Tile loading={loading} Icon={Scale} label="Вес (хранение)" value={fmtWeight(summary?.totalWeightStorageGrams)} color="#1baf7a" />
+      <Tile loading={loading} Icon={Scale} label="Вес (КДК)" value={fmtWeight(summary?.totalWeightKdkGrams)} color="#2a78d6" />
+      <Tile loading={loading} Icon={Scale} label="Вес итог" value={fmtWeight(summary?.totalWeightGrams)} color="#7c3aed" />
+      <Tile loading={loading} Icon={HardHat} label="Сотрудников" value={fmtNum(summary?.executors?.length)} color="#eda100" />
       <Tile Icon={Calendar} label="Смена" value={<span className="block truncate text-sm font-semibold leading-snug" title={shiftLabel(dateStr, shift)}>{shiftLabel(dateStr, shift)}</span>} color="#e87ba4" />
     </div>
   )

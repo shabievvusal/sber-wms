@@ -3,14 +3,24 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
+import { Select } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
-import { Trash2, Search, TriangleAlert } from 'lucide-react'
+import { Field } from './ui'
+import { Search, Trash2, TriangleAlert } from 'lucide-react'
 
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+const DOMAINS = [
+  { key: 'ops', label: 'Операции' },
+  { key: 'placement', label: 'Раскладка' },
+  { key: 'receiving', label: 'Приёмка' },
+  { key: 'remains', label: 'Остатки' },
+]
 
 // Только admin/developer (см. SettingsPage.jsx) — безвозвратное удаление
 // боевых данных сразу из 4 доменов статистики (wms_ops/placement/receiving/
@@ -70,66 +80,51 @@ export function DeleteShiftDataCard() {
   return (
     <SettingCard
       icon={Trash2}
+      danger
       title="Удаление данных за смену"
-      subtitle="Безвозвратно удаляет статистику за выбранную смену сразу из всех 4 доменов (операции, раскладка, приёмка, остатки)"
+      subtitle="Безвозвратно стирает статистику смены сразу из операций, раскладки, приёмки и остатков"
     >
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-[3px]">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дата</label>
-          <Input
-            type="date" value={date} className="w-40"
-            onChange={e => { setDate(e.target.value); resetCheck() }}
-          />
-        </div>
-        <div className="flex flex-col gap-[3px]">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Смена</label>
-          <select
-            value={shift}
-            onChange={e => { setShift(e.target.value); resetCheck() }}
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-          >
+        <Field label="Дата">
+          <DatePicker className="w-44" value={date} onChange={e => { setDate(e.target.value); resetCheck() }} />
+        </Field>
+        <Field label="Смена">
+          <Select className="w-36" value={shift} onChange={e => { setShift(e.target.value); resetCheck() }}>
             <option value="day">Дневная</option>
             <option value="night">Ночная</option>
-          </select>
-        </div>
-        <Button size="sm" variant="outline" disabled={checking || deleting} onClick={handleCheck}>
-          <Search /> {checking ? 'Проверяем...' : 'Проверить'}
+          </Select>
+        </Field>
+        <Button variant="outline" disabled={checking || deleting} onClick={handleCheck}>
+          <Search className="size-4" /> {checking ? 'Считаю…' : 'Посчитать записи'}
         </Button>
-        {canDelete && (
-          <Button size="sm" variant="destructive" disabled={deleting} onClick={handleDelete}>
-            <Trash2 /> {deleting ? 'Удаление...' : `Удалить (${counts.total})`}
-          </Button>
-        )}
       </div>
 
       {counts && (
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Операции</div>
-            <div className="text-lg font-semibold">{counts.ops}</div>
+        <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/[0.04] p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {DOMAINS.map(d => (
+              <div key={d.key}>
+                <div className="text-xs text-muted-foreground">{d.label}</div>
+                <div className="tabular text-xl font-semibold tracking-tight">{Number(counts[d.key] || 0).toLocaleString('ru-RU')}</div>
+              </div>
+            ))}
+            <div>
+              <div className="text-xs text-muted-foreground">Всего</div>
+              <div className={cn('tabular text-xl font-semibold tracking-tight', counts.total ? 'text-destructive' : '')}>{Number(counts.total || 0).toLocaleString('ru-RU')}</div>
+            </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Раскладка</div>
-            <div className="text-lg font-semibold">{counts.placement}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Приёмка</div>
-            <div className="text-lg font-semibold">{counts.receiving}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Остатки</div>
-            <div className="text-lg font-semibold">{counts.remains}</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Итого</div>
-            <div className="text-lg font-semibold text-primary">{counts.total}</div>
-          </div>
+          {canDelete && counts.total > 0 && (
+            <Button variant="destructive" className="mt-4" disabled={deleting} onClick={handleDelete}>
+              <Trash2 className="size-4" /> {deleting ? 'Удаление…' : `Удалить ${Number(counts.total).toLocaleString('ru-RU')} записей`}
+            </Button>
+          )}
+          {canDelete && !counts.total && <div className="mt-3 text-sm text-muted-foreground">За эту смену данных нет — удалять нечего.</div>}
         </div>
       )}
 
       <p className="mt-4 flex items-start gap-1.5 text-xs text-muted-foreground">
-        <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-        Удаление необратимо, резервной копии не создаётся. Кнопка «Удалить» появляется только сразу после «Проверить» для той же даты и смены.
+        <TriangleAlert size={14} className="mt-0.5 shrink-0 text-destructive" />
+        Резервной копии не создаётся. Кнопка удаления появляется только после подсчёта для той же даты и смены.
       </p>
     </SettingCard>
   )

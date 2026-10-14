@@ -3,7 +3,8 @@ import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { OPERATIONS } from './constants'
 import { formatTime, getCurrentShiftInfo } from './format'
-import { RefreshCw, Send, RotateCcw } from 'lucide-react'
+import { RefreshCw, Send, RotateCcw, Loader2 } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -15,7 +16,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text
 export function StatsToolbar({
   dateStr, onDateChange, shift, onShiftChange, operation, onOperationChange,
   fetchHourFrom, fetchHourTo, onFetchHourFromChange, onFetchHourToChange,
-  lastUpdated, engineNote, autoFetchEnabled, onFetch, onRequestFetch, onRecheck, fetching, actions,
+  lastUpdated, engineNote, autoFetchEnabled, onFetch, onRequestFetch, onRecheck, fetching, actions, loading,
 }) {
   const { dateStr: today } = getCurrentShiftInfo()
   const canFetch = actions.includes('fetch_data')
@@ -24,16 +25,23 @@ export function StatsToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
-      <DatePicker value={dateStr} onChange={e => onDateChange(e.target.value)} max={today} />
+      <div className="relative">
+        <DatePicker value={dateStr} onChange={e => onDateChange(e.target.value)} max={today} />
+        {loading && (
+          <span className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-card shadow-card" title="Загрузка…">
+            <Loader2 className="size-3.5 animate-spin text-brand" />
+          </span>
+        )}
+      </div>
 
       <div className="flex gap-1 rounded-md border bg-muted/30 p-0.5">
         <Button size="sm" variant={shift === 'day' ? 'default' : 'ghost'} onClick={() => onShiftChange('day')}>День (9–21)</Button>
         <Button size="sm" variant={shift === 'night' ? 'default' : 'ghost'} onClick={() => onShiftChange('night')}>Ночь (21–9)</Button>
       </div>
 
-      <select className={selectClass} value={operation} onChange={e => onOperationChange(e.target.value)}>
+      <Select className={selectClass} value={operation} onChange={e => onOperationChange(e.target.value)}>
         {OPERATIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </Select>
 
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span>Выгрузить с</span>

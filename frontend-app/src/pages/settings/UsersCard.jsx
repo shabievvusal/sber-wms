@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
+import { cn } from '@/lib/utils'
 import { SettingCard } from './SettingCard'
 import { EditUserDialog } from './EditUserDialog'
-import { VS_MODULE_LABELS, rolesToLabelMap, rolesOrBuiltin } from './constants'
-import { User } from 'lucide-react'
+import { rolesToLabelMap, rolesOrBuiltin } from './constants'
+import { Avatar, IconAction, ModuleChips } from './ui'
+import { KeyRound, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
 
 function fmtDateTime(iso) {
   if (!iso) return null
@@ -33,11 +34,11 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
 
   useEffect(() => { load() }, [])
 
-  const handleDelete = async login => {
-    if (!confirm(`Удалить доступ для ${login}?`)) return
+  const handleDelete = async u => {
+    if (!confirm(`Забрать доступ у ${u.name || u.login}?`)) return
     try {
-      await api.deleteVsAdminUser(login)
-      setUsers(prev => prev.filter(u => u.login !== login))
+      await api.deleteVsAdminUser(u.login)
+      setUsers(prev => prev.filter(x => x.login !== u.login))
       toast.success('Доступ удалён')
     } catch (err) {
       toast.error('Ошибка: ' + err.message)
@@ -45,7 +46,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   }
 
   const roleLabelsMap = rolesToLabelMap(rolesOrBuiltin(roles))
-  const successful = users.filter(u => u.lastSuccessAt).length
+  const withAccess = users.filter(u => u.hasAccess).length
 
   const q = search.trim().toLowerCase()
   const filtered = users.filter(u => !q ||
@@ -63,98 +64,62 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
 
   return (
     <SettingCard
-      icon={User}
-      title="Пользователи"
-      subtitle={`Всего: ${users.length}, успешных входов: ${successful}`}
-      actions={<Button size="sm" onClick={() => setEditUser({})}>+ Добавить</Button>}
+      icon={Users}
+      title="Пользователи сайта"
+      subtitle={loading ? 'Загрузка…' : `${users.length} всего · с доступом ${withAccess}`}
+      actions={<Button size="sm" variant="outline" onClick={() => setEditUser({})}><Plus className="size-3.5" /> Добавить</Button>}
+      bodyClassName="p-2"
     >
-      <Input className="mb-3" placeholder="Поиск по логину, ФИО, роли..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="relative px-2 pt-1 pb-2">
+        <Search className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="pl-9" placeholder="Поиск по номеру, ФИО, роли" value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
       {loading ? (
         <Spinner label="Загрузка пользователей..." />
       ) : !filtered.length ? (
-        <div className="rounded-md border p-6 text-center text-muted-foreground">{users.length ? 'Ничего не найдено' : 'Нет записей о входах'}</div>
+        <div className="p-6 text-center text-sm text-muted-foreground">{users.length ? 'Никого не нашлось' : 'Пока никто не входил'}</div>
       ) : (
-        <>
-          {/* Мобильные карточки — до md (768px) */}
-          <div className="divide-y rounded-md border md:hidden">
-            {filtered.map(u => {
-              let roleText = u.role ? (roleLabelsMap[u.role] || u.role) : '—'
-              if (u.allowWithoutToken) roleText += ' (без токена)'
-              const modulesText = u.modules?.length ? u.modules.map(m => VS_MODULE_LABELS[m] || m).join(', ') : '—'
-              const successText = fmtDateTime(u.lastSuccessAt) || (u.lastAttemptAt ? 'Нет (ошибка)' : '—')
-              const protectedAdmin = u.role === 'admin' && currentUser?.role !== 'developer' && currentUser?.login !== u.login
-              return (
-                <div key={u.login} className="space-y-1.5 p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">{u.login}</span>
-                    <span className="text-xs text-muted-foreground">{roleText}</span>
-                  </div>
-                  <div className="text-muted-foreground">{u.name || '—'}</div>
-                  <div className="truncate text-xs text-muted-foreground" title={modulesText}>Модули: {modulesText}</div>
-                  <div className="text-xs text-muted-foreground">Успешный вход: {successText}</div>
-                  <div className="pt-1">
-                    {protectedAdmin ? (
-                      <span className="text-xs text-muted-foreground">Администратор</span>
-                    ) : u.hasAccess ? (
-                      <div className="flex gap-1.5">
-                        <Button size="sm" variant="outline" onClick={() => setEditUser(u)}>Изменить</Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(u.login)}>Удалить</Button>
-                      </div>
-                    ) : (
-                      <Button size="sm" onClick={() => setEditUser(u)}>Дать доступ</Button>
-                    )}
-                  </div>
+        <ul>
+          {filtered.map(u => {
+            const roleText = u.role ? (roleLabelsMap[u.role] || u.role) : null
+            const success = fmtDateTime(u.lastSuccessAt)
+            const protectedAdmin = u.role === 'admin' && currentUser?.role !== 'developer' && currentUser?.login !== u.login
+            return (
+              <li key={u.login} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50', !u.hasAccess && 'opacity-75')}>
+                <Avatar name={u.name || u.login} className="size-9" />
+                <div className="min-w-0 basis-52">
+                  <div className="truncate text-sm font-medium">{u.name || 'Без имени'}</div>
+                  <div className="tabular truncate text-xs text-muted-foreground">{u.login}</div>
                 </div>
-              )
-            })}
-          </div>
-
-          {/* Десктопная таблица — от md и шире */}
-          <div className="hidden overflow-x-auto rounded-md border md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Логин</TableHead>
-                  <TableHead>ФИО</TableHead>
-                  <TableHead>Роль</TableHead>
-                  <TableHead>Модули</TableHead>
-                  <TableHead>Успешный вход</TableHead>
-                  <TableHead className="text-right">Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map(u => {
-                  let roleText = u.role ? (roleLabelsMap[u.role] || u.role) : '—'
-                  if (u.allowWithoutToken) roleText += ' (без токена)'
-                  const modulesText = u.modules?.length ? u.modules.map(m => VS_MODULE_LABELS[m] || m).join(', ') : '—'
-                  const successText = fmtDateTime(u.lastSuccessAt) || (u.lastAttemptAt ? 'Нет (ошибка)' : '—')
-                  const protectedAdmin = u.role === 'admin' && currentUser?.role !== 'developer' && currentUser?.login !== u.login
-                  return (
-                    <TableRow key={u.login}>
-                      <TableCell className="font-medium">{u.login}</TableCell>
-                      <TableCell className="text-muted-foreground">{u.name || '—'}</TableCell>
-                      <TableCell>{roleText}</TableCell>
-                      <TableCell className="max-w-56 truncate text-xs text-muted-foreground" title={modulesText}>{modulesText}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{successText}</TableCell>
-                      <TableCell className="text-right">
-                        {protectedAdmin ? (
-                          <span className="text-xs text-muted-foreground">Администратор</span>
-                        ) : u.hasAccess ? (
-                          <div className="flex justify-end gap-1.5">
-                            <Button size="sm" variant="outline" onClick={() => setEditUser(u)}>Изменить</Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDelete(u.login)}>Удалить</Button>
-                          </div>
-                        ) : (
-                          <Button size="sm" onClick={() => setEditUser(u)}>Дать доступ</Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </>
+                <div className="flex min-w-0 basis-44 flex-wrap items-center gap-1.5">
+                  {roleText
+                    ? <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">{roleText}</span>
+                    : <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted-foreground">нет доступа</span>}
+                  {u.allowWithoutToken && <span className="inline-flex items-center gap-1 rounded-full bg-warning/12 px-2 py-0.5 text-xs text-warning" title="Может входить без токена WMS"><KeyRound className="size-3" /> без токена</span>}
+                </div>
+                <div className="min-w-0 flex-1 basis-56">
+                  <ModuleChips modules={u.modules} max={3} />
+                </div>
+                <div className="w-32 shrink-0 text-xs text-muted-foreground" title="Последний успешный вход">
+                  {success || (u.lastAttemptAt ? <span className="text-destructive">вход не удался</span> : 'не входил')}
+                </div>
+                <div className="flex w-[104px] shrink-0 justify-end gap-0.5">
+                  {protectedAdmin ? (
+                    <span className="text-xs text-muted-foreground">защищён</span>
+                  ) : u.hasAccess ? (
+                    <>
+                      <IconAction icon={Pencil} title="Права и разделы" tone="brand" onClick={() => setEditUser(u)} />
+                      <IconAction icon={Trash2} title="Забрать доступ" tone="danger" onClick={() => handleDelete(u)} />
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setEditUser(u)}>Дать доступ</Button>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
       {editUser !== null && (

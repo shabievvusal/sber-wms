@@ -3,9 +3,7 @@ import { Menu } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Sidebar, SidebarNav, Brand, findNavLabel, NAV_ITEMS, HIDDEN_PAGE_MODULES, hasModuleAccess } from '@/components/layout/Sidebar'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { Sidebar, MobileDrawer, MobileUserMenu, findNavLabel, NAV_ITEMS, HIDDEN_PAGE_MODULES, hasModuleAccess } from '@/components/layout/Sidebar'
 import LoginPage from '@/components/layout/LoginPage'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { parseHash, setHash } from '@/lib/hashRoute'
@@ -124,32 +122,21 @@ function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Мобильный топ-бар — вместо постоянного бокового меню (Sidebar
             скрыт до `md`, см. Sidebar.jsx). Гамбургер открывает тот же
-            SidebarNav в выезжающем слева Sheet. */}
+            SidebarNav в выезжающей слева панели (MobileDrawer). */}
         <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-[var(--glass)] p-3 backdrop-blur-xl md:hidden print:hidden">
-          <Button size="icon" variant="ghost" onClick={() => setNavOpen(true)}>
+          <Button size="icon" variant="ghost" onClick={() => setNavOpen(true)} aria-label="Открыть меню">
             <Menu className="size-5" />
           </Button>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">{findNavLabel(route.page)}</span>
-          <ThemeToggle id="mobile-theme" />
+          <MobileUserMenu />
         </div>
 
-        <main key={route.page} className="page-in min-w-0 flex-1 overflow-x-hidden">
+        <main key={route.page} className="page-in min-w-0 flex-1 overflow-x-clip">
           <ActivePage initialId={route.id} initialSub={route.sub} />
         </main>
       </div>
 
-      <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent
-          showClose={false}
-          className="inset-y-0 right-auto left-0 w-[264px] max-w-[85vw] gap-4 border-r border-l-0 px-3 py-5 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
-        >
-          <SheetHeader className="space-y-0 border-0 p-0 px-1">
-            <SheetTitle className="sr-only">Меню</SheetTitle>
-            <Brand />
-          </SheetHeader>
-          <SidebarNav activePage={route.page} onNavigate={navigate} layoutPrefix="drawer" />
-        </SheetContent>
-      </Sheet>
+      <MobileDrawer open={navOpen} onOpenChange={setNavOpen} activePage={route.page} onNavigate={navigate} />
     </div>
   )
 }

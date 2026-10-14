@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { Select } from '@/components/ui/select'
 import { SettingCard } from './SettingCard'
 import { rolesOrBuiltin } from './constants'
-import { Clock } from 'lucide-react'
+import { Avatar, IconAction } from './ui'
+import { Check, UserPlus, X } from 'lucide-react'
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
@@ -55,51 +56,36 @@ export function PendingCard({ roles, onApproved }) {
     }
   }
 
-  if (!loading && !pending.length) return null
+  if (loading || !pending.length) return null
 
   return (
-    <SettingCard icon={Clock} title="Заявки на регистрацию" subtitle="Пользователи, ожидающие одобрения доступа" accent>
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ФИО</TableHead>
-              <TableHead>Телефон</TableHead>
-              <TableHead>Дата заявки</TableHead>
-              <TableHead>Роль</TableHead>
-              <TableHead className="text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Загрузка...</TableCell></TableRow>
-            ) : pending.map(p => (
-              <TableRow key={p.phone}>
-                <TableCell className="font-medium">{p.name || '—'}</TableCell>
-                <TableCell>{p.phone}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{fmtDateTime(p.registeredAt)}</TableCell>
-                <TableCell>
-                  <select
-                    className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-                    value={roleFor[p.phone] || 'manager'}
-                    onChange={e => setRoleFor(r => ({ ...r, [p.phone]: e.target.value }))}
-                  >
-                    {rolesOrBuiltin(roles).map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-                  </select>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <Button size="sm" disabled={busy[p.phone]} onClick={() => handleApprove(p.phone)}>
-                      {busy[p.phone] ? '...' : 'Одобрить'}
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleReject(p.phone)}>Отклонить</Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+    <SettingCard
+      icon={UserPlus}
+      title={`Заявки на доступ · ${pending.length}`}
+      subtitle="Выберите роль и одобрите — пользователь сможет войти на сайт"
+      accent
+      bodyClassName="p-2"
+    >
+      <ul>
+        {pending.map(p => (
+          <li key={p.phone} className="flex flex-wrap items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors hover:bg-surface-2/50">
+            <Avatar name={p.name} className="size-10 text-sm" />
+            <div className="min-w-0 flex-1 basis-48">
+              <div className="truncate text-sm font-medium">{p.name || 'Без имени'}</div>
+              <div className="tabular text-xs text-muted-foreground">{p.phone} · заявка {fmtDateTime(p.registeredAt)}</div>
+            </div>
+            <Select className="h-8 w-48" value={roleFor[p.phone] || 'manager'} onChange={e => setRoleFor(r => ({ ...r, [p.phone]: e.target.value }))}>
+              {rolesOrBuiltin(roles).map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </Select>
+            <div className="flex items-center gap-1">
+              <Button size="sm" disabled={busy[p.phone]} onClick={() => handleApprove(p.phone)}>
+                <Check className="size-3.5" /> {busy[p.phone] ? 'Одобряю…' : 'Одобрить'}
+              </Button>
+              <IconAction icon={X} title="Отклонить заявку" tone="danger" onClick={() => handleReject(p.phone)} />
+            </div>
+          </li>
+        ))}
+      </ul>
     </SettingCard>
   )
 }

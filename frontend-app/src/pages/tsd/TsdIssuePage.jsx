@@ -17,6 +17,7 @@ import {
   normalizeScannerCode, shortFio,
 } from './format'
 import { ScanLine, Printer, RotateCcw, CheckSquare, Square, RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 // Перенесено из оригинала (frontend/app/src/pages/tsd/TsdIssuePage.jsx) — кио­ск
 // сканирования: держит и отдаёт сотрудникам физические ТСД (сканеры штрихкодов
@@ -508,7 +509,7 @@ export default function TsdIssuePage() {
   }
 
   if (loading) {
-    return <div className="mx-auto w-full max-w-[1100px] p-6"><Spinner label="Загрузка..." /></div>
+    return <div className="mx-auto w-full p-6"><Spinner label="Загрузка..." /></div>
   }
 
   const printLayer = (
@@ -524,7 +525,7 @@ export default function TsdIssuePage() {
   )
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] space-y-4 p-6">
+    <div className="mx-auto w-full space-y-4 p-6">
       <style>{TSD_PRINT_CSS}</style>
 
       <h1 className="text-2xl font-semibold tracking-tight">Выдача ТСД</h1>
@@ -615,15 +616,15 @@ export default function TsdIssuePage() {
 
         <TabsContent value="print" className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
+            <Select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
               <option value="">Все компании</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            </Select>
+            <Select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="all">Все статусы</option>
               <option value="not_returned">Не сдал</option>
               <option value="returned">Сдал</option>
-            </select>
+            </Select>
             <Input className="h-8 w-48" placeholder="ФИО" value={query} onChange={e => setQuery(e.target.value)} />
             <Button size="sm" variant={visibleSelected ? 'default' : 'outline'} onClick={toggleVisible}>
               {visibleSelected ? <CheckSquare className="size-3.5" /> : <Square className="size-3.5" />}
@@ -704,15 +705,15 @@ export default function TsdIssuePage() {
 
         <TabsContent value="status" className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
+            <Select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
               <option value="">Все компании</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            </Select>
+            <Select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="all">Все статусы</option>
               <option value="not_returned">Не сдал</option>
               <option value="returned">Сдал</option>
-            </select>
+            </Select>
           </div>
 
           <div className="rounded-lg border">
@@ -794,15 +795,15 @@ export default function TsdIssuePage() {
               onChange={({ from, to }) => { setHistoryFrom(from); setHistoryTo(to || from) }}
               className="h-8"
             />
-            <select className={selectClass} value={historyType} onChange={e => setHistoryType(e.target.value)}>
+            <Select className={selectClass} value={historyType} onChange={e => setHistoryType(e.target.value)}>
               <option value="all">Все события</option>
               <option value="issue">Только выдача</option>
               <option value="return">Только приём</option>
-            </select>
-            <select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
+            </Select>
+            <Select className={selectClass} value={company} onChange={e => setCompany(e.target.value)}>
               <option value="">Все компании</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </Select>
             <Input className="h-8 w-48" placeholder="ФИО или ТСД" value={historyQuery} onChange={e => setHistoryQuery(e.target.value)} />
             <Button size="sm" variant="outline" onClick={() => loadHistory()} disabled={historyLoading}>
               <RefreshCw className={cn('size-3.5', historyLoading && 'animate-spin')} /> Обновить

@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen,
+  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -208,7 +209,7 @@ export function Brand({ compact = false }) {
 const initials = name => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase()
 
 /** Кто вошёл: инициалы, ФИО, роль и выход — как UserBlock в WMS. */
-function UserBlock({ collapsed }) {
+function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', themeId = 'collapsed-theme' }) {
   const { user, logout } = useAuth()
   const name = user?.name || 'Без имени'
   const roleLabel = BUILTIN_ROLE_LABELS[user?.role] || user?.role
@@ -225,13 +226,13 @@ function UserBlock({ collapsed }) {
         <PopoverTrigger asChild>
           <button type="button" title={name} className="mx-auto block rounded-xl transition-opacity hover:opacity-80">{avatar}</button>
         </PopoverTrigger>
-        <PopoverContent align="end" side="right" className="w-60 p-1.5">
+        <PopoverContent align={popoverAlign} side={popoverSide} className="w-60 p-1.5">
           <div className="space-y-0.5 px-2 py-1.5">
             <div className="truncate text-sm font-medium">{name}</div>
             <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
           </div>
           <div className="my-1 border-t border-line" />
-          <div className="flex justify-center py-1"><ThemeToggle id="collapsed-theme" /></div>
+          <div className="flex justify-center py-1"><ThemeToggle id={themeId} /></div>
           <div className="my-1 border-t border-line" />
           <button
             type="button"
@@ -307,5 +308,76 @@ export function Sidebar({ activePage, onNavigate }) {
         </div>
       </div>
     </aside>
+  )
+}
+
+/** Аватар в мобильной верхней панели: имя, тема и выход — без открытия меню. */
+export function MobileUserMenu() {
+  return <UserBlock collapsed popoverSide="bottom" popoverAlign="end" themeId="topbar-theme" />
+}
+
+// Мобильное меню (до `md`): панель слева с затемнением фона. Анимация —
+// motion (выезд пружиной, уход быстрым ease-in), а не классы tw-animate:
+// у Sheet по умолчанию заданы анимации «справа», и вместе с классами «слева»
+// панель выезжала и уезжала не с той стороны. Закрывается тапом по фону,
+// Escape, крестиком или свайпом влево. Внизу — тема и выход из аккаунта.
+const drawerIn = { type: 'spring', stiffness: 420, damping: 40, mass: 0.9 }
+const drawerOut = { duration: 0.18, ease: [0.4, 0, 1, 1] }
+
+export function MobileDrawer({ open, onOpenChange, activePage, onNavigate }) {
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <AnimatePresence>
+        {open && (
+          <DialogPrimitive.Portal forceMount>
+            <DialogPrimitive.Overlay asChild forceMount>
+              <motion.div
+                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] md:hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+              />
+            </DialogPrimitive.Overlay>
+            <DialogPrimitive.Content asChild forceMount aria-describedby={undefined}>
+              <motion.aside
+                className="fixed inset-y-0 left-0 z-50 flex w-[288px] max-w-[85vw] flex-col gap-5 rounded-r-3xl border-r border-line bg-surface px-4 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-float outline-none md:hidden"
+                initial={{ x: '-100%' }}
+                animate={{ x: 0, transition: drawerIn }}
+                exit={{ x: '-100%', transition: drawerOut }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={{ left: 0.6, right: 0 }}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x < -80 || info.velocity.x < -400) onOpenChange(false)
+                }}
+              >
+                <DialogPrimitive.Title className="sr-only">Меню</DialogPrimitive.Title>
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <Brand />
+                  <DialogPrimitive.Close
+                    className="grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+                    aria-label="Закрыть меню"
+                  >
+                    <X size={18} />
+                  </DialogPrimitive.Close>
+                </div>
+
+                <SidebarNav activePage={activePage} onNavigate={onNavigate} layoutPrefix="drawer" />
+
+                <div className="space-y-3 px-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Тема</span>
+                    <ThemeToggle id="drawer-theme" />
+                  </div>
+                  <div className="border-t border-line pt-3">
+                    <UserBlock />
+                  </div>
+                </div>
+              </motion.aside>
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        )}
+      </AnimatePresence>
+    </DialogPrimitive.Root>
   )
 }

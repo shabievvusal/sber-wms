@@ -20,7 +20,7 @@ export function HourlyChart({ hourly }) {
           const totalOps = (h.storageOps || 0) + (h.kdkOps || 0)
           const totalEmployees = (h.storageEmployees || 0) + (h.kdkEmployees || 0)
           return (
-            <div key={h.hour} className="flex min-w-[52px] max-w-20 flex-1 flex-col items-center">
+            <div key={h.hour} className="flex min-w-[52px] flex-1 flex-col items-center">
               <div className="mb-1.5 flex min-h-[32px] flex-col items-center justify-end gap-px">
                 <span className="text-[11px] font-bold leading-tight">{fmtNum(totalOps)}</span>
                 <span className="text-[10px] leading-tight text-muted-foreground">{totalEmployees} чел.</span>

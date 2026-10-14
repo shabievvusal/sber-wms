@@ -7,6 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Spinner } from '@/components/ui/spinner'
 import { fmtNum, fmtWeight, getCurrentShiftInfo } from './format'
 import { RefreshCw } from 'lucide-react'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 const thCls = 'h-8 border px-2 text-center text-xs'
@@ -59,11 +60,11 @@ export function MonthlyCompanySummaryTable() {
       <p className="-mt-1 text-xs text-muted-foreground">Итог СЗ, сотрудников, рабочих дней</p>
       <div className="flex flex-wrap items-center gap-2">
         <MonthPicker value={month} onChange={setMonth} className="h-8" />
-        <select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
+        <Select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
           <option value="">Все смены</option>
           <option value="day">День (9–21)</option>
           <option value="night">Ночь (21–9)</option>
-        </select>
+        </Select>
         <Button size="sm" variant="secondary" onClick={load} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}
         </Button>

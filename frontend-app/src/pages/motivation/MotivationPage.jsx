@@ -12,6 +12,7 @@ import { ImportPanel } from './ImportPanel'
 import { ShiftTable } from './ShiftTable'
 import { SettingsPanel } from './SettingsPanel'
 import { buildAccountIndex, currentShift, fmtHours, fmtTime, SHIFT_LABELS, STATUS_META, todayStr } from './format'
+import { Select } from '@/components/ui/select'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -167,10 +168,10 @@ export default function MotivationPage() {
         </label>
         <label className="space-y-1 text-sm">
           <span className="block text-xs text-muted-foreground">Смена</span>
-          <select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
+          <Select className={selectClass} value={shift} onChange={e => setShift(e.target.value)}>
             <option value="day">День</option>
             <option value="night">Ночь</option>
-          </select>
+          </Select>
         </label>
         <Button size="sm" variant="outline" onClick={load} disabled={loading}>
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Пересчитать
