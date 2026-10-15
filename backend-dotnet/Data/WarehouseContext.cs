@@ -11,6 +11,8 @@ namespace BackendDotnet.Data;
 // без этой проверки любой мог бы прочитать данные чужого склада, просто
 // подставив заголовок. Склад принимается, если:
 //  - есть сессия и у пользователя есть доступ к складу (разработчику — любой);
+//  - без сессии заголовок игнорируется (СПБ-3) — иначе не войти на сайт,
+//    пока в браузере запомнен склад;
 //  - или это внутренний вызов от Node по сети docker: такие запросы приходят
 //    мимо Caddy, без X-Forwarded-For (Caddy ставит его всегда, подделать
 //    отсутствие из браузера нельзя). Node сам проверил пользователя.
@@ -38,9 +40,12 @@ public static class WarehouseContext
             {
                 var sessions = ctx.RequestServices.GetRequiredService<SessionService>();
                 var session = await sessions.GetSessionAsync(ctx.Request.Cookies["vs_sid"]);
+                // без сессии заголовок не значит ничего (вход, регистрация, старая
+                // вкладка) — как без него: СПБ-3. Чужой склад так не получить.
                 if (session == null)
                 {
-                    await Results.Json(new { error = "Требуется авторизация" }, statusCode: 401).ExecuteAsync(ctx);
+                    ctx.Items[ItemKey] = WarehouseService.DefaultWarehouseId;
+                    await next();
                     return;
                 }
                 var developer = session.Role == "developer" || AuthService.IsDeveloperLogin(session.Login);
@@ -50,6 +55,15 @@ public static class WarehouseContext
                     var access = await warehouses.GetUserAccessAsync(session.Login);
                     if (!access.Any(a => a.WarehouseId == asked))
                     {
+                        // вход, /me, выход: запомненный в браузере склад может быть
+                        // чужим (другой человек на этом компьютере) — не ошибка,
+                        // /me сам выберет доступный склад
+                        if (ctx.Request.Path.StartsWithSegments("/api/vs/auth"))
+                        {
+                            ctx.Items[ItemKey] = WarehouseService.DefaultWarehouseId;
+                            await next();
+                            return;
+                        }
                         await Results.Json(new { error = "Нет доступа к этому складу" }, statusCode: 403).ExecuteAsync(ctx);
                         return;
                     }

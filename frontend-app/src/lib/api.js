@@ -9,13 +9,13 @@ const embedHeaders = isEmbedded ? { 'X-Embed': '1' } : {}
 
 /** Заголовки каждого запроса к своему серверу: встроенный режим + выбранный
  *  склад (сервер отдаёт данные только этого склада, см. lib/warehouse.js). */
-export function apiHeaders(extra) {
-  const wh = getWarehouseId()
+export function apiHeaders(extra, { noWarehouse = false } = {}) {
+  const wh = noWarehouse ? null : getWarehouseId()
   return { ...embedHeaders, ...(wh ? { 'X-Warehouse': wh } : {}), ...(extra || {}) }
 }
 
-async function req(url, opts = {}) {
-  const r = await fetch(url, { credentials, ...opts, headers: apiHeaders(opts.headers) })
+async function req(url, { noWarehouse, ...opts } = {}) {
+  const r = await fetch(url, { credentials, ...opts, headers: apiHeaders(opts.headers, { noWarehouse }) })
   const text = await r.text()
   let data
   try { data = text ? JSON.parse(text) : null } catch {
@@ -27,9 +27,11 @@ async function req(url, opts = {}) {
 
 // ─── Auth (сессия /api/vs/auth/*) ───────────────────────────────────────────
 
+// вход и регистрация — без склада (сессии ещё нет, склад придёт в /me)
 export async function loginVs(login, password) {
   return req('/api/vs/auth/login', {
     method: 'POST',
+    noWarehouse: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login, password }),
   })
@@ -38,6 +40,7 @@ export async function loginVs(login, password) {
 export async function registerVs(data) {
   return req('/api/vs/auth/register', {
     method: 'POST',
+    noWarehouse: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })

@@ -54,7 +54,8 @@ app.use(async (req, res, next) => {
   try {
     const sid = req.cookies?.[VS_SESSION_COOKIE];
     const session = sid ? await vsAuth.getSession(sid) : null;
-    if (!session) return res.status(401).json({ error: 'Требуется авторизация' });
+    // без сессии заголовок не значит ничего (вход, старая вкладка) — как без него
+    if (!session) return runWithWarehouse(DEFAULT_WAREHOUSE_ID, next);
     const scoped = await vsAuth.applyWarehouse(session, asked);
     if (!scoped) return res.status(403).json({ error: 'Нет доступа к этому складу' });
     return runWithWarehouse(asked, next);
