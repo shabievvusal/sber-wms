@@ -76,15 +76,25 @@ export async function getWmsWarehouseId(token, { fresh = false } = {}) {
   return id
 }
 
-/** Сменить склад в WMS (как выбор склада в шапке WMS) — меняется во всех
- *  сессиях учётки. Только по явному нажатию пользователя. */
+/** Сменить склад в WMS — как выбор склада в шапке WMS: склад в WMS — это
+ *  открытая смена, поэтому текущая закрывается (shifts/close) и открывается
+ *  новая на нужном складе (shifts). Меняется во всех сессиях учётки — только
+ *  по явному нажатию пользователя. */
 export async function switchWmsWarehouse(token, warehouseId) {
-  const r = await fetch(WMS_SHIFTS_URL, {
+  const post = (url, body) => fetch(url, {
     method: 'POST',
     headers: { ...wmsHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ warehouseId }),
+    body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`WMS не сменил склад: ${r.status}`)
+  const errorCode = async r => { try { return (await r.json())?.error || '' } catch { return '' } }
+
+  let r = await post(WMS_SHIFTS_URL, { warehouseId })
+  if (!r.ok && (await errorCode(r)) === 'USER_ALREADY_HAS_A_SHIFT') {
+    const closed = await post(WMS_SHIFTS_URL + '/close', {})
+    if (!closed.ok) throw new Error(`WMS не закрыл текущую смену: ${(await errorCode(closed)) || closed.status}`)
+    r = await post(WMS_SHIFTS_URL, { warehouseId })
+  }
+  if (!r.ok) throw new Error(`WMS не сменил склад: ${(await errorCode(r)) || r.status}`)
   wmsWarehouseCache = { token, id: warehouseId, at: Date.now() }
   return true
 }

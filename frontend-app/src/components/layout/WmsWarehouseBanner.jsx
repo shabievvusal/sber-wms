@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { getStoredToken, getWmsWarehouseId, switchWmsWarehouse } from '@/lib/wmsFetch'
 import { useWarehouse, shortWarehouseName, switchWarehouse } from '@/lib/warehouse'
 import { isEmbedded } from '@/lib/embed'
+import { confirmDialog } from '@/components/ui/confirm'
 
 const CHECK_MS = 2 * 60_000
 
@@ -52,6 +53,11 @@ export function WmsWarehouseBanner() {
   const wmsName = accessible ? name(wmsId) : 'другой склад'
 
   const alignWms = async () => {
+    if (!(await confirmDialog({
+      title: `Сменить склад в WMS на ${siteName}?`,
+      description: `Как выбор склада в шапке WMS: текущая смена в WMS закроется и откроется смена на складе ${siteName}. Склад сменится во всех ваших вкладках и сессиях WMS.`,
+      confirmText: 'Сменить склад',
+    }))) return
     setBusy(true)
     try {
       await switchWmsWarehouse(getStoredToken(), siteId)
