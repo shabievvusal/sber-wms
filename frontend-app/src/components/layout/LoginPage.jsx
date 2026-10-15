@@ -118,7 +118,6 @@ function LoginTab() {
     e.preventDefault()
     setError('')
     if (!isPhoneComplete(phone)) { setError('Введите полный номер телефона (+7 и 10 цифр)'); return }
-    if (!warehouseId) { setError('Выберите склад, на котором работаете'); return }
     setLoading(true)
     const cleanPhone = '+7' + phone.replace(/\D/g, '').slice(-10)
     try {
@@ -168,6 +167,7 @@ function RegisterTab() {
     if (sitePassword !== sitePasswordConfirm) { setError('Пароли от сайта не совпадают'); return }
     if (sitePassword.length < 6) { setError('Пароль от сайта должен быть не менее 6 символов'); return }
     if (!isPhoneComplete(phone)) { setError('Введите полный номер телефона (+7 и 10 цифр)'); return }
+    if (!warehouseId) { setError('Выберите склад, на котором работаете'); return }
     setLoading(true)
     const cleanPhone = '+7' + phone.replace(/\D/g, '').slice(-10)
     try {
