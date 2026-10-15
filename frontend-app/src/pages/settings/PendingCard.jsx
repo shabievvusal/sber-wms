@@ -8,6 +8,8 @@ import { rolesOrBuiltin } from './constants'
 import { Avatar, IconAction } from './ui'
 import { Check, UserPlus, X } from 'lucide-react'
 import { confirmDialog } from '@/components/ui/confirm'
+import { useAuth } from '@/context/AuthContext'
+import { shortWarehouseName } from '@/lib/warehouse'
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
@@ -20,6 +22,9 @@ export function PendingCard({ roles, onApproved }) {
   const [loading, setLoading] = useState(true)
   const [roleFor, setRoleFor] = useState({})
   const [busy, setBusy] = useState({})
+  const { user: me } = useAuth()
+  const myWarehouses = me?.warehouses || []
+  const whName = id => shortWarehouseName(myWarehouses.find(w => w.id === id)?.name || '')
 
   const load = () => {
     setLoading(true)
@@ -73,7 +78,7 @@ export function PendingCard({ roles, onApproved }) {
             <Avatar name={p.name} className="size-10 text-sm" />
             <div className="min-w-0 flex-1 basis-48">
               <div className="truncate text-sm font-medium">{p.name || 'Без имени'}</div>
-              <div className="tabular text-xs text-muted-foreground">{p.phone} · заявка {fmtDateTime(p.registeredAt)}</div>
+              <div className="tabular text-xs text-muted-foreground">{p.phone} · заявка {fmtDateTime(p.registeredAt)}{myWarehouses.length > 1 && p.warehouseId ? ` · ${whName(p.warehouseId)}` : ''}</div>
             </div>
             <Select className="h-8 w-48" value={roleFor[p.phone] || 'manager'} onChange={e => setRoleFor(r => ({ ...r, [p.phone]: e.target.value }))}>
               {rolesOrBuiltin(roles).map(r => <option key={r.key} value={r.key}>{r.label}</option>)}

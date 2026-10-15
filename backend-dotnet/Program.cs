@@ -33,6 +33,7 @@ builder.Services.ConfigureHttpJsonOptions(opt =>
     opt.SerializerOptions.PropertyNamingPolicy = JsonOptions.Default.PropertyNamingPolicy;
 });
 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connString));
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<RouteService>();
@@ -41,6 +42,7 @@ builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<AccountCheckService>();
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<WarehouseService>();
 builder.Services.AddScoped<MotivationService>();
 builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<S3Service>();
@@ -52,6 +54,11 @@ builder.Services.AddSingleton<SseService>();
 builder.WebHost.ConfigureKestrel(opt => opt.Limits.MaxRequestBodySize = 50 * 1024 * 1024);
 
 var app = builder.Build();
+
+// данные по складам: столбец warehouse_id и ключи со складом (один раз)
+await WarehouseSchema.EnsureAsync(connString);
+// склад запроса (заголовок X-Warehouse) — до всех эндпоинтов
+app.UseWarehouseContext();
 
 app.MapGet("/api/dotnet-status", async (AppDbContext db) =>
 {

@@ -15,6 +15,8 @@ import { Avatar, IconAction, ListPager, ModuleChips, clampPage } from './ui'
 import { KeyRound, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
 import { ONLINE_WINDOW_MS } from '@/lib/presence'
 import { confirmDialog } from '@/components/ui/confirm'
+import { Select } from '@/components/ui/select'
+import { getWarehouseId, shortWarehouseName } from '@/lib/warehouse'
 
 const PAGE_SIZE = 20
 const phone10 = v => String(v || '').replace(/\D/g, '').slice(-10)
@@ -55,6 +57,16 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   const [selected, setSelected] = useState(() => new Set())
 
   const [now, setNow] = useState(() => Date.now())
+  // склады администратора: несколько — фильтр (по умолчанию выбранный сейчас склад)
+  const myWarehouses = currentUser?.warehouses || []
+  const whName = id => shortWarehouseName(myWarehouses.find(w => w.id === id)?.name || '')
+  const multiWarehouse = myWarehouses.length > 1
+  const [whFilter, setWhFilter] = useState(() => getWarehouseId() || 'all')
+  // роль своя на каждом складе: показываем права на складе из фильтра
+  // («все склады» — на выбранном сейчас складе, как прислал сервер)
+  const viewOf = u => (whFilter !== 'all' && u.access?.[whFilter] ? { ...u, ...u.access[whFilter] } : u)
+  // массовые действия меняют права на одном складе
+  const bulkWarehouse = whFilter !== 'all' ? whFilter : getWarehouseId()
 
   const load = () => {
     setLoading(true)
@@ -99,7 +111,8 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
 
   const q = search.trim().toLowerCase()
   // сначала те, кто в сети / был недавно, дальше по алфавиту
-  const filtered = users
+  const filtered = users.map(viewOf)
+    .filter(u => !multiWarehouse || whFilter === 'all' || (u.warehouseIds || []).includes(whFilter) || !(u.warehouseIds || []).length)
     .filter(u => !q ||
       (u.login || '').toLowerCase().includes(q) ||
       (u.name || '').toLowerCase().includes(q) ||
@@ -118,7 +131,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
   const selectableAll = filtered.filter(canBulk)
   const allShownSelected = selectableShown.length > 0 && selectableShown.every(u => selected.has(u.login))
   const someShownSelected = selectableShown.some(u => selected.has(u.login))
-  const selectedUsers = useMemo(() => users.filter(u => selected.has(u.login) && canBulk(u)), [users, selected]) // eslint-disable-line react-hooks/exhaustive-deps
+  const selectedUsers = useMemo(() => users.map(viewOf).filter(u => selected.has(u.login) && canBulk(u)), [users, selected, whFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleOne = login => setSelected(prev => {
     const next = new Set(prev)
@@ -138,6 +151,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
       return exists ? prev.map(u => u.login === updatedUser.login ? { ...u, ...updatedUser } : u) : [updatedUser, ...prev]
     })
     setEditUser(null)
+    reloadSilently() // права по складам — как их посчитал сервер
   }
 
   return (
@@ -150,7 +164,15 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
     >
       <div className="relative px-2 pt-1 pb-2">
         <Search className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Поиск по номеру, ФИО, роли" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        <div className="flex flex-wrap gap-2">
+          <Input className="min-w-48 flex-1 pl-9" placeholder="Поиск по номеру, ФИО, роли" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          {multiWarehouse && (
+            <Select className="w-44" value={whFilter} onChange={e => { setWhFilter(e.target.value); setPage(1) }} aria-label="Склад">
+              <option value="all">Все склады</option>
+              {[...myWarehouses].sort((a, b) => whName(a.id).localeCompare(whName(b.id), 'ru')).map(w => <option key={w.id} value={w.id}>{whName(w.id)}</option>)}
+            </Select>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -193,7 +215,12 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                 </span>
                 <div className="min-w-0 basis-52 lg:basis-0 lg:flex-[1.3]">
                   <div className="truncate text-sm font-medium">{u.name || 'Без имени'}</div>
-                  <div className="tabular truncate text-xs text-muted-foreground">{u.login}</div>
+                  <div className="tabular truncate text-xs text-muted-foreground">
+                    {u.login}
+                    {multiWarehouse && (u.warehouseIds?.length
+                      ? <span title="Склады"> · {u.warehouseIds.map(whName).filter(Boolean).join(', ')}{u.otherWarehouses ? ` +${u.otherWarehouses}` : ''}</span>
+                      : <span className="text-warning"> · без склада</span>)}
+                  </div>
                 </div>
                 <div className="flex min-w-0 basis-44 flex-wrap items-center gap-1.5 lg:basis-40 lg:shrink-0">
                   {roleText
@@ -231,7 +258,7 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
                     <span className="text-xs text-muted-foreground">защищён</span>
                   ) : (
                     <>
-                      <IconAction icon={Pencil} title="Права и разделы" tone="brand" onClick={() => setEditUser(u)} />
+                      <IconAction icon={Pencil} title="Права и разделы" tone="brand" onClick={() => setEditUser(users.find(x => x.login === u.login) || u)} />
                       <IconAction icon={Trash2} title="Забрать доступ" tone="danger" onClick={() => handleDelete(u)} />
                     </>
                   )}
@@ -248,6 +275,8 @@ export function UsersCard({ roles, currentUser, emplCompanies }) {
         <UsersBulkBar
           users={selectedUsers}
           roles={rolesOrBuiltin(roles)}
+          warehouseId={bulkWarehouse}
+          warehouseName={multiWarehouse ? whName(bulkWarehouse) : null}
           onClear={() => setSelected(new Set())}
           onDone={() => { setSelected(new Set()); reloadSilently() }}
         />

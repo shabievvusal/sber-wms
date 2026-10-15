@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.ValueGeneration;
 using BackendDotnet.Models;
 using BackendDotnet.Json;
 
@@ -12,7 +14,25 @@ namespace BackendDotnet.Data;
 // читает/пишет по уже готовой схеме.
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    private readonly IHttpContextAccessor? _http;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor? http = null) : base(options)
+    {
+        _http = http;
+    }
+
+    // Склад запроса (заголовок X-Warehouse, см. WarehouseContext). Все таблицы
+    // с данными склада видны только по нему (глобальный фильтр ниже), новые
+    // строки получают его автоматически (WarehouseIdGenerator). Общие таблицы
+    // (веса товаров) — без склада.
+    public string WarehouseId => WarehouseContext.Current(_http?.HttpContext);
+
+    private void Scoped<T>(EntityTypeBuilder<T> b) where T : class
+    {
+        b.Property<string>("WarehouseId").HasColumnName("warehouse_id")
+            .HasValueGenerator<WarehouseIdGenerator>().ValueGeneratedOnAdd();
+        b.HasQueryFilter(e => EF.Property<string>(e, "WarehouseId") == WarehouseId);
+    }
 
     public DbSet<RouteEntity> Routes => Set<RouteEntity>();
     public DbSet<TsdAssignmentEntity> TsdAssignments => Set<TsdAssignmentEntity>();
@@ -35,6 +55,7 @@ public class AppDbContext : DbContext
         var ops = modelBuilder.Entity<WmsOpEntity>();
         ops.ToTable("wms_ops");
         ops.HasKey(o => o.Id);
+        Scoped(ops);
         ops.Property(o => o.Id).HasColumnName("id");
         ops.Property(o => o.Date).HasColumnName("date");
         ops.Property(o => o.Hour).HasColumnName("hour");
@@ -64,6 +85,7 @@ public class AppDbContext : DbContext
         var placement = modelBuilder.Entity<WmsPlacementEntity>();
         placement.ToTable("wms_placement");
         placement.HasKey(p => p.Id);
+        Scoped(placement);
         placement.Property(p => p.Id).HasColumnName("id");
         placement.Property(p => p.Date).HasColumnName("date");
         placement.Property(p => p.Hour).HasColumnName("hour");
@@ -94,6 +116,7 @@ public class AppDbContext : DbContext
         var receiving = modelBuilder.Entity<WmsReceivingEntity>();
         receiving.ToTable("wms_receiving");
         receiving.HasKey(r => r.Id);
+        Scoped(receiving);
         receiving.Property(r => r.Id).HasColumnName("id");
         receiving.Property(r => r.Date).HasColumnName("date");
         receiving.Property(r => r.Hour).HasColumnName("hour");
@@ -117,6 +140,7 @@ public class AppDbContext : DbContext
         var remains = modelBuilder.Entity<WmsRemainsEntity>();
         remains.ToTable("wms_remains");
         remains.HasKey(r => r.Id);
+        Scoped(remains);
         remains.Property(r => r.Id).HasColumnName("id");
         remains.Property(r => r.Date).HasColumnName("date");
         remains.Property(r => r.Hour).HasColumnName("hour");
@@ -148,7 +172,8 @@ public class AppDbContext : DbContext
 
         var storageAgg = modelBuilder.Entity<WmsStorageAggEntity>();
         storageAgg.ToTable("wms_storage_agg");
-        storageAgg.HasKey(s => new { s.Date, s.Shift });
+        Scoped(storageAgg);
+        storageAgg.HasKey("WarehouseId", nameof(WmsStorageAggEntity.Date), nameof(WmsStorageAggEntity.Shift));
         storageAgg.Property(s => s.Date).HasColumnName("date");
         storageAgg.Property(s => s.Shift).HasColumnName("shift");
         storageAgg.Property(s => s.TotalStorageCount).HasColumnName("total_storage_count");
@@ -167,6 +192,7 @@ public class AppDbContext : DbContext
         var tsd = modelBuilder.Entity<TsdAssignmentEntity>();
         tsd.ToTable("tsd_assignments");
         tsd.HasKey(t => t.Id);
+        Scoped(tsd);
         tsd.Property(t => t.Id).HasColumnName("id");
         tsd.Property(t => t.ExecutorId).HasColumnName("executor_id");
         tsd.Property(t => t.Fio).HasColumnName("fio");
@@ -181,6 +207,7 @@ public class AppDbContext : DbContext
         var tsdManual = modelBuilder.Entity<TsdManualEmployeeEntity>();
         tsdManual.ToTable("tsd_manual_employees");
         tsdManual.HasKey(t => t.Id);
+        Scoped(tsdManual);
         tsdManual.Property(t => t.Id).HasColumnName("id");
         tsdManual.Property(t => t.Fio).HasColumnName("fio");
         tsdManual.Property(t => t.Company).HasColumnName("company");
@@ -190,6 +217,7 @@ public class AppDbContext : DbContext
         var motivation = modelBuilder.Entity<MotivationPersonEntity>();
         motivation.ToTable("motivation_people");
         motivation.HasKey(m => m.Id);
+        Scoped(motivation);
         motivation.Property(m => m.Id).HasColumnName("id");
         motivation.Property(m => m.ShiftDate).HasColumnName("shift_date");
         motivation.Property(m => m.Shift).HasColumnName("shift");
@@ -203,7 +231,8 @@ public class AppDbContext : DbContext
 
         var empl = modelBuilder.Entity<EmployeeEntity>();
         empl.ToTable("employees");
-        empl.HasKey(e => e.ExecutorId);
+        Scoped(empl);
+        empl.HasKey("WarehouseId", nameof(EmployeeEntity.ExecutorId));
         empl.Property(e => e.ExecutorId).HasColumnName("executor_id");
         empl.Property(e => e.Fio).HasColumnName("fio");
         empl.Property(e => e.Company).HasColumnName("company");
@@ -213,6 +242,7 @@ public class AppDbContext : DbContext
         var route = modelBuilder.Entity<RouteEntity>();
         route.ToTable("routes");
         route.HasKey(r => r.RouteId);
+        Scoped(route);
         route.Property(r => r.RouteId).HasColumnName("route_id");
         route.Property(r => r.RouteNumber).HasColumnName("route_number");
         route.Property(r => r.Date).HasColumnName("date");
@@ -267,4 +297,11 @@ public class AppDbContext : DbContext
             (a, b) => JsonSerializer.Serialize(a, JsonOptions.Default) == JsonSerializer.Serialize(b, JsonOptions.Default),
             v => JsonSerializer.Serialize(v, JsonOptions.Default).GetHashCode(),
             v => JsonSerializer.Deserialize<Dictionary<string, T>>(JsonSerializer.Serialize(v, JsonOptions.Default), JsonOptions.Default)!);
+}
+
+/// <summary>Склад новой строки — склад текущего запроса (AppDbContext.WarehouseId).</summary>
+public class WarehouseIdGenerator : ValueGenerator<string>
+{
+    public override bool GeneratesTemporaryValues => false;
+    public override string Next(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry) => ((AppDbContext)entry.Context).WarehouseId;
 }

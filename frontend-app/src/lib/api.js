@@ -1,13 +1,21 @@
 // Минимальный API-слой для превью редизайна. Бьёт в тот же бэкенд (см. vite.config.js proxy),
 // намеренно НЕ импортирует ../../app/src/api/index.js — песочница должна оставаться независимой.
 import { isEmbedded } from '@/lib/embed'
+import { getWarehouseId } from '@/lib/warehouse'
 
 const credentials = 'include'
 // во встроенном в WMS режиме сервер ставит cookie входа для iframe (см. lib/embed.js)
 const embedHeaders = isEmbedded ? { 'X-Embed': '1' } : {}
 
+/** Заголовки каждого запроса к своему серверу: встроенный режим + выбранный
+ *  склад (сервер отдаёт данные только этого склада, см. lib/warehouse.js). */
+export function apiHeaders(extra) {
+  const wh = getWarehouseId()
+  return { ...embedHeaders, ...(wh ? { 'X-Warehouse': wh } : {}), ...(extra || {}) }
+}
+
 async function req(url, opts = {}) {
-  const r = await fetch(url, { credentials, ...opts, headers: { ...embedHeaders, ...(opts.headers || {}) } })
+  const r = await fetch(url, { credentials, ...opts, headers: apiHeaders(opts.headers) })
   const text = await r.text()
   let data
   try { data = text ? JSON.parse(text) : null } catch {
@@ -35,9 +43,15 @@ export async function registerVs(data) {
   })
 }
 
+/** Справочник складов (для формы регистрации — доступен без входа). */
+export async function getWarehouses() {
+  return req('/api/vs/auth/warehouses')
+}
+
 // Не через req() — 401 здесь означает «нет сессии», а не ошибку.
 export async function getVsMe() {
-  const r = await fetch('/api/vs/auth/me', { credentials })
+  // с выбранным складом: роль и разделы у пользователя на каждом складе свои
+  const r = await fetch('/api/vs/auth/me', { credentials, headers: apiHeaders() })
   if (!r.ok) return null
   return r.json()
 }
@@ -204,20 +218,20 @@ export async function uploadRkPhotos(files) {
 // Маршруты, чьи ЕО имеет смысл обновить фоном (последние `days` дней) —
 // только метаданные, без самих ЕО. Дёргает устройство с включённым
 // автообновлением (eoAutoRefresh.jsx), а не экран кладовщика.
-export async function getEoRefreshTargets(days) {
+export async function getEoRefreshTargets(days, { warehouseId } = {}) {
   const params = new URLSearchParams()
   if (days) params.set('days', days)
-  return req(`/api/rk/eo-refresh-targets?${params}`)
+  return req(`/api/rk/eo-refresh-targets?${params}`, warehouseId ? { headers: { 'X-Warehouse': warehouseId } } : {})
 }
 
 // Сохранение ЕО, полученных браузером напрямую из WMS (fetchRouteFromWMS в
 // wmsFetch.js) — единственный путь их обновления. Ручной запрос «сходи в WMS
 // за меня» (requestEoRefresh + очередь на бэкенде) убран 2026-09-06: списки
 // обновляет фоном устройство с автообновлением (lib/eoAutoRefresh.jsx).
-export async function saveRouteEosRefresh(routeId, wmsData) {
+export async function saveRouteEosRefresh(routeId, wmsData, { warehouseId } = {}) {
   return req(`/api/rk/routes/${encodeURIComponent(routeId)}/eos/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(warehouseId ? { 'X-Warehouse': warehouseId } : {}) },
     body: JSON.stringify(wmsData),
   })
 }

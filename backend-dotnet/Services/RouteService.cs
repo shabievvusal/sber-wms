@@ -448,8 +448,9 @@ public class RouteService
 
     public async Task<List<RouteResponse>> GetRoutesAsync(string? q, string? dateFrom, string? dateTo, string? receivedDateFrom, string? receivedDateTo, string? status)
     {
-        var sql = new System.Text.StringBuilder("SELECT * FROM routes WHERE 1=1");
-        var parameters = new List<object>();
+        // сырой SQL мимо фильтра EF — склад указываем сами
+        var parameters = new List<object> { _db.WarehouseId };
+        var sql = new System.Text.StringBuilder("SELECT * FROM routes WHERE warehouse_id = $1");
 
         if (status == "unshipped") sql.Append(" AND shipment IS NULL");
         else if (status == "pending") sql.Append(" AND shipment IS NOT NULL");

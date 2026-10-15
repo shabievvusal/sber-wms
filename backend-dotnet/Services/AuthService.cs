@@ -226,6 +226,31 @@ public class AuthService
         return filtered;
     }
 
+    // ─── Права на складе ────────────────────────────────────────────────────
+    // Роль своя на каждом складе (vs_user_warehouses, см. WarehouseService):
+    // у склада может быть своя роль, свои разделы и действия; чего у склада
+    // нет — как у пользователя (vs_users). Разработчик — везде разработчик.
+
+    public record Rights(string Role, List<string> Modules, List<string> Actions);
+
+    /// <param name="userRole">роль пользователя (уже с учётом разработчика)</param>
+    /// <param name="userModules">разделы пользователя (уже разрешённые для его роли)</param>
+    public async Task<Rights> RightsOnWarehouseAsync(string? userRole, List<string>? userModules, List<string>? userActions,
+        string? whRole, List<string>? whModules, List<string>? whActions)
+    {
+        if (userRole == "developer")
+            return new("developer", userModules ?? await GetModulesForRoleAsync("developer"), userActions ?? AuthConstants.GetActionsForRole("developer"));
+        var ownRole = whRole != null ? await ResolveRoleAsync(whRole) : null;
+        var role = ownRole ?? userRole ?? "manager";
+        var modules = whModules != null ? await ResolveModulesAsync(role, whModules)
+            : ownRole != null ? await GetModulesForRoleAsync(role)
+            : userModules ?? await GetModulesForRoleAsync(role);
+        var actions = whActions != null ? whActions.Where(a => AuthConstants.AllActions.Contains(a)).ToList()
+            : ownRole != null ? AuthConstants.GetActionsForRole(role)
+            : userActions ?? AuthConstants.GetActionsForRole(role);
+        return new(role, modules, actions);
+    }
+
     // ─── vs_users (Фаза 0) ───────────────────────────────────────────────────
 
     private static AuthVsUser RowToUser(NpgsqlDataReader r) => new()

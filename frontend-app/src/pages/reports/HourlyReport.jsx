@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 import { useEffect, useMemo, useState } from 'react'
 import * as api from '@/lib/api'
 import {
@@ -44,7 +45,7 @@ export default function HourlyReport() {
 
   const [procNames, setProcNames] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('hr_proc_names') ?? 'null')
+      const saved = JSON.parse(localStorage.getItem(whKey('hr_proc_names')) ?? 'null')
       if (!saved) return DEFAULT_PROC_NAMES
       return [...DEFAULT_PROC_NAMES, ...saved.filter(n => !FIXED_PROC_NAMES.has(n))]
     } catch { return DEFAULT_PROC_NAMES }
@@ -53,10 +54,10 @@ export default function HourlyReport() {
   const [newProcName, setNewProcName] = useState('')
   const [manual, setManual] = useState(() => loadManual(todayStr()))
 
-  useEffect(() => { localStorage.setItem('hr_proc_names', JSON.stringify(procNames)) }, [procNames])
-  useEffect(() => { localStorage.setItem(`hr_proc_${date}`, JSON.stringify(procData)) }, [procData, date])
+  useEffect(() => { localStorage.setItem(whKey('hr_proc_names'), JSON.stringify(procNames)) }, [procNames])
+  useEffect(() => { localStorage.setItem(whKey(`hr_proc_${date}`), JSON.stringify(procData)) }, [procData, date])
   useEffect(() => { setProcData(loadProcData(date)) }, [date])
-  useEffect(() => { localStorage.setItem(`hr_manual_${date}`, JSON.stringify(manual)) }, [manual, date])
+  useEffect(() => { localStorage.setItem(whKey(`hr_manual_${date}`), JSON.stringify(manual)) }, [manual, date])
   useEffect(() => { setManual(loadManual(date)) }, [date])
 
   const setM = (field, val) => setManual(prev => ({ ...prev, [field]: val }))

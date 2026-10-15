@@ -10,6 +10,7 @@
  */
 
 const pg = require('pg');
+const { currentWarehouse } = require('./warehouse-context');
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -31,7 +32,7 @@ pool.on('error', err => console.error('[pg] empl pool:', err.message));
 // решает, когда его перечитать (один раз за HTTP-запрос, не за айтем).
 
 async function getLookupMaps() {
-  const { rows } = await pool.query('SELECT executor_id, fio, company FROM employees');
+  const { rows } = await pool.query('SELECT executor_id, fio, company FROM employees WHERE warehouse_id = $1', [currentWarehouse()]);
   const fioMap = new Map();
   const idMap  = new Map();
   for (const row of rows) {
@@ -76,7 +77,7 @@ function normPkForRegistry(fio) {
 
 /** Возвращает [{fio, company}] + [companies] */
 async function listEmployees() {
-  const { rows } = await pool.query('SELECT executor_id, fio, company, phone, password FROM employees ORDER BY fio');
+  const { rows } = await pool.query('SELECT executor_id, fio, company, phone, password FROM employees WHERE warehouse_id = $1 ORDER BY fio', [currentWarehouse()]);
   const employees = rows.map(r => ({
     executorId: r.executor_id,
     fio: r.fio,
@@ -103,10 +104,10 @@ async function upsertEmployee({ executorId, fio, company, phone, password }) {
   if (!id) throw new Error('executorId обязателен для сохранения сотрудника');
   if (!f) throw new Error('ФИО обязательно');
   await pool.query(
-    `INSERT INTO employees (executor_id, fio, company, phone, password)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (executor_id) DO UPDATE SET fio = $2, company = $3, phone = $4, password = $5`,
-    [id, f, c, p, pw]
+    `INSERT INTO employees (executor_id, fio, company, phone, password, warehouse_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (warehouse_id, executor_id) DO UPDATE SET fio = $2, company = $3, phone = $4, password = $5`,
+    [id, f, c, p, pw, currentWarehouse()]
   );
 }
 
@@ -119,7 +120,7 @@ async function upsertEmployee({ executorId, fio, company, phone, password }) {
 async function addNewEmployees(executors) {
   if (!executors || !executors.length) return 0;
   // Получаем существующие записи
-  const { rows } = await pool.query('SELECT executor_id, fio FROM employees');
+  const { rows } = await pool.query('SELECT executor_id, fio FROM employees WHERE warehouse_id = $1', [currentWarehouse()]);
   const existingIds  = new Set(rows.map(r => r.executor_id).filter(Boolean));
 
   let added = 0;
@@ -131,9 +132,9 @@ async function addNewEmployees(executors) {
     // Уже есть с таким реальным UUID — пропускаем
     if (existingIds.has(id)) continue;
     await pool.query(
-      `INSERT INTO employees (executor_id, fio, company) VALUES ($1, $2, '')
-       ON CONFLICT (executor_id) DO NOTHING`,
-      [id, f]
+      `INSERT INTO employees (executor_id, fio, company, warehouse_id) VALUES ($1, $2, '', $3)
+       ON CONFLICT (warehouse_id, executor_id) DO NOTHING`,
+      [id, f, currentWarehouse()]
     );
     existingIds.add(id);
     added++;
@@ -148,14 +149,14 @@ async function addNewEmployees(executors) {
  */
 async function enrichNames(registry) {
   if (!registry || !Object.keys(registry).length) return 0;
-  const { rows } = await pool.query('SELECT executor_id, fio FROM employees');
+  const { rows } = await pool.query('SELECT executor_id, fio FROM employees WHERE warehouse_id = $1', [currentWarehouse()]);
   let updated = 0;
   for (const row of rows) {
     const fullFio = registry[normPkForRegistry(row.fio)];
     if (!fullFio) continue;
     if (fullFio.split(/\s+/).length <= row.fio.split(/\s+/).length) continue;
     const titled = fullFio.replace(/\S+/g, w => w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-    await pool.query('UPDATE employees SET fio = $1 WHERE executor_id = $2', [titled, row.executor_id]);
+    await pool.query('UPDATE employees SET fio = $1 WHERE executor_id = $2 AND warehouse_id = $3', [titled, row.executor_id, currentWarehouse()]);
     updated++;
   }
   return updated;
@@ -166,7 +167,8 @@ async function saveAll(employees) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('TRUNCATE employees');
+    // только сотрудники текущего склада — остальные склады не трогаем
+    await client.query('DELETE FROM employees WHERE warehouse_id = $1', [currentWarehouse()]);
     for (const { executorId, fio, company, phone, password } of employees) {
       const id = (executorId || '').trim();
       const f  = String(fio || '').trim();
@@ -175,8 +177,8 @@ async function saveAll(employees) {
       const pw = String(password != null ? password : '').trim();
       if (!f || !id) continue;
       await client.query(
-        'INSERT INTO employees (executor_id, fio, company, phone, password) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (executor_id) DO UPDATE SET fio=$2, company=$3, phone=$4, password=$5',
-        [id, f, c, p, pw]
+        'INSERT INTO employees (executor_id, fio, company, phone, password, warehouse_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (warehouse_id, executor_id) DO UPDATE SET fio=$2, company=$3, phone=$4, password=$5',
+        [id, f, c, p, pw, currentWarehouse()]
       );
     }
     await client.query('COMMIT');

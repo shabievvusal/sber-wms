@@ -125,7 +125,9 @@ export function AuthProvider({ children }) {
   // WMS-пароль совпал (см. 4-ветвистую логику /api/vs/auth/login).
   const login = useCallback(async (loginValue, password) => {
     const data = await api.loginVs(loginValue, password)
-    setUser(data)
+    // ответ входа без списка складов — он есть в /me
+    const me = await api.getVsMe().catch(() => null)
+    setUser(me ? { ...data, ...me } : data)
     if (data.accessToken) {
       const expiry = Date.now() + (data.expiresIn || 300) * 1000
       saveAccessToken(data.accessToken, expiry)

@@ -19,6 +19,19 @@ public class VsSessionRequiredFilter : IEndpointFilter
         {
             return Results.Json(new { error = "Требуется авторизация" }, statusCode: 401);
         }
+        // Склад, выбранный на сайте (заголовок X-Warehouse): доступа к нему нет —
+        // отказ; роль на этом складе своя (vs_user_warehouses) — подставляем её,
+        // чтобы все проверки роли дальше (VsAdminRequiredFilter, хендлеры)
+        // видели права именно на выбранном складе. Разработчик — везде разработчик.
+        var asked = http.Request.Headers[WarehouseService.HeaderName].ToString().Trim();
+        if (asked != "" && session.Role != "developer")
+        {
+            var warehouses = http.RequestServices.GetRequiredService<WarehouseService>();
+            var row = (await warehouses.GetUserAccessAsync(session.Login)).FirstOrDefault(a => a.WarehouseId == asked);
+            if (row == null) return Results.Json(new { error = "Нет доступа к этому складу" }, statusCode: 403);
+            if (row.Role != null) session.Role = row.Role;
+        }
+        if (asked != "") http.Items["warehouseId"] = asked;
         http.Items["vsSession"] = session;
         return await next(context);
     }

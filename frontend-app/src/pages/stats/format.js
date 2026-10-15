@@ -6,6 +6,7 @@
 // (getDateSummaryFull), а не дублируется его серверная логика на клиенте
 // (см. PLAN.md про statsCalc.js/storage.js).
 
+import { whKey } from '@/lib/warehouse'
 import { DAY_HOURS, NIGHT_HOURS, SHIFT_MINUTES } from './constants'
 
 /** KD*-зоны — кросс-док/пик-бай-лайн (КДК), обычные H-зоны — хранение. */
@@ -32,7 +33,7 @@ export function isKdkZoneKey(zoneKey) {
 const LS_ZONE_OVERRIDES = 'stats_zone_overrides'
 
 function readZoneOverrides() {
-  try { return JSON.parse(localStorage.getItem(LS_ZONE_OVERRIDES) || '{}') } catch { return {} }
+  try { return JSON.parse(localStorage.getItem(whKey(LS_ZONE_OVERRIDES)) || '{}') } catch { return {} }
 }
 
 export function getZoneOverrides() {
@@ -42,13 +43,13 @@ export function getZoneOverrides() {
 export function saveZoneOverride(key, { label, light, text }) {
   const overrides = readZoneOverrides()
   overrides[key] = { label, light, text }
-  try { localStorage.setItem(LS_ZONE_OVERRIDES, JSON.stringify(overrides)) } catch { /* ignore */ }
+  try { localStorage.setItem(whKey(LS_ZONE_OVERRIDES), JSON.stringify(overrides)) } catch { /* ignore */ }
 }
 
 export function deleteZoneOverride(key) {
   const overrides = readZoneOverrides()
   delete overrides[key]
-  try { localStorage.setItem(LS_ZONE_OVERRIDES, JSON.stringify(overrides)) } catch { /* ignore */ }
+  try { localStorage.setItem(whKey(LS_ZONE_OVERRIDES), JSON.stringify(overrides)) } catch { /* ignore */ }
 }
 
 /** Ключи зон, для которых есть ручное переопределение — показываются в

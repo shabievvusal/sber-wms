@@ -8,7 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const productWeights = require('./product-weights');
 
-const DATA_DIR = path.join(__dirname, 'data');
+// папка данных склада запроса (у СПБ-3 — прежняя data/), см. warehouse-context.js
+const { dataDir } = require('./warehouse-context');
 const PLACEMENT_DIR_NAME = 'placement';
 const RECEIVING_DIR_NAME = 'receiving';
 const REMAINS_DIR_NAME = 'remains';
@@ -44,7 +45,7 @@ function getShiftKeyFromMoscowDateHour(dateStr, hour) {
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
 }
 
 function getShiftKey(isoDate) {
@@ -148,7 +149,7 @@ function toLightItem(item) {
 // ─── Почасовое хранение (лёгкий формат) ─────────────────────────────────────
 
 function hourlyDir(dateStr) {
-  return path.join(DATA_DIR, dateStr);
+  return path.join(dataDir(), dateStr);
 }
 
 function hourlyFilePath(dateStr, hour) {
@@ -834,7 +835,7 @@ function storageByHourToCols(storageByHour, cols) {
 }
 
 function placementDir(dateStr) {
-  return path.join(DATA_DIR, dateStr, PLACEMENT_DIR_NAME);
+  return path.join(dataDir(), dateStr, PLACEMENT_DIR_NAME);
 }
 
 function placementFilePath(dateStr, hour) {
@@ -1047,7 +1048,7 @@ function getPlacementSummary(dateStr, options = {}, context = {}) {
 }
 
 function receivingDir(dateStr) {
-  return path.join(DATA_DIR, dateStr, RECEIVING_DIR_NAME);
+  return path.join(dataDir(), dateStr, RECEIVING_DIR_NAME);
 }
 
 function receivingFilePath(dateStr, hour) {
@@ -1253,7 +1254,7 @@ function getReceivingSummary(dateStr, options = {}, context = {}) {
 }
 
 function remainsDir(dateStr) {
-  return path.join(DATA_DIR, dateStr, REMAINS_DIR_NAME);
+  return path.join(dataDir(), dateStr, REMAINS_DIR_NAME);
 }
 
 function remainsFilePath(dateStr, hour) {
@@ -1404,7 +1405,7 @@ function getDateSummary(dateStr, options = {}, context = {}) {
 // ─── Старые смены (для совместимости) ────────────────────────────────────────
 
 function shiftFilePath(shiftKey) {
-  return path.join(DATA_DIR, `shift_${shiftKey}.json`);
+  return path.join(dataDir(), `shift_${shiftKey}.json`);
 }
 
 function loadShift(shiftKey) {
@@ -1444,18 +1445,18 @@ function getShiftItems(shiftKey) {
 
 function listShifts() {
   ensureDataDir();
-  if (!fs.existsSync(DATA_DIR)) return [];
+  if (!fs.existsSync(dataDir())) return [];
   const result = [];
-  const dirs = fs.readdirSync(DATA_DIR, { withFileTypes: true }).filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name));
+  const dirs = fs.readdirSync(dataDir(), { withFileTypes: true }).filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name));
   for (const dir of dirs) {
     const dateStr = dir.name;
-    const hourFiles = fs.readdirSync(path.join(DATA_DIR, dateStr)).filter(f => /^\d{2}\.json$/.test(f));
+    const hourFiles = fs.readdirSync(path.join(dataDir(), dateStr)).filter(f => /^\d{2}\.json$/.test(f));
     let dayCount = 0;
     let nightCount = 0;
     let lastUpdated = null;
     for (const f of hourFiles) {
       const hour = parseInt(f.replace('.json', ''), 10);
-      const fp = path.join(DATA_DIR, dateStr, f);
+      const fp = path.join(dataDir(), dateStr, f);
       const stat = fs.statSync(fp);
       if (lastUpdated === null || stat.mtime > lastUpdated) lastUpdated = stat.mtime;
       try {
@@ -1477,11 +1478,11 @@ function listShifts() {
     if (dayCount > 0) result.push({ shiftKey: `${dateStr}_day`, date: dateStr, type: 'day', count: dayCount, updatedAt: lastUpdated ? new Date(lastUpdated).toISOString() : null, fileSize: null });
     if (nightCount > 0) result.push({ shiftKey: `${dateStr}_night`, date: dateStr, type: 'night', count: nightCount, updatedAt: lastUpdated ? new Date(lastUpdated).toISOString() : null, fileSize: null });
   }
-  const shiftFiles = fs.readdirSync(DATA_DIR).filter(f => f.startsWith('shift_') && f.endsWith('.json'));
+  const shiftFiles = fs.readdirSync(dataDir()).filter(f => f.startsWith('shift_') && f.endsWith('.json'));
   for (const f of shiftFiles) {
     const shiftKey = f.replace('shift_', '').replace('.json', '');
     if (result.some(r => r.shiftKey === shiftKey)) continue;
-    const stat = fs.statSync(path.join(DATA_DIR, f));
+    const stat = fs.statSync(path.join(dataDir(), f));
     const shift = loadShift(shiftKey);
     result.push({
       shiftKey,
@@ -1505,7 +1506,7 @@ module.exports = {
   getShiftKey,
   saveStorageForDate,
   getStorageForDate,
-  DATA_DIR,
+  get DATA_DIR() { return dataDir(); },
   ensureDataDir,
   toLightItem,
   getMergeKeyFromLight,

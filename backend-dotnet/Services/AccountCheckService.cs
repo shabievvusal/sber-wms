@@ -27,11 +27,16 @@ public class AccountCheckService
     private static volatile bool _tableReady;
 
     private readonly string _connectionString;
+    private readonly IHttpContextAccessor _http;
 
-    public AccountCheckService(IConfiguration config)
+    public AccountCheckService(IConfiguration config, IHttpContextAccessor http)
     {
         _connectionString = config.GetConnectionString("Postgres")!;
+        _http = http;
     }
+
+    // склад запроса — результаты проверок и сотрудники у каждого склада свои
+    private string Warehouse => BackendDotnet.Data.WarehouseContext.Current(_http.HttpContext);
 
     public static class Status
     {
@@ -50,13 +55,15 @@ public class AccountCheckService
         await conn.OpenAsync();
         if (!_tableReady)
         {
-            await using var cmd = new NpgsqlCommand(@"
+            await using var cmd = new NpgsqlCommand($@"
                 CREATE TABLE IF NOT EXISTS employee_account_checks (
-                    executor_id TEXT PRIMARY KEY,
+                    warehouse_id TEXT NOT NULL DEFAULT '{WarehouseService.DefaultWarehouseId}',
+                    executor_id TEXT NOT NULL,
                     status      TEXT NOT NULL,
                     error_code  TEXT,
                     message     TEXT,
-                    checked_at  BIGINT NOT NULL
+                    checked_at  BIGINT NOT NULL,
+                    PRIMARY KEY (warehouse_id, executor_id)
                 )", conn);
             await cmd.ExecuteNonQueryAsync();
             _tableReady = true;
@@ -76,7 +83,8 @@ public class AccountCheckService
     public async Task<List<CheckResult>> ListAsync()
     {
         await using var conn = await OpenAsync();
-        await using var cmd = new NpgsqlCommand("SELECT executor_id, status, error_code, message, checked_at FROM employee_account_checks", conn);
+        await using var cmd = new NpgsqlCommand("SELECT executor_id, status, error_code, message, checked_at FROM employee_account_checks WHERE warehouse_id = $1", conn);
+        cmd.Parameters.AddWithValue(Warehouse);
         await using var r = await cmd.ExecuteReaderAsync();
         var list = new List<CheckResult>();
         while (await r.ReadAsync())
@@ -89,12 +97,14 @@ public class AccountCheckService
     {
         var results = new List<CheckResult>();
         if (executorIds.Count == 0) return results;
+        var wh = Warehouse; // склад запроса — запоминаем сразу: проверка идёт долго
 
         await using var conn = await OpenAsync();
         var creds = new Dictionary<string, (string Phone, string Password)>();
-        await using (var cmd = new NpgsqlCommand("SELECT executor_id, COALESCE(phone, ''), COALESCE(password, '') FROM employees WHERE executor_id = ANY($1)", conn))
+        await using (var cmd = new NpgsqlCommand("SELECT executor_id, COALESCE(phone, ''), COALESCE(password, '') FROM employees WHERE executor_id = ANY($1) AND warehouse_id = $2", conn))
         {
             cmd.Parameters.AddWithValue(executorIds.ToArray());
+            cmd.Parameters.AddWithValue(wh);
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) creds[r.GetString(0)] = (r.GetString(1), r.GetString(2));
         }
@@ -125,7 +135,7 @@ public class AccountCheckService
                 first = false;
                 result = await TryLoginAsync(id, login, c.Password.Trim(), ct);
             }
-            await SaveAsync(conn, result);
+            await SaveAsync(conn, result, wh);
             results.Add(result);
         }
         return results;
@@ -176,17 +186,18 @@ public class AccountCheckService
         }
     }
 
-    private static async Task SaveAsync(NpgsqlConnection conn, CheckResult r)
+    private static async Task SaveAsync(NpgsqlConnection conn, CheckResult r, string warehouse)
     {
         await using var cmd = new NpgsqlCommand(@"
-            INSERT INTO employee_account_checks (executor_id, status, error_code, message, checked_at)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (executor_id) DO UPDATE SET status = $2, error_code = $3, message = $4, checked_at = $5", conn);
+            INSERT INTO employee_account_checks (executor_id, status, error_code, message, checked_at, warehouse_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (warehouse_id, executor_id) DO UPDATE SET status = $2, error_code = $3, message = $4, checked_at = $5", conn);
         cmd.Parameters.AddWithValue(r.ExecutorId);
         cmd.Parameters.AddWithValue(r.Status);
         cmd.Parameters.AddWithValue((object?)r.Code ?? DBNull.Value);
         cmd.Parameters.AddWithValue((object?)r.Message ?? DBNull.Value);
         cmd.Parameters.AddWithValue(r.CheckedAt);
+        cmd.Parameters.AddWithValue(warehouse);
         await cmd.ExecuteNonQueryAsync();
     }
 }

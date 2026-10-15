@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import * as api from '@/lib/api'
-import { getStoredToken, fetchRouteFromWMS } from '@/lib/wmsFetch'
+import { getStoredToken, fetchRouteFromWMS, getWmsWarehouseId } from '@/lib/wmsFetch'
 
 // ─── Фоновое обновление списков ЕО ─────────────────────────────────────────
 // У обычного кладовщика нет WMS-токена: сходить за ЕО в WMS может только
@@ -44,7 +44,10 @@ export function readEoLastRun() {
  * вообще ходят в WMS за ЕО. Возвращает `{ total, ok, failed }`.
  */
 export async function refreshAllEoNow(token, onProgress) {
-  const targets = (await api.getEoRefreshTargets(TARGET_DAYS)) || []
+  // склад, выбранный сейчас в WMS: WMS отдаёт маршруты только его
+  const warehouseId = await getWmsWarehouseId(token).catch(() => null)
+  const opts = warehouseId ? { warehouseId } : {}
+  const targets = (await api.getEoRefreshTargets(TARGET_DAYS, opts)) || []
   const routes = targets.filter(t => t?.routeId)
   let ok = 0
   let failed = 0
@@ -52,7 +55,7 @@ export async function refreshAllEoNow(token, onProgress) {
     onProgress?.(i, routes.length)
     try {
       const wmsData = await fetchRouteFromWMS(token, t.routeId)
-      await api.saveRouteEosRefresh(t.routeId, wmsData)
+      await api.saveRouteEosRefresh(t.routeId, wmsData, opts)
       ok += 1
     } catch {
       failed += 1 // один маршрут не должен рушить остальные

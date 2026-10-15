@@ -614,7 +614,11 @@ function createBindingCode() {
   return crypto.randomBytes(3).toString('hex').toUpperCase();
 }
 
+/** Склады есть только в Postgres-режиме (vs-auth-pg.js) — здесь сессия как есть. */
+async function applyWarehouse(session) { return session }
+
 module.exports = {
+  applyWarehouse,
   loadVsUsers,
   findUserByLogin,
   createSession,

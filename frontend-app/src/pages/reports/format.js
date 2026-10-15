@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 // Форматтеры и справочники — перенесены из оригинала HourlyReport.jsx
 // один в один (по прямому запросу пользователя — раздел «Отчёт каждый час»
 // переносится точь-в-точь, без переосмысления).
@@ -55,7 +56,7 @@ export const MANUAL_DEFAULTS = {
 }
 
 export function loadManual(dateStr) {
-  try { return { ...MANUAL_DEFAULTS, ...JSON.parse(localStorage.getItem(`hr_manual_${dateStr}`) ?? '{}') } }
+  try { return { ...MANUAL_DEFAULTS, ...JSON.parse(localStorage.getItem(whKey(`hr_manual_${dateStr}`)) ?? '{}') } }
   catch { return { ...MANUAL_DEFAULTS } }
 }
 
@@ -63,7 +64,7 @@ export const DEFAULT_PROC_NAMES = ['Кросс-докинг', 'Хранение'
 export const FIXED_PROC_NAMES = new Set(DEFAULT_PROC_NAMES)
 
 export function loadProcData(dateStr) {
-  try { return JSON.parse(localStorage.getItem(`hr_proc_${dateStr}`) ?? '{}') }
+  try { return JSON.parse(localStorage.getItem(whKey(`hr_proc_${dateStr}`)) ?? '{}') }
   catch { return {} }
 }
 

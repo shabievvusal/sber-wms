@@ -6,6 +6,7 @@
  */
 
 const pg   = require('pg');
+const { currentWarehouse } = require('./warehouse-context');
 const { Pool } = pg;
 const fs   = require('fs');
 const path = require('path');
@@ -581,7 +582,8 @@ async function getRoutesByDriverUnshipped(driverName) {
 }
 
 async function getAddresses() {
-  const { rows } = await pool.query('SELECT cfz_addresses FROM routes');
+  // маршруты склада запроса (отчёт по отгрузке, коды адресов)
+  const { rows } = await pool.query('SELECT cfz_addresses FROM routes WHERE warehouse_id = $1', [currentWarehouse()]);
   const set = new Set();
   for (const row of rows) {
     for (const a of (row.cfz_addresses || [])) {
@@ -592,7 +594,7 @@ async function getAddresses() {
 }
 
 async function getReportData(dateFrom, dateTo) {
-  const { rows } = await pool.query('SELECT * FROM routes');
+  const { rows } = await pool.query('SELECT * FROM routes WHERE warehouse_id = $1', [currentWarehouse()]);
   const map = new Map();
 
   function ensureCell(addr, date) {

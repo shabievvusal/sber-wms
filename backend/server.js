@@ -9,6 +9,8 @@ const { promisify } = require('util');
 const scheduler = require('./scheduler');
 const dataCollector = require('./data-collector');
 const storage = require('./storage');
+// склад запроса и папка его данных (см. warehouse-context.js)
+const { dataDir, currentWarehouse, runWithWarehouse, perWarehouse, DEFAULT_WAREHOUSE_ID } = require('./warehouse-context');
 const vsAuth = process.env.USE_PG === 'true'
   ? require('./vs-auth-pg')
   : require('./vs-auth');
@@ -29,7 +31,7 @@ const app = express();
 app.use(cookieParser());
 const PORT = process.env.PORT || 3000;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const AUTO_FETCH_SETTINGS_PATH = path.join(__dirname, 'data', 'auto-fetch-settings.json');
+const AUTO_FETCH_SETTINGS_PATH = () => path.join(dataDir(), 'auto-fetch-settings.json');
 const execFileAsync = promisify(execFile);
 
 try {
@@ -41,6 +43,25 @@ try {
 // ✅ МАКСИМАЛЬНЫЙ ЛИМИТ - 1 ГИГАБАЙТ
 app.use(express.json({ limit: '1024mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1024mb' }));
+
+// Склад запроса (заголовок X-Warehouse, ставит сайт): проверяем, что он
+// пользователю доступен (vs_user_warehouses, см. vs-auth-pg.js applyWarehouse),
+// и выполняем запрос «от имени» склада — дальше файлы данных, кэши и вызовы
+// dotnet берут склад из warehouse-context.js. Без заголовка — СПБ-3, как было.
+app.use(async (req, res, next) => {
+  const asked = String(req.headers['x-warehouse'] || '').trim();
+  if (!asked) return runWithWarehouse(DEFAULT_WAREHOUSE_ID, next);
+  try {
+    const sid = req.cookies?.[VS_SESSION_COOKIE];
+    const session = sid ? await vsAuth.getSession(sid) : null;
+    if (!session) return res.status(401).json({ error: 'Требуется авторизация' });
+    const scoped = await vsAuth.applyWarehouse(session, asked);
+    if (!scoped) return res.status(403).json({ error: 'Нет доступа к этому складу' });
+    return runWithWarehouse(asked, next);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 const DEFAULT_CONFIG = {
   token: '',
@@ -90,7 +111,7 @@ function normalizeAutoFetchSettings(input = {}) {
 
 function loadAutoFetchSettings() {
   try {
-    const raw = JSON.parse(fs.readFileSync(AUTO_FETCH_SETTINGS_PATH, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(AUTO_FETCH_SETTINGS_PATH(), 'utf8'));
     return normalizeAutoFetchSettings(raw);
   } catch {
     return { ...DEFAULT_AUTO_FETCH_SETTINGS };
@@ -99,9 +120,9 @@ function loadAutoFetchSettings() {
 
 function saveAutoFetchSettings(settings) {
   const normalized = normalizeAutoFetchSettings(settings);
-  const dir = path.dirname(AUTO_FETCH_SETTINGS_PATH);
+  const dir = path.dirname(AUTO_FETCH_SETTINGS_PATH());
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(AUTO_FETCH_SETTINGS_PATH, JSON.stringify(normalized, null, 2), 'utf8');
+  fs.writeFileSync(AUTO_FETCH_SETTINGS_PATH(), JSON.stringify(normalized, null, 2), 'utf8');
   return normalized;
 }
 
@@ -169,10 +190,38 @@ function saveConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
 }
 
+// Склад, выбранный сейчас в WMS у учётки токена (у учётки он один на все её
+// сессии). Серверный сборщик собирает то, что отдаёт WMS, — значит, данные
+// принадлежат этому складу: под ним их и сохраняем.
+async function wmsWarehouseOfToken(token) {
+  const t = String(token || '').trim();
+  if (!t) return null;
+  try {
+    const r = await fetch('https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${t}`,
+        Origin: 'https://wwh.samokat.ru',
+        Referer: 'https://wwh.samokat.ru/',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data?.value?.warehouseId || null;
+  } catch {
+    return null;
+  }
+}
+
 async function doFetch() {
   try {
-    const result = await dataCollector.fetchFromAPI();
-    return { success: true, ...result };
+    const wh = (await wmsWarehouseOfToken(loadConfig().token)) || DEFAULT_WAREHOUSE_ID;
+    return await runWithWarehouse(wh, async () => {
+      scheduler.setLastRun(new Date());
+      const result = await dataCollector.fetchFromAPI();
+      return { success: true, warehouseId: wh, ...result };
+    });
   } catch (err) {
     return {
       success: false,
@@ -185,7 +234,7 @@ async function doFetch() {
 
 scheduler.setFetchHandler(doFetch);
 
-let fetchRequested = false;
+const fetchRequestedBy = new Set(); // склады, где попросили обновить данные
 
 // API-маршруты регистрируем до статики, чтобы POST /api/empl и др. не отдавали index.html
 app.get('/api/status', (req, res) => {
@@ -195,7 +244,7 @@ app.get('/api/status', (req, res) => {
       scheduleRunning: scheduler.isRunning(),
       tokenRefresherRunning: false,
       lastRun: scheduler.getLastRun(),
-      fetchRequested,
+      fetchRequested: fetchRequestedBy.has(currentWarehouse()),
       config: {
         ...config,
         token: config.token ? '***' : '',
@@ -216,8 +265,10 @@ app.post('/api/fetch-data', async (req, res) => {
     const config = loadConfig();
     const token = req.body?.token || config.token;
     const options = req.body?.options || {};
-    const result = await dataCollector.fetchFromAPI(token, options);
-    res.json(result);
+    // данные WMS — того склада, что выбран у учётки токена
+    const wh = (await wmsWarehouseOfToken(token)) || currentWarehouse();
+    const result = await runWithWarehouse(wh, () => dataCollector.fetchFromAPI(token, options));
+    res.json({ ...result, warehouseId: wh });
   } catch (err) {
     const status = err.status || 500;
     const message = err.message || 'Ошибка запроса данных';
@@ -373,11 +424,11 @@ app.get('/api/data/:filename', (req, res) => {
   res.json(data);
 });
 
-const DATA_DIR = path.join(__dirname, 'data');
 const EMPL_CSV_PATH = path.join(__dirname, '..', 'empl.csv');
-const EMPL_IDS_PATH = path.join(DATA_DIR, 'empl-ids.json');
-const MISSING_WEIGHT_PATH = path.join(DATA_DIR, 'missing_weight.json');
-const NAMES_REGISTRY_PATH = path.join(DATA_DIR, 'names_registry.json');
+// Файлы склада — в папке его данных (у СПБ-3 прежняя data/), см. warehouse-context.js
+const EMPL_IDS_PATH = () => path.join(dataDir(), 'empl-ids.json');
+const MISSING_WEIGHT_PATH = () => path.join(dataDir(), 'missing_weight.json');
+const NAMES_REGISTRY_PATH = () => path.join(dataDir(), 'names_registry.json');
 
 function normPkForRegistry(fio) {
   const norm = String(fio || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -390,8 +441,8 @@ function normPkForRegistry(fio) {
 async function updateNamesRegistry(items) {
   let registry = {};
   try {
-    if (fs.existsSync(NAMES_REGISTRY_PATH))
-      registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH, 'utf8'));
+    if (fs.existsSync(NAMES_REGISTRY_PATH()))
+      registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH(), 'utf8'));
   } catch {}
 
   let changed = false;
@@ -416,7 +467,7 @@ async function updateNamesRegistry(items) {
   }
 
   if (changed) {
-    try { fs.writeFileSync(NAMES_REGISTRY_PATH, JSON.stringify(registry), 'utf8'); } catch {}
+    try { fs.writeFileSync(NAMES_REGISTRY_PATH(), JSON.stringify(registry), 'utf8'); } catch {}
   }
 
   // Обновляем empl.csv — заменяем короткие имена на полные, собираем existingPks
@@ -479,16 +530,16 @@ function loadMissingWeight() {
 }
 
 function loadMissingWeightStrict() {
-  if (!fs.existsSync(MISSING_WEIGHT_PATH)) return [];
-  const text = fs.readFileSync(MISSING_WEIGHT_PATH, 'utf8').replace(/^\uFEFF/, '');
+  if (!fs.existsSync(MISSING_WEIGHT_PATH())) return [];
+  const text = fs.readFileSync(MISSING_WEIGHT_PATH(), 'utf8').replace(/^\uFEFF/, '');
   const parsed = JSON.parse(text);
   if (!Array.isArray(parsed)) throw new Error('missing_weight.json должен быть массивом');
   return parsed;
 }
 
 function saveMissingWeight(list) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(MISSING_WEIGHT_PATH, JSON.stringify(list, null, 2), 'utf8');
+  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
+  fs.writeFileSync(MISSING_WEIGHT_PATH(), JSON.stringify(list, null, 2), 'utf8');
 }
 
 function getMissingWeightProductName(item) {
@@ -514,16 +565,16 @@ function rebuildMissingWeightFromData() {
   const weights = productWeights.getMap();
   const byKey = new Map();
 
-  if (!fs.existsSync(DATA_DIR)) {
+  if (!fs.existsSync(dataDir())) {
     saveMissingWeight([]);
     return 0;
   }
 
-  const dateDirs = fs.readdirSync(DATA_DIR, { withFileTypes: true })
+  const dateDirs = fs.readdirSync(dataDir(), { withFileTypes: true })
     .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name));
 
   for (const dirent of dateDirs) {
-    const dirPath = path.join(DATA_DIR, dirent.name);
+    const dirPath = path.join(dataDir(), dirent.name);
     const hourFiles = fs.readdirSync(dirPath)
       .filter(f => /^\d{2}\.json$/.test(f));
 
@@ -563,7 +614,8 @@ function getDotnetMissingWeightRebuildCmd() {
   return null;
 }
 
-const missingWeightRebuildStatus = {
+// у каждого склада свой пересчёт (своя история в своей папке данных)
+const mwStatus = perWarehouse(() => ({
   running: false,
   startedAt: null,
   finishedAt: null,
@@ -572,10 +624,10 @@ const missingWeightRebuildStatus = {
   engine: null,
   reason: null,
   durationMs: null,
-};
+}));
 
 function getMissingWeightRebuildStatus() {
-  return { ...missingWeightRebuildStatus };
+  return { ...mwStatus() };
 }
 
 // Автоматический пересчёт (после каждой выгрузки из WMS) — не чаще раза в
@@ -588,16 +640,16 @@ function getMissingWeightRebuildStatus() {
 const MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS = 3 * 60 * 60 * 1000;
 
 function startMissingWeightRebuild(reason = 'manual') {
-  if (missingWeightRebuildStatus.running) return false;
+  if (mwStatus().running) return false;
 
-  const lastFinished = Date.parse(missingWeightRebuildStatus.finishedAt || '');
+  const lastFinished = Date.parse(mwStatus().finishedAt || '');
   if (reason !== 'manual'
-      && !missingWeightRebuildStatus.error
+      && !mwStatus().error
       && Date.now() - lastFinished < MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS) {
     return false;
   }
 
-  Object.assign(missingWeightRebuildStatus, {
+  Object.assign(mwStatus(), {
     running: true,
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -617,7 +669,7 @@ function startMissingWeightRebuild(reason = 'manual') {
       if (count > 0 && list.length === 0) {
         throw new Error(`.NET нашёл ${count} товаров, но файл результата пуст`);
       }
-      Object.assign(missingWeightRebuildStatus, {
+      Object.assign(mwStatus(), {
         running: false,
         finishedAt: new Date().toISOString(),
         count: list.length,
@@ -628,7 +680,7 @@ function startMissingWeightRebuild(reason = 'manual') {
     })
     .catch(err => {
       const message = err?.message || String(err);
-      Object.assign(missingWeightRebuildStatus, {
+      Object.assign(mwStatus(), {
         running: false,
         finishedAt: new Date().toISOString(),
         error: message,
@@ -657,7 +709,7 @@ async function rebuildMissingWeightDotnet(options = {}) {
 
   // Экспортируем таблицу весов во временный JSON { article: grams }
   const weightsObj = Object.fromEntries(productWeights.getMap());
-  const tmpDir = path.join(DATA_DIR, 'raw_tmp');
+  const tmpDir = path.join(dataDir(), 'raw_tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
   const weightsPath = path.join(tmpDir, `weights_${Date.now()}.json`);
   fs.writeFileSync(weightsPath, JSON.stringify(weightsObj), 'utf8');
@@ -665,7 +717,7 @@ async function rebuildMissingWeightDotnet(options = {}) {
   try {
     const { stdout } = await execFileAsync(
       cmd.exe,
-      cmd.args.concat(['--data-dir', DATA_DIR, '--weights', weightsPath, '--out', MISSING_WEIGHT_PATH]),
+      cmd.args.concat(['--data-dir', dataDir(), '--weights', weightsPath, '--out', MISSING_WEIGHT_PATH()]),
       { windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
     );
     const out = String(stdout || '').trim();
@@ -681,7 +733,7 @@ async function rebuildMissingWeightDotnet(options = {}) {
 
 // ─── Консолидация: multer + paths ──────────────────────────────────────────
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const CONSOLIDATION_PATH = path.join(__dirname, 'data', 'consolidation.json');
+const CONSOLIDATION_PATH = () => path.join(dataDir(), 'consolidation.json');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const upload = multer({
@@ -707,21 +759,22 @@ const uploadExcel = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-let _complaintsCache = null;
+const _complaintsCache = new Map(); // склад → список жалоб
 
 function loadComplaints() {
-  if (_complaintsCache) return _complaintsCache;
+  if (_complaintsCache.has(currentWarehouse())) return _complaintsCache.get(currentWarehouse());
   try {
-    if (!fs.existsSync(CONSOLIDATION_PATH)) return [];
-    _complaintsCache = JSON.parse(fs.readFileSync(CONSOLIDATION_PATH, 'utf8'));
-    return _complaintsCache;
+    if (!fs.existsSync(CONSOLIDATION_PATH())) return [];
+    const list = JSON.parse(fs.readFileSync(CONSOLIDATION_PATH(), 'utf8'));
+    _complaintsCache.set(currentWarehouse(), list);
+    return list;
   } catch { return []; }
 }
 
 function saveComplaints(list) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(CONSOLIDATION_PATH, JSON.stringify(list, null, 2), 'utf8');
-  _complaintsCache = list;
+  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
+  fs.writeFileSync(CONSOLIDATION_PATH(), JSON.stringify(list, null, 2), 'utf8');
+  _complaintsCache.set(currentWarehouse(), list);
 }
 
 function tgSafe(v) {
@@ -890,7 +943,7 @@ async function ingestInChunks(url, items) {
     try {
       const ingestRes = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Warehouse': currentWarehouse() },
         body: JSON.stringify({ items: chunk }),
       });
       if (!ingestRes.ok) return `dotnet ingest HTTP ${ingestRes.status}`;
@@ -908,7 +961,7 @@ app.post('/api/save-fetched-data', async (req, res) => {
     const body = req.body || {};
     const value = body.value || body;
     const items = Array.isArray(value?.items) ? value.items : [];
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
 
     // Сохраняем полные имена (с отчеством) до удаления raw-файла
     let newEmployees = [];
@@ -929,7 +982,7 @@ app.post('/api/save-fetched-data', async (req, res) => {
         return res.status(500).json({ ok: false, error: 'dotnet not found' });
       }
       // временный raw для .NET (после обработки удаляем)
-      const tmpDir = path.join(DATA_DIR, 'raw_tmp');
+      const tmpDir = path.join(dataDir(), 'raw_tmp');
       fs.mkdirSync(tmpDir, { recursive: true });
       const rawName = `fetched_${Date.now()}.json`;
       const rawPath = path.join(tmpDir, rawName);
@@ -938,7 +991,7 @@ app.post('/api/save-fetched-data', async (req, res) => {
       rawMs = Date.now() - tRawStart;
       try {
         const tDotnetStart = Date.now();
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', DATA_DIR]), {
+        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
           windowsHide: true,
           maxBuffer: 10 * 1024 * 1024,
         });
@@ -1090,8 +1143,8 @@ function readEmplCsvText() {
 /** Карта нормализованное ФИО -> компания для фильтра по роли manager */
 function loadEmplIdRegistry() {
   try {
-    if (!fs.existsSync(EMPL_IDS_PATH)) return {};
-    const raw = JSON.parse(fs.readFileSync(EMPL_IDS_PATH, 'utf8'));
+    if (!fs.existsSync(EMPL_IDS_PATH())) return {};
+    const raw = JSON.parse(fs.readFileSync(EMPL_IDS_PATH(), 'utf8'));
     return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   } catch {
     return {};
@@ -1099,8 +1152,8 @@ function loadEmplIdRegistry() {
 }
 
 function saveEmplIdRegistry(registry) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(EMPL_IDS_PATH, JSON.stringify(registry || {}, null, 2), 'utf8');
+  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
+  fs.writeFileSync(EMPL_IDS_PATH(), JSON.stringify(registry || {}, null, 2), 'utf8');
 }
 
 function upsertEmplIdRegistry(executorId, fio, company, phone = '', password = '') {
@@ -1570,12 +1623,13 @@ app.post('/api/empl/add-new', async (req, res) => {
 // только что добавленный сотрудник должен сразу исчезать из выдачи.
 
 const EXECUTORS_TTL_MS = 5 * 60 * 1000;
-let executorsCache = null;           // { at, list: [{ executorId, fio }] }
-let executorsInflight = null;        // Promise активного скана (single-flight)
-const executorsDirCache = new Map(); // 'YYYY-MM-DD' -> { stamp, execs: Map<id, fio> }
+// по складу: { at, list: [{ executorId, fio }] } и Promise активного скана (single-flight)
+const executorsCacheBy = new Map();
+const executorsInflightBy = new Map();
+const executorsDirCache = new Map(); // 'склад|YYYY-MM-DD' -> { stamp, execs: Map<id, fio> }
 
 function invalidateExecutorsCache() {
-  executorsCache = null;
+  executorsCacheBy.delete(currentWarehouse());
 }
 
 function titleCaseExecutorFio(fio) {
@@ -1599,18 +1653,18 @@ async function collectExecutorsFromPg() {
 /** Исполнители из почасовых файлов: асинхронно, с покаталожным кэшем. */
 async function collectExecutorsFromFiles() {
   const fsp = fs.promises;
-  if (!fs.existsSync(DATA_DIR)) return [];
+  if (!fs.existsSync(dataDir())) return [];
 
   let dateDirs;
   try {
-    dateDirs = (await fsp.readdir(DATA_DIR, { withFileTypes: true }))
+    dateDirs = (await fsp.readdir(dataDir(), { withFileTypes: true }))
       .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
       .map(e => e.name);
   } catch { return []; }
 
   const found = new Map(); // executorId -> fio
   for (const dir of dateDirs) {
-    const dirPath = path.join(DATA_DIR, dir);
+    const dirPath = path.join(dataDir(), dir);
     let hourFiles;
     try { hourFiles = (await fsp.readdir(dirPath)).filter(f => /^\d{2}\.json$/.test(f)); } catch { continue; }
     hourFiles.sort();
@@ -1625,7 +1679,8 @@ async function collectExecutorsFromFiles() {
       } catch {}
     }
 
-    const cached = executorsDirCache.get(dir);
+    const dirKey = currentWarehouse() + '|' + dir;
+    const cached = executorsDirCache.get(dirKey);
     let execs;
     if (cached && cached.stamp === stamp) {
       execs = cached.execs;
@@ -1642,7 +1697,7 @@ async function collectExecutorsFromFiles() {
           execs.set(executorId, titleCaseExecutorFio(fio));
         }
       }
-      executorsDirCache.set(dir, { stamp, execs });
+      executorsDirCache.set(dirKey, { stamp, execs });
     }
 
     for (const [id, fio] of execs) if (!found.has(id)) found.set(id, fio);
@@ -1652,10 +1707,12 @@ async function collectExecutorsFromFiles() {
 }
 
 async function getAllExecutors() {
-  if (executorsCache && Date.now() - executorsCache.at < EXECUTORS_TTL_MS) return executorsCache.list;
-  if (executorsInflight) return executorsInflight;
+  const wh = currentWarehouse();
+  const cached = executorsCacheBy.get(wh);
+  if (cached && Date.now() - cached.at < EXECUTORS_TTL_MS) return cached.list;
+  if (executorsInflightBy.has(wh)) return executorsInflightBy.get(wh);
 
-  executorsInflight = (async () => {
+  const inflight = (async () => {
     let list = null;
     if (wmsOpsPg) {
       // Таблицы может не быть (установка без выполненной миграции) — тогда
@@ -1664,11 +1721,11 @@ async function getAllExecutors() {
       catch (err) { console.error('find-unregistered: wms_ops недоступна, читаем файлы:', err.message); }
     }
     if (list === null) list = await collectExecutorsFromFiles();
-    executorsCache = { at: Date.now(), list };
+    executorsCacheBy.set(wh, { at: Date.now(), list });
     return list;
-  })().finally(() => { executorsInflight = null; });
-
-  return executorsInflight;
+  })().finally(() => { executorsInflightBy.delete(wh); });
+  executorsInflightBy.set(wh, inflight);
+  return inflight;
 }
 
 app.get('/api/empl/find-unregistered', async (req, res) => {
@@ -1705,12 +1762,12 @@ app.post('/api/empl/enrich-names', async (req, res) => {
     // Читаем реестр имён (накапливается при каждом fetch из WMS)
     let registry = {};
     try {
-      if (fs.existsSync(NAMES_REGISTRY_PATH))
-        registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH, 'utf8'));
+      if (fs.existsSync(NAMES_REGISTRY_PATH()))
+        registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH(), 'utf8'));
     } catch {}
 
     // Также добавляем имена из raw_tmp (если там что-то осталось)
-    const RAW_TMP_DIR = path.join(DATA_DIR, 'raw_tmp');
+    const RAW_TMP_DIR = path.join(dataDir(), 'raw_tmp');
     if (fs.existsSync(RAW_TMP_DIR)) {
       const rawFiles = fs.readdirSync(RAW_TMP_DIR).filter(f => f.endsWith('.json') && !f.startsWith('weights_'));
       for (const file of rawFiles) {
@@ -2126,7 +2183,9 @@ app.delete('/api/node/users/:login', requireNodeToken, async (req, res) => {
 async function vsSessionOptional(req, res, next) {
   try {
     const sessionId = req.cookies?.[VS_SESSION_COOKIE];
-    req.vsSession = sessionId ? await vsAuth.getSession(sessionId) : null;
+    const session = sessionId ? await vsAuth.getSession(sessionId) : null;
+    // права на выбранном складе; к складу нет доступа — как без сессии
+    req.vsSession = session ? await vsAuth.applyWarehouse(session, req.headers['x-warehouse']) : null;
     next();
   } catch (err) {
     next(err);
@@ -2141,7 +2200,11 @@ async function vsSessionRequired(req, res, next) {
     if (!session) {
       return res.status(401).json({ error: 'Требуется авторизация' });
     }
-    req.vsSession = session;
+    // склад, выбранный на сайте: нет доступа — отказ; роль на складе своя —
+    // подставляем, чтобы vsAdminRequired и хендлеры видели права на этом складе
+    const scoped = await vsAuth.applyWarehouse(session, req.headers['x-warehouse']);
+    if (!scoped) return res.status(403).json({ error: 'Нет доступа к этому складу' });
+    req.vsSession = scoped;
     next();
   } catch (err) {
     next(err);
@@ -2158,7 +2221,7 @@ function vsAdminRequired(req, res, next) {
 }
 
 app.post('/api/vs/request-fetch', vsSessionRequired, (req, res) => {
-  fetchRequested = true;
+  fetchRequestedBy.add(currentWarehouse());
   res.json({ ok: true });
 });
 
@@ -2189,7 +2252,7 @@ app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired,
 // Корп. устройство вызывает после завершения полного runFetchForHours
 app.post('/api/vs/mark-updated', vsSessionRequired, (req, res) => {
   scheduler.setLastRun(new Date());
-  fetchRequested = false;
+  fetchRequestedBy.delete(currentWarehouse());
   res.json({ ok: true });
 });
 
@@ -2416,12 +2479,12 @@ app.post('/api/stats/placement/save', vsSessionRequired, async (req, res) => {
         console.error('placement/save dotnet error: dotnet not found');
         return res.status(500).json({ ok: false, error: 'dotnet not found' });
       }
-      const tmpDir = path.join(DATA_DIR, 'raw_tmp');
+      const tmpDir = path.join(dataDir(), 'raw_tmp');
       fs.mkdirSync(tmpDir, { recursive: true });
       const rawPath = path.join(tmpDir, `placement_${Date.now()}.json`);
       fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
       try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', DATA_DIR]), {
+        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
           windowsHide: true,
           maxBuffer: 10 * 1024 * 1024,
         });
@@ -2537,12 +2600,12 @@ app.post('/api/stats/receiving/save', vsSessionRequired, async (req, res) => {
         console.error('receiving/save dotnet error: dotnet not found');
         return res.status(500).json({ ok: false, error: 'dotnet not found' });
       }
-      const tmpDir = path.join(DATA_DIR, 'raw_tmp');
+      const tmpDir = path.join(dataDir(), 'raw_tmp');
       fs.mkdirSync(tmpDir, { recursive: true });
       const rawPath = path.join(tmpDir, `receiving_${Date.now()}.json`);
       fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
       try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', DATA_DIR]), {
+        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
           windowsHide: true,
           maxBuffer: 10 * 1024 * 1024,
         });
@@ -2658,12 +2721,12 @@ app.post('/api/stats/remains/save', vsSessionRequired, async (req, res) => {
         console.error('remains/save dotnet error: dotnet not found');
         return res.status(500).json({ ok: false, error: 'dotnet not found' });
       }
-      const tmpDir = path.join(DATA_DIR, 'raw_tmp');
+      const tmpDir = path.join(dataDir(), 'raw_tmp');
       fs.mkdirSync(tmpDir, { recursive: true });
       const rawPath = path.join(tmpDir, `remains_${Date.now()}.json`);
       fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
       try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', DATA_DIR]), {
+        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
           windowsHide: true,
           maxBuffer: 10 * 1024 * 1024,
         });
@@ -2876,7 +2939,7 @@ app.get('/api/analysis/article-speeds', vsSessionOptional, async (req, res) => {
     const cmd = getDotnetArticleSpeedsCmd();
     if (!cmd) return res.status(500).json({ error: 'ArticleSpeeds tool не найден' });
 
-    const cmdArgs = [...cmd.args, '--data-dir', DATA_DIR, '--date-from', dateFrom, '--date-to', dateTo];
+    const cmdArgs = [...cmd.args, '--data-dir', dataDir(), '--date-from', dateFrom, '--date-to', dateTo];
     if (req.query.opType) cmdArgs.push('--op-type', String(req.query.opType));
     if (req.query.zone)   cmdArgs.push('--zone',    String(req.query.zone));
 
@@ -2971,7 +3034,7 @@ app.post('/api/employees', async (req, res) => {
 });
 
 const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/handling-units-in-progress';
-const ROLLCALL_PATH = path.join(__dirname, 'data', 'rollcall.json');
+const ROLLCALL_PATH = () => path.join(dataDir(), 'rollcall.json');
 
 
 app.get('/api/monitor/live', async (req, res) => {
@@ -2979,6 +3042,12 @@ app.get('/api/monitor/live', async (req, res) => {
     const config = loadConfig();
     const token = (config.token || '').trim();
     if (!token) return res.status(401).json({ error: 'Токен не задан' });
+    // токен сервера смотрит в склад, выбранный у его учётки в WMS — данные
+    // другого склада под выбранным на сайте не показываем
+    const tokenWarehouse = await wmsWarehouseOfToken(token);
+    if (tokenWarehouse && tokenWarehouse !== currentWarehouse()) {
+      return res.status(409).json({ error: 'Серверный токен WMS настроен на другой склад' });
+    }
     const headers = {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -3003,8 +3072,8 @@ app.get('/api/monitor/live', async (req, res) => {
 
 app.get('/api/rollcall', (req, res) => {
   try {
-    if (!fs.existsSync(ROLLCALL_PATH)) return res.json({ shiftKey: null, present: [] });
-    res.json(JSON.parse(fs.readFileSync(ROLLCALL_PATH, 'utf8')));
+    if (!fs.existsSync(ROLLCALL_PATH())) return res.json({ shiftKey: null, present: [] });
+    res.json(JSON.parse(fs.readFileSync(ROLLCALL_PATH(), 'utf8')));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3014,7 +3083,7 @@ app.put('/api/rollcall', (req, res) => {
   try {
     const { shiftKey, present } = req.body || {};
     storage.ensureDataDir();
-    fs.writeFileSync(ROLLCALL_PATH, JSON.stringify({ shiftKey: shiftKey || null, present: present || [] }), 'utf8');
+    fs.writeFileSync(ROLLCALL_PATH(), JSON.stringify({ shiftKey: shiftKey || null, present: present || [] }), 'utf8');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3377,12 +3446,12 @@ app.post('/api/consolidation/telegram/send', async (req, res) => {
 
 // ─── Кэш дневной сводки по компаниям ─────────────────────────────────────────
 
-const COMPANY_DAY_CACHE_DIR = path.join(DATA_DIR, 'company-day-cache');
+const COMPANY_DAY_CACHE_DIR = () => path.join(dataDir(), 'company-day-cache');
 const COMPANY_DAY_CACHE_VERSION = 3;
 
 function companyCachePath(dateStr, shift) {
   const suffix = shift ? `_${shift}` : '_all';
-  return path.join(COMPANY_DAY_CACHE_DIR, `${dateStr}${suffix}.json`);
+  return path.join(COMPANY_DAY_CACHE_DIR(), `${dateStr}${suffix}.json`);
 }
 
 function loadCompanyDayCache(dateStr, shift) {
@@ -3396,7 +3465,7 @@ function loadCompanyDayCache(dateStr, shift) {
 }
 
 function saveCompanyDayCache(dateStr, shift, companies) {
-  if (!fs.existsSync(COMPANY_DAY_CACHE_DIR)) fs.mkdirSync(COMPANY_DAY_CACHE_DIR, { recursive: true });
+  if (!fs.existsSync(COMPANY_DAY_CACHE_DIR())) fs.mkdirSync(COMPANY_DAY_CACHE_DIR(), { recursive: true });
   const fp = companyCachePath(dateStr, shift);
   fs.writeFileSync(fp, JSON.stringify({ version: COMPANY_DAY_CACHE_VERSION, dateStr, shift, cachedAt: new Date().toISOString(), companies }), 'utf8');
 }
@@ -4310,7 +4379,7 @@ function startTelegramBindingPolling() {
 
 // ─── Нарушения (Violations) ─────────────────────────────────────────────────
 const VIOLATIONS_DIR   = path.join(__dirname, 'data', 'violation-videos');
-const VIOLATIONS_PATH  = path.join(__dirname, 'data', 'violations.json');
+const VIOLATIONS_PATH  = () => path.join(dataDir(), 'violations.json');
 if (!fs.existsSync(VIOLATIONS_DIR)) fs.mkdirSync(VIOLATIONS_DIR, { recursive: true });
 
 const uploadViolation = multer({
@@ -4329,11 +4398,11 @@ const uploadViolation = multer({
 });
 
 function loadViolations() {
-  try { return JSON.parse(fs.readFileSync(VIOLATIONS_PATH, 'utf8')); }
+  try { return JSON.parse(fs.readFileSync(VIOLATIONS_PATH(), 'utf8')); }
   catch { return []; }
 }
 function saveViolations(data) {
-  fs.writeFileSync(VIOLATIONS_PATH, JSON.stringify(data, null, 2));
+  fs.writeFileSync(VIOLATIONS_PATH(), JSON.stringify(data, null, 2));
 }
 
 // Раздача видео

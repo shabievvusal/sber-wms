@@ -78,7 +78,7 @@ public class MotivationService
     public async Task<MotivationSettings> GetSettingsAsync()
     {
         var rows = await _db.Database.SqlQuery<string>(
-            $"SELECT value AS \"Value\" FROM motivation_settings WHERE key = {SettingsKey}").ToListAsync();
+            $"SELECT value AS \"Value\" FROM motivation_settings WHERE key = {SettingsKey} AND warehouse_id = {_db.WarehouseId}").ToListAsync();
         if (rows.Count == 0 || string.IsNullOrWhiteSpace(rows[0])) return new MotivationSettings();
         try { return JsonSerializer.Deserialize<MotivationSettings>(rows[0], JsonOptions.Default) ?? new MotivationSettings(); }
         catch (JsonException) { return new MotivationSettings(); }
@@ -96,7 +96,7 @@ public class MotivationService
 
         var json = JsonSerializer.Serialize(s, JsonOptions.Default);
         await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO motivation_settings (key, value) VALUES ({SettingsKey}, {json}) ON CONFLICT (key) DO UPDATE SET value = {json}");
+            $"INSERT INTO motivation_settings (warehouse_id, key, value) VALUES ({_db.WarehouseId}, {SettingsKey}, {json}) ON CONFLICT (warehouse_id, key) DO UPDATE SET value = {json}");
         return await GetSettingsAsync();
     }
 

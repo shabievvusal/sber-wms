@@ -4,7 +4,9 @@ const fs = require('fs');
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const DATA_DIR = path.join(__dirname, 'data');
 
-const LAST_RUN_PATH = path.join(DATA_DIR, 'last-run.json');
+// у каждого склада своё «Обновлено» — файл в папке его данных
+const { dataDir, currentWarehouse } = require('./warehouse-context');
+const LAST_RUN_PATH = () => path.join(dataDir(), 'last-run.json');
 
 let intervalId = null;
 let fetchHandler = null;
@@ -14,15 +16,16 @@ let fetchHandler = null;
 // перезапуска контейнера оно показывало «—», хотя данные за смену давно
 // собраны (пользователь 2026-09-06: «неправильно указывается время
 // последнего обновления»).
-let lastRun = (() => {
+const lastRunBy = new Map(); // склад → Date | null
+function readLastRun() {
   try {
-    const raw = JSON.parse(fs.readFileSync(LAST_RUN_PATH, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(LAST_RUN_PATH(), 'utf8'));
     const d = raw && raw.lastRun ? new Date(raw.lastRun) : null;
     return d && !isNaN(d) ? d : null;
   } catch {
     return null;
   }
-})();
+}
 
 function loadConfig() {
   try {
@@ -52,7 +55,6 @@ function start() {
   const minutes = Math.max(1, parseInt(config.intervalMinutes, 10) || 60);
   ensureDataDir();
   intervalId = setInterval(async () => {
-    setLastRun(new Date());
     if (fetchHandler) await fetchHandler();
   }, minutes * 60 * 1000);
   return { ok: true, message: `Автоопрос каждые ${minutes} мин` };
@@ -71,14 +73,17 @@ function isRunning() {
 }
 
 function getLastRun() {
-  return lastRun;
+  const wh = currentWarehouse();
+  if (!lastRunBy.has(wh)) lastRunBy.set(wh, readLastRun());
+  return lastRunBy.get(wh);
 }
 
 function setLastRun(date) {
-  lastRun = date || new Date();
+  const lastRun = date || new Date();
+  lastRunBy.set(currentWarehouse(), lastRun);
   try {
     ensureDataDir();
-    fs.writeFileSync(LAST_RUN_PATH, JSON.stringify({ lastRun: lastRun.toISOString() }), 'utf8');
+    fs.writeFileSync(LAST_RUN_PATH(), JSON.stringify({ lastRun: lastRun.toISOString() }), 'utf8');
   } catch { /* не критично — время просто не переживёт перезапуск */ }
 }
 

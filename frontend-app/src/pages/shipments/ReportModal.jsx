@@ -25,7 +25,7 @@ export default function ReportModal({ open, onOpenChange }) {
     if (!dateFrom || !dateTo) { toast.error('Выберите период'); return }
     setDownloading(true)
     try {
-      const r = await fetch(`/api/shipments/report?dateFrom=${dateFrom}&dateTo=${dateTo}`, { credentials: 'include' })
+      const r = await fetch(`/api/shipments/report?dateFrom=${dateFrom}&dateTo=${dateTo}`, { credentials: 'include', headers: api.apiHeaders() })
       if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Ошибка') }
       const blob = await r.blob()
       const a = document.createElement('a')

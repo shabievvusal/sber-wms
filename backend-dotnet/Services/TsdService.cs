@@ -133,8 +133,9 @@ public class TsdService
 
     public async Task<TsdSettings> GetSettingsAsync()
     {
-        var rows = await _db.Database.SqlQueryRaw<string>(
-            "SELECT value AS \"Value\" FROM tsd_settings WHERE key = 'total_count'").ToListAsync();
+        var wh = _db.WarehouseId;
+        var rows = await _db.Database.SqlQuery<string>(
+            $"SELECT value AS \"Value\" FROM tsd_settings WHERE key = 'total_count' AND warehouse_id = {wh}").ToListAsync();
         var totalCount = rows.Count > 0 && int.TryParse(rows[0], out var v) ? Math.Max(0, v) : 0;
         return new TsdSettings { TotalCount = totalCount };
     }
@@ -143,7 +144,7 @@ public class TsdService
     {
         var count = Math.Max(0, req.TotalCount);
         await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO tsd_settings (key, value) VALUES ('total_count', {count.ToString()}) ON CONFLICT (key) DO UPDATE SET value = {count.ToString()}");
+            $"INSERT INTO tsd_settings (warehouse_id, key, value) VALUES ({_db.WarehouseId}, 'total_count', {count.ToString()}) ON CONFLICT (warehouse_id, key) DO UPDATE SET value = {count.ToString()}");
         return await GetSettingsAsync();
     }
 

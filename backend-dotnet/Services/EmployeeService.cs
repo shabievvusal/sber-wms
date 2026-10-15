@@ -46,10 +46,11 @@ public class EmployeeService
         if (id == "") throw new ArgumentException("executorId обязателен для сохранения сотрудника");
         if (fio == "") throw new ArgumentException("ФИО обязательно");
 
+        var wh = _db.WarehouseId;
         await _db.Database.ExecuteSqlInterpolatedAsync($@"
-            INSERT INTO employees (executor_id, fio, company, phone, password)
-            VALUES ({id}, {fio}, {company}, {phone}, {password})
-            ON CONFLICT (executor_id) DO UPDATE SET fio = {fio}, company = {company}, phone = {phone}, password = {password}");
+            INSERT INTO employees (warehouse_id, executor_id, fio, company, phone, password)
+            VALUES ({wh}, {id}, {fio}, {company}, {phone}, {password})
+            ON CONFLICT (warehouse_id, executor_id) DO UPDATE SET fio = {fio}, company = {company}, phone = {phone}, password = {password}");
     }
 
     public async Task<int> AddNewEmployeesAsync(EmployeeAddNewRequest req)
@@ -66,9 +67,10 @@ public class EmployeeService
             var fio = (c.Fio ?? "").Trim();
             if (fio == "" || id == "") continue;
             if (existingIds.Contains(id)) continue;
+            var wh = _db.WarehouseId;
             await _db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO employees (executor_id, fio, company) VALUES ({id}, {fio}, '')
-                ON CONFLICT (executor_id) DO NOTHING");
+                INSERT INTO employees (warehouse_id, executor_id, fio, company) VALUES ({wh}, {id}, {fio}, '')
+                ON CONFLICT (warehouse_id, executor_id) DO NOTHING");
             existingIds.Add(id);
             added++;
         }
@@ -78,7 +80,9 @@ public class EmployeeService
     public async Task SaveAllAsync(List<EmployeeUpsertRequest> employees)
     {
         await using var tx = await _db.Database.BeginTransactionAsync();
-        await _db.Database.ExecuteSqlRawAsync("TRUNCATE employees");
+        // сотрудники только выбранного склада (данные других складов не трогаем)
+        var wh = _db.WarehouseId;
+        await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM employees WHERE warehouse_id = {wh}");
         foreach (var e in employees)
         {
             var id = (e.ExecutorId ?? "").Trim();
@@ -88,9 +92,9 @@ public class EmployeeService
             var password = (e.Password ?? "").Trim();
             if (fio == "" || id == "") continue;
             await _db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO employees (executor_id, fio, company, phone, password)
-                VALUES ({id}, {fio}, {company}, {phone}, {password})
-                ON CONFLICT (executor_id) DO UPDATE SET fio = {fio}, company = {company}, phone = {phone}, password = {password}");
+                INSERT INTO employees (warehouse_id, executor_id, fio, company, phone, password)
+                VALUES ({wh}, {id}, {fio}, {company}, {phone}, {password})
+                ON CONFLICT (warehouse_id, executor_id) DO UPDATE SET fio = {fio}, company = {company}, phone = {phone}, password = {password}");
         }
         await tx.CommitAsync();
     }

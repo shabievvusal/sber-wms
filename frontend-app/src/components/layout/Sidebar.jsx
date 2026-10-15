@@ -5,10 +5,11 @@ import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronDown, LogOut, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
+  ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { WarehouseLabel, WarehousePicker, useWarehouseCount } from '@/components/layout/WarehouseSwitcher'
 import { useAuth } from '@/context/AuthContext'
 import { ROLE_LABELS } from '@/pages/settings/constants'
 
@@ -190,8 +191,6 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false, layoutPr
 
 /** Логотип: градиентная плитка + название (как Brand в WMS). */
 export function Brand({ compact = false }) {
-  const { user } = useAuth()
-  const roleLabel = ROLE_LABELS[user?.role] || user?.role || 'WMS Мониторинг'
   return (
     <div className={cn('flex items-center gap-3', compact && 'justify-center')}>
       <div className="bg-brand-gradient grid size-10 shrink-0 place-items-center rounded-2xl text-white shadow-card">
@@ -200,7 +199,8 @@ export function Brand({ compact = false }) {
       {!compact && (
         <div className="min-w-0 leading-tight">
           <div className="truncate font-semibold tracking-tight">СберЛогистика</div>
-          <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
+          {/* склад — вместо роли (роль видна внизу, у имени); сменить — у «Выйти» */}
+          <WarehouseLabel />
         </div>
       )}
     </div>
@@ -212,6 +212,8 @@ const initials = name => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).
 /** Кто вошёл: инициалы, ФИО, роль и выход — как UserBlock в WMS. */
 function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', themeId = 'collapsed-theme' }) {
   const { user, logout } = useAuth()
+  // складов несколько — рядом с «Выйти» кнопка «Сменить склад»
+  const manyWarehouses = useWarehouseCount() > 1
   const name = user?.name || 'Без имени'
   const roleLabel = ROLE_LABELS[user?.role] || user?.role
 
@@ -235,6 +237,14 @@ function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', the
           <div className="my-1 border-t border-line" />
           <div className="flex justify-center py-1"><ThemeToggle id={themeId} /></div>
           <div className="my-1 border-t border-line" />
+          {manyWarehouses && (
+            <WarehousePicker side={popoverSide} align="start">
+              <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-2">
+                <ArrowLeftRight size={15} />
+                Сменить склад
+              </button>
+            </WarehousePicker>
+          )}
           <button
             type="button"
             onClick={logout}
@@ -255,6 +265,17 @@ function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', the
         <div className="truncate text-sm font-medium" title={name}>{name}</div>
         <div className="truncate text-xs text-muted-foreground">{roleLabel}</div>
       </div>
+      {manyWarehouses && (
+        <WarehousePicker>
+          <button
+            type="button"
+            title="Сменить склад"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            <ArrowLeftRight size={15} />
+          </button>
+        </WarehousePicker>
+      )}
       <button
         type="button"
         title="Выйти"

@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 import { useEffect, useState } from 'react'
 import * as api from '@/lib/api'
 import { Input } from '@/components/ui/input'
@@ -22,14 +23,14 @@ const AutoSaveNote = () => <span className="text-xs text-muted-foreground">Со�
 /** Штраф для служебных записок и реквизиты для акта учёта времени (Мотивация). */
 export function DocsCard() {
   const [fineAmount, setFineAmount] = useState(() => {
-    try { const v = localStorage.getItem(LS_FINE_AMOUNT); return v !== null ? v : '' } catch { return '' }
+    try { const v = localStorage.getItem(whKey(LS_FINE_AMOUNT)); return v !== null ? v : '' } catch { return '' }
   })
   const [actConstants, setActConstants] = useState(() => loadActConstants())
 
   const handleFineChange = e => {
     const val = e.target.value
     setFineAmount(val)
-    try { localStorage.setItem(LS_FINE_AMOUNT, val) } catch { /* ignore */ }
+    try { localStorage.setItem(whKey(LS_FINE_AMOUNT), val) } catch { /* ignore */ }
   }
 
   const handleActConstantChange = (key, value) => {
@@ -76,7 +77,7 @@ export function DocsCard() {
 function CompanyFullNamesCard() {
   const [companies, setCompanies] = useState([])
   const [fullNames, setFullNames] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(LS_COMPANY_FULL_NAMES) || '{}') } catch { return {} }
+    try { return JSON.parse(localStorage.getItem(whKey(LS_COMPANY_FULL_NAMES)) || '{}') } catch { return {} }
   })
 
   useEffect(() => {
@@ -86,7 +87,7 @@ function CompanyFullNamesCard() {
   const handleChange = (company, value) => {
     setFullNames(prev => {
       const updated = { ...prev, [company]: value.trim() }
-      try { localStorage.setItem(LS_COMPANY_FULL_NAMES, JSON.stringify(updated)) } catch { /* ignore */ }
+      try { localStorage.setItem(whKey(LS_COMPANY_FULL_NAMES), JSON.stringify(updated)) } catch { /* ignore */ }
       return updated
     })
   }

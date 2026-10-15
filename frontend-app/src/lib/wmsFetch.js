@@ -4,6 +4,8 @@
 // ../../zlp-main-main/frontend/app/src/api/index.js (fetchRkFromWms), без
 // логики уровня приложения — только сеть.
 
+import { apiHeaders } from '@/lib/api'
+
 const WMS_ROUTES_BASE = 'https://api-p01.samokat.ru/wmsout-wwh/shipments/routes'
 const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/handling-units-in-progress'
 const SAMOKAT_STOCKS_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/changes/search'
@@ -14,6 +16,9 @@ const MONITORING_STATS_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor
 const INBOUND_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/inbound/tasks'
 const MOVEMENTS_URL = 'https://api-p01.samokat.ru/wmsout-wwh/movements/picking-refill/tasks'
 const SHIPMENT_ORDERS_URL = 'https://api-p01.samokat.ru/wmsout-wwh/shipment-order/shipments'
+// склад, выбранный сейчас в WMS у учётки (у учётки он один на все её сессии)
+const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
+const WMS_SHIFTS_URL = 'https://api.samokat.ru/wmsin-wwh/shifts'
 const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage_dc' }
 
 const LS_ACCESS_KEY = 'wms_access_token'
@@ -52,6 +57,36 @@ async function wmsGet(url, token) {
   }
   if (!r.ok) throw new Error(`WMS ${r.status}: ${data?.message || data?.error || r.statusText}`)
   return data
+}
+
+// ─── Склад учётки в WMS ─────────────────────────────────────────────────────
+// Данные из WMS приходят по складу, выбранному сейчас у учётки (в шапке WMS;
+// он один на все сессии учётки). Поэтому всё, что сохраняется у нас,
+// помечается именно этим складом — а не выбранным на сайте: иначе данные
+// одного склада попали бы в другой.
+let wmsWarehouseCache = { token: null, id: null, at: 0 }
+
+/** id склада, выбранного сейчас в WMS у учётки токена (кэш 1 мин). */
+export async function getWmsWarehouseId(token, { fresh = false } = {}) {
+  if (!token) return null
+  if (!fresh && wmsWarehouseCache.token === token && Date.now() - wmsWarehouseCache.at < 60_000) return wmsWarehouseCache.id
+  const data = await wmsGet(WMS_FEATURES_URL, token)
+  const id = data?.value?.warehouseId || null
+  wmsWarehouseCache = { token, id, at: Date.now() }
+  return id
+}
+
+/** Сменить склад в WMS (как выбор склада в шапке WMS) — меняется во всех
+ *  сессиях учётки. Только по явному нажатию пользователя. */
+export async function switchWmsWarehouse(token, warehouseId) {
+  const r = await fetch(WMS_SHIFTS_URL, {
+    method: 'POST',
+    headers: { ...wmsHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ warehouseId }),
+  })
+  if (!r.ok) throw new Error(`WMS не сменил склад: ${r.status}`)
+  wmsWarehouseCache = { token, id: warehouseId, at: Date.now() }
+  return true
 }
 
 // Живой снимок операций в процессе — MonitorPage.jsx использует его вместо
@@ -323,9 +358,11 @@ export async function fetchRkFromWms({ dateFrom, dateTo, token, onProgress }) {
     onProgress?.(`Загружено деталей: ${routeDetails.length} / ${items.length}...`)
   }
 
+  // маршруты — в склад, выбранный сейчас в WMS (откуда они и пришли)
+  const wmsWarehouse = await getWmsWarehouseId(token).catch(() => null)
   const r = await fetch('/api/rk/import-bulk', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders({ 'Content-Type': 'application/json', ...(wmsWarehouse ? { 'X-Warehouse': wmsWarehouse } : {}) }),
     body: JSON.stringify({ routes: routeDetails }),
     credentials: 'include',
   })
@@ -339,10 +376,13 @@ export async function fetchRkFromWms({ dateFrom, dateTo, token, onProgress }) {
 // /api/stats/{placement,remains}/save, что уже вызывают same-origin пути в
 // new zlp — эти функции просто дают им реальные данные вместо демо-фетча).
 
-async function postOwnBackend(url, value) {
+// Сохранение выгрузки у нас — со складом, выбранным сейчас в WMS (см. выше).
+// Не удалось узнать склад в WMS — выбранный на сайте.
+async function postOwnBackend(url, value, token) {
+  const warehouseId = (await getWmsWarehouseId(token).catch(() => null)) || null
   const r = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders({ 'Content-Type': 'application/json', ...(warehouseId ? { 'X-Warehouse': warehouseId } : {}) }),
     body: JSON.stringify({ value }),
     credentials: 'include',
   })
@@ -351,8 +391,8 @@ async function postOwnBackend(url, value) {
   try { data = text ? JSON.parse(text) : null } catch {
     throw new Error(`Сервер вернул не JSON (${r.status}): ${text.slice(0, 150)}`)
   }
-  if (!r.ok) throw new Error(data?.error || r.statusText || `HTTP ${r.status}`)
-  return data
+  if (!r.ok) throw new Error(r.status === 403 ? 'В WMS выбран склад, к которому у вас нет доступа на сайте — данные не сохранены' : (data?.error || r.statusText || `HTTP ${r.status}`))
+  return { ...data, warehouseId }
 }
 
 function _buildBodyForBrowser(options) {
@@ -420,7 +460,7 @@ export async function fetchDataViaBrowser(token, options = {}) {
   // не на объём данных); на дневную смену (9-21, до 12 часов) это давало
   // много лишних секунд ожидания без единой пользы — .NET-инструмент и так
   // умеет разложить один большой батч по часам сам. См. PLAN.md.
-  const saveRes = await postOwnBackend('/api/save-fetched-data', { items: allItems, total: allItems.length })
+  const saveRes = await postOwnBackend('/api/save-fetched-data', { items: allItems, total: allItems.length }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения')
 
   return {
@@ -470,7 +510,7 @@ export async function fetchPlacementViaBrowser(token, { dateFrom, dateTo, create
     const next = await _fetchPlacementPage(token, buildParams(page))
     allItems = allItems.concat(next.items)
   }
-  const saveRes = await postOwnBackend('/api/stats/placement/save', { items: allItems, total: allItems.length })
+  const saveRes = await postOwnBackend('/api/stats/placement/save', { items: allItems, total: allItems.length }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения размещения')
   return {
     success: true,
@@ -516,7 +556,7 @@ export async function fetchRemainsViaBrowser(token, { dateFrom, dateTo, pageSize
     const next = await _fetchRemainsPage(token, buildParams(page))
     allItems = allItems.concat(next.items)
   }
-  const saveRes = await postOwnBackend('/api/stats/remains/save', { items: allItems, total: allItems.length })
+  const saveRes = await postOwnBackend('/api/stats/remains/save', { items: allItems, total: allItems.length }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения объединения остатков')
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0, newEmployees: saveRes.newEmployees || [] }
 }

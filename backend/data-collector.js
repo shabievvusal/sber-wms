@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { loadConfig, ensureDataDir, DATA_DIR } = require('./scheduler');
+const { loadConfig, ensureDataDir } = require('./scheduler');
+const { dataDir } = require('./warehouse-context');
 const { buildDashboardSummary } = require('./build-dashboard-summary');
 
 const API_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/changes/search';
@@ -251,11 +252,11 @@ async function fetchFromAPI(token, bodyOptions = {}) {
       const body = buildBody(baseOptions);
       return filenameFromRange(body.operationCompletedAtFrom, body.operationCompletedAtTo);
     })();
-    let filename = path.join(DATA_DIR, name);
+    let filename = path.join(dataDir(), name);
     let n = 1;
     while (fs.existsSync(filename)) {
       name = name.replace(/\.json$/, `_${n}.json`);
-      filename = path.join(DATA_DIR, name);
+      filename = path.join(dataDir(), name);
       n++;
     }
     const payload = { fetchedAt: new Date().toISOString(), value: { items: resultItems, total } };
@@ -266,7 +267,7 @@ async function fetchFromAPI(token, bodyOptions = {}) {
       const summary = buildDashboardSummary(resultItems, path.join(__dirname, '..', 'empl.csv'));
       summary.meta.fetchedAt = new Date().toISOString();
       summary.meta.sourceFile = name;
-      fs.writeFileSync(path.join(DATA_DIR, lightName), JSON.stringify(summary, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dataDir(), lightName), JSON.stringify(summary, null, 2), 'utf8');
     } catch (err) {
       console.error('Не удалось записать лёгкий файл', lightName, err.message);
     }
@@ -333,17 +334,17 @@ async function fetchFromAPI(token, bodyOptions = {}) {
 
   ensureDataDir();
   let name = filenameFromItems(items) || filenameFromRange(body.operationCompletedAtFrom, body.operationCompletedAtTo);
-  let filename = path.join(DATA_DIR, name);
+  let filename = path.join(dataDir(), name);
   let n = 1;
   while (fs.existsSync(filename)) {
     name = name.replace(/\.json$/, `_${n}.json`);
-    filename = path.join(DATA_DIR, name);
+    filename = path.join(dataDir(), name);
     n++;
   }
   fs.writeFileSync(filename, JSON.stringify({ fetchedAt: new Date().toISOString(), ...data }, null, 2), 'utf8');
 
   const lightName = name.replace(/\.json$/, '.light.json');
-  const lightPath = path.join(DATA_DIR, lightName);
+  const lightPath = path.join(dataDir(), lightName);
   try {
     const summary = buildDashboardSummary(items, path.join(__dirname, '..', 'empl.csv'));
     summary.meta.fetchedAt = new Date().toISOString();

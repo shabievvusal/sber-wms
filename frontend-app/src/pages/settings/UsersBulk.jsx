@@ -16,16 +16,18 @@ import { confirmDialog } from '@/components/ui/confirm'
 const PRIVILEGED = new Set(['admin', 'developer'])
 
 /** Применяет payloadFor(user) ко всем выбранным по очереди; null — пропустить. */
-async function applyToUsers(users, payloadFor, setProgress) {
+async function applyToUsers(users, payloadFor, setProgress, warehouseId) {
   let ok = 0, skipped = 0
   const failed = []
   for (let i = 0; i < users.length; i++) {
     const u = users[i]
     setProgress({ done: i, total: users.length })
     const payload = payloadFor(u)
-    if (!payload) { skipped++; continue }
+    // роль своя на каждом складе: меняем права только на этом складе,
+    // у кого его нет — пропускаем
+    if (!payload || (warehouseId && !(u.warehouseIds || []).includes(warehouseId))) { skipped++; continue }
     try {
-      await api.putVsAdminUser(u.login, payload)
+      await api.putVsAdminUser(u.login, warehouseId ? { ...payload, warehouseId } : payload)
       ok++
     } catch (err) {
       failed.push(`${u.name || u.login}: ${err.message}`)
@@ -51,7 +53,7 @@ const MODES = [
   { v: 'set', label: 'Заменить', hint: 'У всех будут ровно выбранные разделы' },
 ]
 
-function BulkModulesDialog({ users, onClose, onDone }) {
+function BulkModulesDialog({ users, warehouseId, warehouseName, onClose, onDone }) {
   const [mode, setMode] = useState('add')
   const [modules, setModules] = useState(() => new Set())
   const [progress, setProgress] = useState(null)
@@ -76,7 +78,7 @@ function BulkModulesDialog({ users, onClose, onDone }) {
       // пустой список на бэкенде = «как у роли», поэтому «ни одного раздела» не отправляем
       if (!next.length) return null
       return { modules: next }
-    }, setProgress)
+    }, setProgress, warehouseId)
     report(result, 'Разделы обновлены')
     onDone()
   }
@@ -86,7 +88,7 @@ function BulkModulesDialog({ users, onClose, onDone }) {
     <Dialog open onOpenChange={o => !o && !busy && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Разделы у {users.length} пользователей</DialogTitle>
+          <DialogTitle>Разделы у {users.length} пользователей{warehouseName ? ` на складе ${warehouseName}` : ''}</DialogTitle>
           <DialogDescription>
             {skippedPriv > 0 ? `Администраторы и разработчики (${skippedPriv}) пропускаются — у них всегда все разделы.` : 'Разделы, которые увидят выбранные пользователи'}
           </DialogDescription>
@@ -129,7 +131,7 @@ function BulkModulesDialog({ users, onClose, onDone }) {
  * экрана): назначить роль, добавить/убрать/заменить разделы, вернуть разделы
  * роли.
  */
-export function UsersBulkBar({ users, roles, onClear, onDone }) {
+export function UsersBulkBar({ users, roles, warehouseId, warehouseName, onClear, onDone }) {
   const [role, setRole] = useState('')
   const [resetModules, setResetModules] = useState(true)
   const [progress, setProgress] = useState(null)
@@ -139,28 +141,30 @@ export function UsersBulkBar({ users, roles, onClear, onDone }) {
   const assignRole = async () => {
     if (!role) { toast.error('Выберите роль'); return }
     const label = roles.find(r => r.key === role)?.label || role
-    if (!(await confirmDialog({ title: `Назначить роль «${label}»?`, description: `Роль сменится у ${users.length} пользователей.${resetModules ? '\nИх разделы станут такими же, как у роли.' : ''}`, confirmText: 'Назначить' }))) return
-    const result = await applyToUsers(users, () => (resetModules ? { role, modules: [] } : { role }), setProgress)
+    const where = warehouseName ? ` на складе ${warehouseName}` : ''
+    if (!(await confirmDialog({ title: `Назначить роль «${label}»${where}?`, description: `Роль сменится у ${users.length} пользователей${where}.${resetModules ? '\nИх разделы станут такими же, как у роли.' : ''}`, confirmText: 'Назначить' }))) return
+    const result = await applyToUsers(users, () => (resetModules ? { role, modules: [] } : { role }), setProgress, warehouseId)
     report(result, `Роль «${label}» назначена`)
     onDone()
   }
 
   const resetToRole = async () => {
     if (!(await confirmDialog({ title: 'Вернуть разделы роли?', description: `У ${users.length} пользователей личные настройки разделов сбросятся — останутся разделы их роли.`, confirmText: 'Вернуть' }))) return
-    const result = await applyToUsers(users, () => ({ modules: [] }), setProgress)
+    const result = await applyToUsers(users, () => ({ modules: [] }), setProgress, warehouseId)
     report(result, 'Разделы как у роли')
     onDone()
   }
 
   return (
     <>
-      {modulesOpen && <BulkModulesDialog users={users} onClose={() => setModulesOpen(false)} onDone={() => { setModulesOpen(false); onDone() }} />}
+      {modulesOpen && <BulkModulesDialog users={users} warehouseId={warehouseId} warehouseName={warehouseName} onClose={() => setModulesOpen(false)} onDone={() => { setModulesOpen(false); onDone() }} />}
       <div className="sticky bottom-3 z-20 mt-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-[var(--glass)] p-3 shadow-float backdrop-blur-xl">
           <span className="inline-flex items-center gap-2 text-sm font-medium">
             <span className="grid h-6 min-w-6 place-items-center rounded-full bg-brand px-1.5 text-xs font-semibold text-white">{users.length}</span>
             выбрано
           </span>
+          {warehouseName && <span className="text-xs text-muted-foreground">права на складе {warehouseName}</span>}
           <div className="h-6 w-px bg-line" />
           <div className="flex flex-wrap items-center gap-2">
             <Select className="h-8 w-48" value={role} onChange={e => setRole(e.target.value)} placeholder="Роль…">

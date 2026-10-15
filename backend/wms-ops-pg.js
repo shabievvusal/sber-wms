@@ -13,6 +13,7 @@
  */
 
 const { Pool } = require('pg');
+const { currentWarehouse } = require('./warehouse-context');
 
 const pool = new Pool({
   host:     process.env.PG_HOST     || 'postgres',
@@ -43,9 +44,9 @@ async function listExecutors() {
     SELECT executor_id,
            (array_agg(executor ORDER BY length(executor) DESC, executor))[1] AS executor
       FROM wms_ops
-     WHERE executor_id <> '' AND executor <> ''
+     WHERE executor_id <> '' AND executor <> '' AND warehouse_id = $1
      GROUP BY executor_id
-  `);
+  `, [currentWarehouse()]);
   return rows;
 }
 

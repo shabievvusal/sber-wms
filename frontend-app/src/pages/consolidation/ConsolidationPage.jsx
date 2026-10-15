@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
@@ -26,10 +27,10 @@ const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
 const LS_SUPERVISORS = 'memos_supervisors'
 
 function getCompanyFullNames() {
-  try { return JSON.parse(localStorage.getItem(LS_COMPANY_FULL_NAMES) || '{}') } catch { return {} }
+  try { return JSON.parse(localStorage.getItem(whKey(LS_COMPANY_FULL_NAMES)) || '{}') } catch { return {} }
 }
 function getSupervisorOptions() {
-  try { return JSON.parse(localStorage.getItem(LS_SUPERVISORS) || '[]') } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(whKey(LS_SUPERVISORS)) || '[]') } catch { return [] }
 }
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'

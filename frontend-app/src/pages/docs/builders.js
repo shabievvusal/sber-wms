@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 // Перенесено «точь-в-точь» из оригинала (frontend/app/src/pages/docs/DocsPage.jsx,
 // строки 1-327) — юридический/кадровый текст шаблонов служебных записок и
 // объяснительных, ссылки на разделы должностной инструкции. Это контент, а не
@@ -92,11 +93,11 @@ export function todayStr() {
 }
 
 export function getSupervisors() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY_SUPERVISORS) || '[]') } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(whKey(STORAGE_KEY_SUPERVISORS)) || '[]') } catch { return [] }
 }
 
 export function saveSupervisors(arr) {
-  localStorage.setItem(STORAGE_KEY_SUPERVISORS, JSON.stringify(arr))
+  localStorage.setItem(whKey(STORAGE_KEY_SUPERVISORS), JSON.stringify(arr))
 }
 
 // ─── Document builders ──────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Menu } from 'lucide-react'
+import { Menu, Warehouse } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { ConfirmHost } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ import { parseHash, setHash } from '@/lib/hashRoute'
 import { EoAutoRefresh } from '@/lib/eoAutoRefresh'
 import { usePresence } from '@/lib/presence'
 import { isEmbedded, initEmbedBridge, postEmbedUser, setEmbedLogout } from '@/lib/embed'
+import { useWarehouse } from '@/lib/warehouse'
+import { WmsWarehouseBanner } from '@/components/layout/WmsWarehouseBanner'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -93,7 +95,8 @@ function AppGate() {
 }
 
 function AppShell() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const wh = useWarehouse(user)
   const [route, setRoute] = useState(parseHash)
   const [navOpen, setNavOpen] = useState(false)
   usePresence(!!user) // «Был в сети» в Настройках → Пользователи
@@ -123,6 +126,9 @@ function AppShell() {
 
   const navigate = p => { setHash(p); setNavOpen(false) }
 
+  // ни одного склада — данных нет никаких (назначает администратор)
+  if (!wh.id) return <NoWarehouseScreen name={user?.name} onLogout={logout} />
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* Фоновое обновление списков ЕО — работает только на устройстве с
@@ -144,12 +150,31 @@ function AppShell() {
           <MobileUserMenu />
         </div>
 
-        <main key={route.page} className="page-in min-w-0 flex-1 overflow-x-clip">
+        {/* склад в WMS ≠ склад на сайте — предупреждение (внутри WMS сайт следует за WMS) */}
+        <WmsWarehouseBanner />
+        {/* смена склада — страница монтируется заново и грузит данные выбранного склада */}
+        <main key={`${route.page}:${wh.id}`} className="page-in min-w-0 flex-1 overflow-x-clip">
           <ActivePage initialId={route.id} initialSub={route.sub} />
         </main>
       </div>
 
       {!isEmbedded && <MobileDrawer open={navOpen} onOpenChange={setNavOpen} activePage={route.page} onNavigate={navigate} />}
+    </div>
+  )
+}
+
+/** У пользователя нет ни одного склада. */
+function NoWarehouseScreen({ name, onLogout }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-background p-6">
+      <div className="max-w-md space-y-3 text-center">
+        <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand"><Warehouse className="size-6" /></div>
+        <h2 className="text-lg font-semibold tracking-tight">Нет доступа ни к одному складу</h2>
+        <p className="text-sm text-muted-foreground">
+          {name ? name + ", в" : "В"}аша учётка есть на сайте, но администратор ещё не назначил вам склад. Обратитесь к администратору своего склада.
+        </p>
+        <Button variant="outline" onClick={onLogout}>Выйти</Button>
+      </div>
     </div>
   )
 }

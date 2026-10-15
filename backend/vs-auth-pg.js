@@ -518,6 +518,36 @@ async function getSession(sessionId) {
   return session;
 }
 
+// ─── Склад, выбранный на сайте (заголовок X-Warehouse) ──────────────────────
+// Доступ к складам и роль на каждом — таблица vs_user_warehouses (ведёт
+// backend-dotnet/Services/WarehouseService.cs). Ключ логина — как там:
+// телефон +7XXXXXXXXXX, буквенный — в нижнем регистре.
+function warehouseKey(login) {
+  const t = String(login || '').trim()
+  if (!t) return ''
+  if (isLetterLogin(t)) return t.toLowerCase()
+  const digits = t.replace(/\D/g, '')
+  const ten = digits.length > 10 ? digits.slice(-10) : digits
+  return ten.length === 10 ? '+7' + ten : t
+}
+
+/** Сессия с правами на выбранном складе: роль склада (если своя) и
+ *  warehouseId. null — доступа к складу нет. Без заголовка — как есть. */
+async function applyWarehouse(session, warehouseId) {
+  const wid = String(warehouseId || '').trim()
+  if (!session || !wid) return session
+  if (session.role === 'developer') return { ...session, warehouseId: wid }
+  let res
+  try {
+    res = await pool.query('SELECT role FROM vs_user_warehouses WHERE login = $1 AND warehouse_id = $2', [warehouseKey(session.login), wid])
+  } catch (err) {
+    if (err.code === '42P01') return session // таблицы ещё нет (dotnet её создаст)
+    throw err
+  }
+  if (!res.rows.length) return null
+  return { ...session, role: res.rows[0].role || session.role, warehouseId: wid }
+}
+
 async function destroySession(sessionId) {
   if (sessionId) await deleteSessionRow(sessionId);
 }
@@ -710,6 +740,7 @@ module.exports = {
   findUserByLogin,
   createSession,
   getSession,
+  applyWarehouse,
   destroySession,
   getModulesForRole,
   recordLoginAttempt,

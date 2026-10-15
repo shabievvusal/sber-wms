@@ -1,3 +1,4 @@
+import { whKey } from '@/lib/warehouse'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
@@ -10,10 +11,10 @@ const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
 const LS_FINE_AMOUNT = 'sz_fine_amount'
 
 function getCompanyFullNames() {
-  try { return JSON.parse(localStorage.getItem(LS_COMPANY_FULL_NAMES) || '{}') } catch { return {} }
+  try { return JSON.parse(localStorage.getItem(whKey(LS_COMPANY_FULL_NAMES)) || '{}') } catch { return {} }
 }
 function getFineAmount() {
-  try { const v = localStorage.getItem(LS_FINE_AMOUNT); return v ? Number(v) : 0 } catch { return 0 }
+  try { const v = localStorage.getItem(whKey(LS_FINE_AMOUNT)); return v ? Number(v) : 0 } catch { return 0 }
 }
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
