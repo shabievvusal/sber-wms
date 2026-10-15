@@ -81,20 +81,30 @@ export async function getWmsWarehouseId(token, { fresh = false } = {}) {
  *  новая на нужном складе (shifts). Меняется во всех сессиях учётки — только
  *  по явному нажатию пользователя. */
 export async function switchWmsWarehouse(token, warehouseId) {
-  const post = (url, body) => fetch(url, {
-    method: 'POST',
-    headers: { ...wmsHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const errorCode = async r => { try { return (await r.json())?.error || '' } catch { return '' } }
-
-  let r = await post(WMS_SHIFTS_URL, { warehouseId })
-  if (!r.ok && (await errorCode(r)) === 'USER_ALREADY_HAS_A_SHIFT') {
-    const closed = await post(WMS_SHIFTS_URL + '/close', {})
-    if (!closed.ok) throw new Error(`WMS не закрыл текущую смену: ${(await errorCode(closed)) || closed.status}`)
-    r = await post(WMS_SHIFTS_URL, { warehouseId })
+  // WMS сообщает об ошибке полем error — бывает и при HTTP 200
+  // (USER_ALREADY_HAS_A_SHIFT приходит так), поэтому смотрим и статус, и тело
+  const post = async (url, body) => {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { ...wmsHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    let data = null
+    try { data = await r.json() } catch { /* пустой ответ — ок */ }
+    const error = data?.error || (r.ok ? '' : String(r.status))
+    return { ok: !error, error }
   }
-  if (!r.ok) throw new Error(`WMS не сменил склад: ${(await errorCode(r)) || r.status}`)
+
+  let res = await post(WMS_SHIFTS_URL, { warehouseId })
+  if (res.error === 'USER_ALREADY_HAS_A_SHIFT') {
+    const closed = await post(WMS_SHIFTS_URL + '/close', {})
+    if (!closed.ok) throw new Error(`WMS не закрыл текущую смену: ${closed.error}`)
+    res = await post(WMS_SHIFTS_URL, { warehouseId })
+  }
+  if (!res.ok) throw new Error(`WMS не сменил склад: ${res.error}`)
+  // проверяем, что склад в WMS действительно сменился
+  const now = await getWmsWarehouseId(token, { fresh: true }).catch(() => null)
+  if (now && now !== warehouseId) throw new Error('WMS не сменил склад — смените его в шапке WMS')
   wmsWarehouseCache = { token, id: warehouseId, at: Date.now() }
   return true
 }
