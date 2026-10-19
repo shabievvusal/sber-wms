@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { getStoredToken, getPieceSelectionTasks } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,9 @@ import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { DEFAULT_STATUSES, STATUS_LABELS, TEMP_LABELS, TEMP_OPTIONS, ZONE_OPTIONS } from './constants'
 import { fmtDay, fmtKg, fmtLiters, fmtNum, userName, dateToApiFrom, dateToApiTo, selectedOrAll } from './format'
-import { RefreshCw } from 'lucide-react'
+import { Printer, RefreshCw } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { AddressLabelsPrint, printAddressLabels } from './AddressLabels'
 import { Select } from '@/components/ui/select'
 
 const PAGE_SIZE = 100
@@ -31,6 +33,11 @@ function sortValue(row, key) {
   return Number(row?.[SORT_FIELDS[key]]) || 0
 }
 
+function compareRows(a, b, key) {
+  if (key === 'name') return String(a.shipTo?.name || '').localeCompare(String(b.shipTo?.name || ''), 'ru')
+  return sortValue(a, key) - sortValue(b, key)
+}
+
 // Перенесено из оригинала (frontend/app/src/pages/picking/PieceSelectionPage.jsx)
 // — отчёт по заданиям штучного отбора. Есть настоящий WMS-токен → реальный
 // getPieceSelectionTasks (прямой браузерный вызов в api-p01.samokat.ru,
@@ -48,12 +55,17 @@ export default function PieceSelectionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sort, setSort] = useState({ key: '', dir: 'desc' })
+  // этикетки с адресами: отмеченные задания (или все показанные) печатаются
+  // в порядке таблицы — бригадир сам раскладывает их как удобно
+  const [selected, setSelected] = useState(() => new Set())
+  const [printItems, setPrintItems] = useState([])
 
   const toggleSort = key => setSort(prev => prev.key === key ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' })
 
   const load = async () => {
     setLoading(true)
     setError('')
+    setSelected(new Set())
     const token = getStoredToken()
     if (!token) {
       setRows([])
@@ -100,11 +112,37 @@ export default function PieceSelectionPage() {
   const sorted = useMemo(() => {
     if (!sort.key) return filtered
     const direction = sort.dir === 'asc' ? 1 : -1
-    return [...filtered].sort((a, b) => (sortValue(a, sort.key) - sortValue(b, sort.key)) * direction)
+    return [...filtered].sort((a, b) => compareRows(a, b, sort.key) * direction)
   }, [filtered, sort])
+
+  const toggleOne = id => setSelected(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const shownSelected = sorted.filter(r => selected.has(r.id))
+  const allShownSelected = sorted.length > 0 && shownSelected.length === sorted.length
+  const toggleAllShown = () => setSelected(allShownSelected ? new Set() : new Set(sorted.map(r => r.id)))
+  // отмечено — печатаем отмеченные, иначе всё, что показано (с фильтрами), — в порядке таблицы
+  const toPrint = shownSelected.length ? shownSelected : sorted
+
+  const handlePrint = () => {
+    if (!toPrint.length) { toast.error('Нет заданий для печати'); return }
+    setPrintItems(toPrint)
+  }
+  // печать — когда слой с этикетками уже отрисован
+  useEffect(() => {
+    if (!printItems.length) return
+    const id = window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      printAddressLabels()
+      setPrintItems([])
+    }))
+    return () => window.cancelAnimationFrame(id)
+  }, [printItems])
 
   return (
     <div className="mx-auto w-full space-y-4 p-6">
+      {printItems.length > 0 && <AddressLabelsPrint items={printItems} />}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Штучный отбор</h1>
         <p className="text-sm text-muted-foreground">Задания комплектации по штучному отбору</p>
@@ -139,6 +177,22 @@ export default function PieceSelectionPage() {
         </span>
       </div>
 
+      {rows && rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-surface-2/40 px-3 py-2 text-sm">
+          <Printer className="size-4 text-muted-foreground" />
+          <span className="text-muted-foreground">
+            Этикетки с адресами 100×75 мм — в порядке таблицы (отсортируйте как удобно).
+            {shownSelected.length ? ` Отмечено: ${shownSelected.length}.` : ' Ничего не отмечено — напечатаются все показанные.'}
+          </span>
+          {shownSelected.length > 0 && (
+            <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => setSelected(new Set())}>снять отметки</button>
+          )}
+          <Button size="sm" className="ml-auto" onClick={handlePrint} disabled={!toPrint.length}>
+            <Printer className="size-3.5" /> Печать этикеток ({toPrint.length})
+          </Button>
+        </div>
+      )}
+
       <div className="rounded-lg border">
         {!rows && !loading && <div className="p-8 text-center text-sm text-muted-foreground">Выберите период и нажмите «Загрузить»</div>}
         {loading && <Spinner label="Загрузка заданий..." />}
@@ -149,7 +203,8 @@ export default function PieceSelectionPage() {
               {sorted.map(row => (
                 <div key={row.id} className="space-y-1.5 p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-medium">{row.shipTo?.name || '—'}</span>
+                    <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} aria-label="Отметить для печати" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{row.shipTo?.name || '—'}</span>
                     <Badge variant={statusBadgeVariant(row.status)}>{STATUS_LABELS[row.status] || row.status || '—'}</Badge>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
@@ -174,8 +229,11 @@ export default function PieceSelectionPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8">
+                      <Checkbox checked={allShownSelected ? true : shownSelected.length ? 'indeterminate' : false} onCheckedChange={toggleAllShown} aria-label="Отметить все показанные" />
+                    </TableHead>
                     <TableHead>Статус</TableHead>
-                    <TableHead>ЦФЗ</TableHead>
+                    <SortableHead label="ЦФЗ" sortKey="name" sort={sort} onSort={toggleSort} />
                     <SortableHead label="Ячеек" sortKey="cells" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Вес" sortKey="weight" sort={sort} onSort={toggleSort} className="text-right" />
                     <SortableHead label="Объем" sortKey="volume" sort={sort} onSort={toggleSort} className="text-right" />
@@ -188,7 +246,8 @@ export default function PieceSelectionPage() {
                 </TableHeader>
                 <TableBody>
                   {sorted.map(row => (
-                    <TableRow key={row.id}>
+                    <TableRow key={row.id} className={selected.has(row.id) ? 'bg-brand-soft/40' : undefined}>
+                      <TableCell><Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} aria-label="Отметить для печати" /></TableCell>
                       <TableCell><Badge variant={statusBadgeVariant(row.status)}>{STATUS_LABELS[row.status] || row.status || '—'}</Badge></TableCell>
                       <TableCell>{row.shipTo?.name || '—'}</TableCell>
                       <TableCell className="text-right">{fmtNum(row.sourceCellsCount)}</TableCell>
@@ -202,7 +261,7 @@ export default function PieceSelectionPage() {
                     </TableRow>
                   ))}
                   {!sorted.length && (
-                    <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
