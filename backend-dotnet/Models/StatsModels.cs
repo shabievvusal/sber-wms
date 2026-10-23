@@ -169,28 +169,31 @@ public class WmsRemainsEntity
     public DateTime? CreatedAt { get; set; }
 }
 
-// ─── Спуск/пополнение (wms_picking_refill) ─────────────────────────────────
-// Задачи WMS movements/picking-refill: MOVE_DOWN — спуск, MOVE_TO_PICKING —
-// пополнение. Оба типа в одной таблице, саммари фильтрует по TaskType.
+// ─── Журнал перемещений ЕО (wms_stock_moves) ───────────────────────────────
+// Операции WMS stocks/changes/search: спуск (PIECE_SELECTION_HANDLING_UNIT_
+// DESCENT), пополнение (PIECE_SELECTION_PICKING_REPLENISHMENT), размещение
+// (STORAGE_PLACEMENT). Строка — один товар операции (id строки WMS); одна ЕО
+// с одним временем завершения — одна операция, схлопывается в саммари.
 
-public class WmsPickingRefillEntity
+public class WmsStockMoveEntity
 {
     public long Id { get; set; }
     public DateOnly Date { get; set; }
     public short Hour { get; set; }
     public string MergeKey { get; set; } = "";
-    public string ItemId { get; set; } = "";
-    public string Status { get; set; } = "";
-    public string TaskType { get; set; } = "";
-    public string HandlingUnitBarcode { get; set; } = "";
-    public string SourceCellBarcode { get; set; } = "";
-    public string SourceCellName { get; set; } = "";
-    public string TargetCellBarcode { get; set; } = "";
-    public string TargetCellName { get; set; } = "";
+    public string OperationType { get; set; } = "";
+    public string SourceCellAddress { get; set; } = "";
+    public string SourceHandlingUnitBarcode { get; set; } = "";
+    public string TargetCellAddress { get; set; } = "";
+    public string TargetHandlingUnitBarcode { get; set; } = "";
+    public string NomenclatureCode { get; set; } = "";
+    public string ProductName { get; set; } = "";
+    public decimal Quantity { get; set; }
     public ResponsibleUser ResponsibleUser { get; set; } = new();
     public string ExecutorId { get; set; } = "";
     public string Executor { get; set; } = "";
-    public DateTime? CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 // ─── product_weights ────────────────────────────────────────────────────────
@@ -227,8 +230,8 @@ public class ShiftDataCounts
     public int Placement { get; set; }
     public int Receiving { get; set; }
     public int Remains { get; set; }
-    public int PickingRefill { get; set; }
-    public int Total => Ops + Placement + Receiving + Remains + PickingRefill;
+    public int StockMoves { get; set; }
+    public int Total => Ops + Placement + Receiving + Remains + StockMoves;
 }
 
 public class OpsIngestRequest
@@ -252,9 +255,9 @@ public class RemainsSaveRequest
     public List<System.Text.Json.JsonElement>? Items { get; set; }
 }
 
-// POST /api/stats/picking-refill/save — браузер шлёт { value: { items } }
+// POST /api/stats/stock-moves/save — браузер шлёт { value: { items } }
 // (postOwnBackend в wmsFetch.js), плоский { items } тоже принимается.
-public class PickingRefillSaveRequest
+public class StockMovesSaveRequest
 {
     public System.Text.Json.JsonElement? Value { get; set; }
     public List<System.Text.Json.JsonElement>? Items { get; set; }

@@ -581,35 +581,43 @@ export async function fetchRemainsViaBrowser(token, { dateFrom, dateTo, pageSize
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0, newEmployees: saveRes.newEmployees || [] }
 }
 
-// Спуск (MOVE_DOWN) и пополнение (MOVE_TO_PICKING) — одна выгрузка без
-// фильтра по taskType, бэкенд сам раскладывает по типам. pageSize 100 — с
-// таким размером страницы WMS отдаёт эту выгрузку в веб-интерфейсе.
-export async function fetchPickingRefillViaBrowser(token, { dateFrom, dateTo, pageSize = 100 } = {}) {
-  const size = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 100))
-  const buildParams = pageNumber => {
-    const p = new URLSearchParams()
-    if (dateFrom) p.set('dateFrom', dateFrom)
-    if (dateTo) p.set('dateTo', dateTo)
-    p.set('status', 'COMPLETED')
-    p.set('pageNumber', String(pageNumber))
-    p.set('pageSize', String(size))
-    return p
+// Спуск, пополнение и размещение — из того же журнала stocks/changes, что и
+// комплектация, одной выгрузкой на три типа; сохраняются отдельно от неё
+// (/api/stats/stock-moves/save), бэкенд сам раскладывает по типам.
+const STOCK_MOVE_TYPES = ['PIECE_SELECTION_HANDLING_UNIT_DESCENT', 'PIECE_SELECTION_PICKING_REPLENISHMENT', 'STORAGE_PLACEMENT']
+
+// В бэкенд — только нужные поля: в ответе WMS на каждую строку ещё картинка,
+// штрихкоды и сроки товара, запрос вышел бы в разы тяжелее.
+function _slimStockMove(it) {
+  return {
+    id: it.id,
+    operationType: it.operationType,
+    product: { nomenclatureCode: it.product?.nomenclatureCode, name: it.product?.name },
+    sourceAddress: it.sourceAddress,
+    targetAddress: it.targetAddress,
+    operationStartedAt: it.operationStartedAt,
+    operationCompletedAt: it.operationCompletedAt,
+    responsibleUser: it.responsibleUser,
+    targetQuantity: it.targetQuantity,
   }
-  const getPage = async params => {
-    const data = await samokatGet(token, MOVEMENTS_URL, params)
-    const value = data?.value || data
-    return { items: Array.isArray(value?.items) ? value.items : [], total: value?.total ?? data?.totalElements ?? null }
-  }
-  const first = await getPage(buildParams(1))
-  let allItems = [...first.items]
+}
+
+export async function fetchStockMovesViaBrowser(token, { dateFrom, dateTo, pageSize = 2000 } = {}) {
+  const size = Math.min(2000, Math.max(100, parseInt(pageSize, 10) || 2000))
+  const body = pageNumber => ({
+    ..._buildBodyForBrowser({ operationCompletedAtFrom: dateFrom, operationCompletedAtTo: dateTo, pageNumber, pageSize: size }),
+    operationTypes: STOCK_MOVE_TYPES,
+  })
+  const first = await _fetchOnePageFromBrowser(token, body(1))
+  let allItems = first.items.map(_slimStockMove)
   const total = first.total ?? allItems.length
   const pages = Math.ceil(total / size)
   for (let page = 2; page <= pages; page++) {
-    const next = await getPage(buildParams(page))
-    allItems = allItems.concat(next.items)
+    const next = await _fetchOnePageFromBrowser(token, body(page))
+    allItems = allItems.concat(next.items.map(_slimStockMove))
   }
-  const saveRes = await postOwnBackend('/api/stats/picking-refill/save', { items: allItems, total: allItems.length }, token)
-  if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения спуска/пополнения')
+  const saveRes = await postOwnBackend('/api/stats/stock-moves/save', { items: allItems, total: allItems.length }, token)
+  if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения спуска/пополнения/размещения')
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0 }
 }
 

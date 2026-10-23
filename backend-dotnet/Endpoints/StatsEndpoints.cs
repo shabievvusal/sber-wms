@@ -318,24 +318,26 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
-        // ─── Спуск/пополнение ───────────────────────────────────────────────
+        // ─── Журнал перемещений ЕО: спуск / пополнение / размещение ─────────
         // В отличие от остальных доменов — без Node и JSON-файлов: браузер
-        // шлёт выгрузку WMS прямо сюда (через Caddy), пишется только в PG.
+        // шлёт выгрузку stocks/changes прямо сюда (через Caddy), пишется
+        // только в PG. Саммари размещения — выше (/placement/summary), оно
+        // читает этот же журнал с откатом на wms_placement.
 
-        app.MapPost("/api/stats/picking-refill/save", async (PickingRefillSaveRequest body, StatsService svc) =>
+        app.MapPost("/api/stats/stock-moves/save", async (StockMovesSaveRequest body, StatsService svc) =>
         {
             try
             {
                 var items = body.Items ?? (body.Value.HasValue && body.Value.Value.ValueKind == JsonValueKind.Object && body.Value.Value.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array
                     ? itemsEl.EnumerateArray().ToList() : new List<JsonElement>());
-                var (added, skipped) = await svc.SavePickingRefillItemsAsync(items);
-                return Results.Json(new { ok = true, operation = "picking-refill", added, skipped, itemsCount = items.Count });
+                var (added, skipped) = await svc.SaveStockMovesAsync(items);
+                return Results.Json(new { ok = true, operation = "stock-moves", added, skipped, itemsCount = items.Count });
             }
             catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        // movedown — спуск (MOVE_DOWN), refill — пополнение (MOVE_TO_PICKING)
-        foreach (var (op, taskType) in new[] { ("movedown", "MOVE_DOWN"), ("refill", "MOVE_TO_PICKING") })
+        // movedown — спуск, refill — пополнение
+        foreach (var (op, taskType) in new[] { ("movedown", StatsService.OpDescent), ("refill", StatsService.OpReplenishment) })
         {
             app.MapGet($"/api/date/{{date}}/{op}/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
             {
@@ -355,7 +357,7 @@ public static class StatsEndpoints
                     var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
                     var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
                     var idMap = await svc.GetIdMapAsync();
-                    var summary = await svc.GetPickingRefillSummaryAsync(taskType, date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                    var summary = await svc.GetStockMovesSummaryAsync(taskType, date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
                     return Results.Json(Merge(new { date, shift = (object?)normalizedShift }, summary));
                 }
                 catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
@@ -378,7 +380,7 @@ public static class StatsEndpoints
                     var rows = new List<object>();
                     foreach (var dateStr in dates)
                     {
-                        var summary = (dynamic)await svc.GetPickingRefillSummaryAsync(taskType, dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                        var summary = (dynamic)await svc.GetStockMovesSummaryAsync(taskType, dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
                         var hb = summary.hourlyByEmployee;
                         foreach (var row in hb.rows)
                         {
