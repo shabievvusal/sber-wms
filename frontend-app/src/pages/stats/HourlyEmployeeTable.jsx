@@ -92,9 +92,20 @@ function Legend({ mode, zoneCatalog }) {
 // Зоны («По зонам»: раскраска ячеек + легенда) больше не завязаны на
 // фиксированный список — см. `buildZoneCatalog`/`zoneColor` в format.js
 // (уточнение пользователя от 2026-07-12: «без хардкода»).
+// Приёмка: по какому показателю сортировать «Итого» и колонки часов —
+// значения итога и по часам из сводки (BuildReceivingSummary).
+const RECEIVING_SORT_METRICS = {
+  deliveries: { label: 'поставкам', total: r => r.total, byHour: r => r.byHour },
+  eo: { label: 'ЕО', total: r => r.secondaryTotal, byHour: r => r.secondaryByHour },
+  sku: { label: 'SKU', total: r => r.skuTotal, byHour: r => r.skuByHour },
+  pieces: { label: 'штукам', total: r => r.piecesTotal, byHour: r => r.piecesByHour },
+  weight: { label: 'весу', total: r => r.weightGramsTotal, byHour: r => r.weightGramsByHour },
+}
+
 export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, operation, shift, dateStr, allowedIdleMinutes }) {
   const [sortCol, setSortCol] = useState('total')
   const [sortDir, setSortDir] = useState('desc')
+  const [receivingMetric, setReceivingMetric] = useState('deliveries')
   // Фильтр «час + зона» (запрос пользователя 2026-07-15): выбрал час и зону —
   // остаются только те, кто в этот час работал именно в этой зоне
   // (byHourZone[час] === зона). Работает поверх уже отфильтрованных по
@@ -137,16 +148,19 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
     if (sortCol === 'name') return (sortDir === 'asc' ? 1 : -1) * a.name.localeCompare(b.name, 'ru')
     if (sortCol === 'company') return (sortDir === 'asc' ? 1 : -1) * (a.company || '').localeCompare(b.company || '', 'ru')
     let av, bv
+    const metric = isReceiving ? RECEIVING_SORT_METRICS[receivingMetric] : null
     // Сортировка по конкретному часу (запрос пользователя 2026-07-15) —
     // sortCol здесь число (сам час), а не одна из именованных строк ниже.
-    if (typeof sortCol === 'number') { av = a.byHour?.[sortCol] || 0; bv = b.byHour?.[sortCol] || 0 }
+    if (typeof sortCol === 'number' && metric) { av = metric.byHour(a)?.[sortCol] || 0; bv = metric.byHour(b)?.[sortCol] || 0 }
+    else if (typeof sortCol === 'number') { av = a.byHour?.[sortCol] || 0; bv = b.byHour?.[sortCol] || 0 }
+    else if (sortCol === 'total' && metric) { av = metric.total(a) || 0; bv = metric.total(b) || 0 }
     else if (sortCol === 'worked') { av = a._worked || 0; bv = b._worked || 0 }
     else if (sortCol === 'weightStorage') { av = a._weight.storage; bv = b._weight.storage }
     else if (sortCol === 'weightKdk') { av = a._weight.kdk; bv = b._weight.kdk }
     else if (sortCol === 'weight') { av = a._weight.total; bv = b._weight.total }
     else { av = a.total; bv = b.total }
     return sortDir === 'desc' ? bv - av : av - bv
-  }), [visible, sortCol, sortDir])
+  }), [visible, sortCol, sortDir, isReceiving, receivingMetric])
 
   // Итоги над часовой сеткой (запрос пользователя 2026-07-15): по каждому
   // часу — сумма задач и среднее НА РАБОТАВШЕГО (делим на число сотрудников,
@@ -199,6 +213,18 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
           )}
           {hourZoneActive && (
             <span className="text-xs text-muted-foreground">Найдено: {visible.length}</span>
+          )}
+          {isReceiving && (
+            <>
+              <span className="ml-2 text-xs text-muted-foreground">Сортировать по:</span>
+              <Select
+                className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                value={receivingMetric}
+                onChange={e => { setReceivingMetric(e.target.value); if (sortCol !== 'total' && typeof sortCol !== 'number') { setSortCol('total'); setSortDir('desc') } }}
+              >
+                {Object.entries(RECEIVING_SORT_METRICS).map(([key, m]) => <option key={key} value={key}>{m.label}</option>)}
+              </Select>
+            </>
           )}
         </div>
       )}
