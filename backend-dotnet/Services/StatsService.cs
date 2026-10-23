@@ -1425,6 +1425,36 @@ public class StatsService
 
     public async Task<object> GetReceivingSummaryAsync(string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc = null, DateTime? completedToUtc = null)
     {
+        var items = await GetReceivingFilteredItemsAsync(dateStr, fromHour, toHour, shift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc);
+        return BuildReceivingSummary(items, idMap);
+    }
+
+    // Поставки построчно — для Excel-отчёта по приёмке (те же фильтры, что у сводки).
+    public async Task<List<object>> GetReceivingRowsAsync(string dateStr, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc = null, DateTime? completedToUtc = null)
+    {
+        var items = await GetReceivingFilteredItemsAsync(dateStr, null, null, shift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc);
+        return items.Select(r => (object)new
+        {
+            id = r.ItemId,
+            taskNumber = r.TaskNumber,
+            orderNumber = r.OrderNumber,
+            supplierName = r.SupplierName,
+            type = r.Type,
+            status = r.Status,
+            startedAt = r.StartedAt,
+            completedAt = r.CompletedAt,
+            executorId = r.ExecutorId,
+            executor = r.Executor,
+            company = ResolveCompany(idMap, r.ExecutorId) ?? "—",
+            eo = r.EoCount,
+            sku = r.SkuCount,
+            pieces = r.Pieces,
+            weightGrams = r.WeightInGrams,
+        }).ToList();
+    }
+
+    private async Task<List<WmsReceivingEntity>> GetReceivingFilteredItemsAsync(string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc, DateTime? completedToUtc)
+    {
         var items = completedFromUtc != null && completedToUtc != null
             ? await GetReceivingItemsByCompletedAsync(completedFromUtc.Value, completedToUtc.Value)
             : await GetReceivingItemsAsync(dateStr, fromHour, toHour, shift);
@@ -1439,7 +1469,7 @@ public class StatsService
                 return !string.IsNullOrEmpty(company) && allowed.Contains(company.Trim().ToLowerInvariant());
             }).ToList();
         }
-        return BuildReceivingSummary(items, idMap);
+        return items;
     }
 
     // ─── Remains: запись ─────────────────────────────────────────────────────

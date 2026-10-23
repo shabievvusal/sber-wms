@@ -508,6 +508,14 @@ function opDateSummary(path) {
 export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
+
+// Приёмка построчно (поставки) — для Excel-отчёта; те же shift/интервал, что у сводки.
+export async function getReceivingRows(dateStr, { shift, completedFrom, completedTo } = {}) {
+  const params = new URLSearchParams()
+  if (shift) params.set('shift', shift)
+  if (completedFrom && completedTo) { params.set('completedFrom', completedFrom); params.set('completedTo', completedTo) }
+  return req(`/api/date/${dateStr}/receiving/rows?${params}`)
+}
 export const getMovedownDateSummary = opDateSummary('movedown')
 export const getRefillDateSummary = opDateSummary('refill')
 

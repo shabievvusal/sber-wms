@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateTimeRangePicker } from '@/components/ui/date-picker'
+import { exportReceivingXlsx } from './receivingExport'
 import { Spinner } from '@/components/ui/spinner'
 import { StatsToolbar } from './StatsToolbar'
 import { StatsCard } from './StatsCard'
@@ -643,9 +644,35 @@ export default function StatsPage() {
     toast.success('Файл .xlsx загружен')
   }
 
+  // Приёмка — свой многолистовой отчёт (receivingExport.js) по списку поставок
+  // за ту же дату/смену или интервал «Дата завершения», с фильтром компании.
+  const handleExportReceiving = async () => {
+    try {
+      const res = await api.getReceivingRows(dateStr, { shift, ...(receivingRangeIso || {}) })
+      let rows = res?.rows || []
+      if (filterCompany === '__none__') rows = rows.filter(r => !r.company || r.company === '—')
+      else if (filterCompany !== '__all__') rows = rows.filter(r => r.company === filterCompany)
+      if (!rows.length) { toast.info('Нет данных для экспорта'); return }
+      const fmtMsk = s => s.replace('T', ' ').split(' ').map((p, i) => i === 0 ? p.split('-').reverse().join('.') : p).join(' ')
+      const periodLabel = receivingRange.from && receivingRange.to
+        ? `Завершены ${fmtMsk(receivingRange.from)} – ${fmtMsk(receivingRange.to)} (МСК)`
+        : `${dateStr.split('-').reverse().join('.')} · ${shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'}`
+      const suffix = receivingRange.from && receivingRange.to
+        ? `${receivingRange.from.replace(':', '-')}_${receivingRange.to.replace(':', '-')}`
+        : `${dateStr}_${shift}`
+      await exportReceivingXlsx(rows, {
+        periodLabel: filterCompany === '__all__' ? periodLabel : `${periodLabel} · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`,
+        fileName: `приемка_${suffix}.xlsx`,
+      })
+    } catch (err) {
+      toast.error('Не удалось выгрузить приёмку: ' + (err.message || err))
+    }
+  }
+
   const handleExportClick = () => {
     if (effectiveHeMode === 'idles') return handleExportIdles()
     if (effectiveHeMode === 'monthly') return monthlyExportRef.current?.()
+    if (operation === 'receiving') return handleExportReceiving()
     return handleExportHourly()
   }
 

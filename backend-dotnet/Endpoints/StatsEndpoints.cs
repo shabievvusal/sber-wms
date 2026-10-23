@@ -212,33 +212,23 @@ public static class StatsEndpoints
         {
             try
             {
-                if (!System.Text.RegularExpressions.Regex.IsMatch(date, @"^\d{4}-\d{2}-\d{2}$"))
-                    return Results.Json(new { error = "Неверный формат даты (YYYY-MM-DD)" }, statusCode: 400);
-                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
-                {
-                    if (normalizedShift != null && normalizedShift != session.ShiftType)
-                        return Results.Json(new { error = "Доступ только к своей смене" }, statusCode: 403);
-                    normalizedShift = session.ShiftType;
-                }
-                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                var idMap = await svc.GetIdMapAsync();
-                DateTime? completedFromUtc = null, completedToUtc = null;
-                // Супервайзеру — только своя смена (выше), интервал её не обходит.
-                if (session?.Role != "supervisor"
-                    && DateTimeOffset.TryParse(completedFrom, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var cf)
-                    && DateTimeOffset.TryParse(completedTo, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var ct))
-                {
-                    if (ct < cf) return Results.Json(new { error = "Конец интервала раньше начала" }, statusCode: 400);
-                    if (ct - cf > TimeSpan.FromDays(31)) return Results.Json(new { error = "Интервал не больше 31 дня" }, statusCode: 400);
-                    completedFromUtc = cf.UtcDateTime;
-                    completedToUtc = ct.UtcDateTime;
-                }
-                var summary = await svc.GetReceivingSummaryAsync(date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc);
-                return Results.Json(Merge(new { date, shift = (object?)normalizedShift }, summary));
+                var (q, error) = await ResolveReceivingQueryAsync(date, shift, completedFrom, completedTo, ctx, svc, sessions);
+                if (error != null) return error;
+                var summary = await svc.GetReceivingSummaryAsync(date, fromHour, toHour, q.Shift, q.FilterExecutorNorm, q.FilterCompanies, q.IdMap, q.CompletedFromUtc, q.CompletedToUtc);
+                return Results.Json(Merge(new { date, shift = (object?)q.Shift }, summary));
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        });
+
+        // Поставки построчно — источник Excel-отчёта по приёмке (страница статистики).
+        app.MapGet("/api/date/{date}/receiving/rows", async (string date, string? shift, string? completedFrom, string? completedTo, HttpContext ctx, StatsService svc, SessionService sessions) =>
+        {
+            try
+            {
+                var (q, error) = await ResolveReceivingQueryAsync(date, shift, completedFrom, completedTo, ctx, svc, sessions);
+                if (error != null) return error;
+                var rows = await svc.GetReceivingRowsAsync(date, q.Shift, q.FilterExecutorNorm, q.FilterCompanies, q.IdMap, q.CompletedFromUtc, q.CompletedToUtc);
+                return Results.Json(new { date, shift = (object?)q.Shift, rows });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
@@ -538,6 +528,41 @@ public static class StatsEndpoints
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
+    }
+
+    private record ReceivingQuery(string? Shift, string? FilterExecutorNorm, List<string>? FilterCompanies, Dictionary<string, string> IdMap, DateTime? CompletedFromUtc, DateTime? CompletedToUtc);
+
+    // Общие для /receiving/summary и /receiving/rows: проверка даты, смена
+    // супервайзера, фильтры «только свои»/видимые компании и интервал
+    // completedFrom/completedTo (ISO) вместо даты/смены.
+    private static async Task<(ReceivingQuery Query, IResult? Error)> ResolveReceivingQueryAsync(string date, string? shift, string? completedFrom, string? completedTo, HttpContext ctx, StatsService svc, SessionService sessions)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(date, @"^\d{4}-\d{2}-\d{2}$"))
+            return (null!, Results.Json(new { error = "Неверный формат даты (YYYY-MM-DD)" }, statusCode: 400));
+        var normalizedShift = shift == "day" || shift == "night" ? shift : null;
+        var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
+        if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
+        {
+            if (normalizedShift != null && normalizedShift != session.ShiftType)
+                return (null!, Results.Json(new { error = "Доступ только к своей смене" }, statusCode: 403));
+            normalizedShift = session.ShiftType;
+        }
+        var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
+        var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
+        var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
+        var idMap = await svc.GetIdMapAsync();
+        DateTime? completedFromUtc = null, completedToUtc = null;
+        // Супервайзеру — только своя смена (выше), интервал её не обходит.
+        if (session?.Role != "supervisor"
+            && DateTimeOffset.TryParse(completedFrom, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var cf)
+            && DateTimeOffset.TryParse(completedTo, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var ct))
+        {
+            if (ct < cf) return (null!, Results.Json(new { error = "Конец интервала раньше начала" }, statusCode: 400));
+            if (ct - cf > TimeSpan.FromDays(31)) return (null!, Results.Json(new { error = "Интервал не больше 31 дня" }, statusCode: 400));
+            completedFromUtc = cf.UtcDateTime;
+            completedToUtc = ct.UtcDateTime;
+        }
+        return (new ReceivingQuery(normalizedShift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc), null);
     }
 
     private static string NormalizeFioForMatch(string? fio)
