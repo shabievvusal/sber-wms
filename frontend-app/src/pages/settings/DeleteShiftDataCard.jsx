@@ -21,6 +21,7 @@ const DOMAINS = [
   { key: 'placement', label: 'Раскладка' },
   { key: 'receiving', label: 'Приёмка' },
   { key: 'remains', label: 'Остатки' },
+  { key: 'pickingRefill', label: 'Спуск/пополнение' },
 ]
 
 // Только admin/developer (см. SettingsPage.jsx) — безвозвратное удаление
@@ -63,7 +64,7 @@ export function DeleteShiftDataCard() {
     const confirmed = await confirmDialog({
       title: `Удалить ${shiftLabel} смену за ${date.split('-').reverse().join('.')}?`,
       description:
-        `Операции: ${counts.ops}\nРаскладка: ${counts.placement}\nПриёмка: ${counts.receiving}\nОстатки: ${counts.remains}\nВсего: ${counts.total}\n\n` +
+        `Операции: ${counts.ops}\nРаскладка: ${counts.placement}\nПриёмка: ${counts.receiving}\nОстатки: ${counts.remains}\nСпуск/пополнение: ${counts.pickingRefill ?? 0}\nВсего: ${counts.total}\n\n` +
         `Это необратимо, резервной копии не будет.`,
       confirmText: `Удалить ${counts.total} записей`,
       danger: true,

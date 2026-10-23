@@ -50,6 +50,18 @@ const API_BY_OP = {
   placement: (from, to, shift) => api.getMonthlyPlacementEmployees(from, to, shift),
   receiving: (from, to, shift) => api.getMonthlyReceivingEmployees(from, to, shift),
   remains: (from, to, shift) => api.getMonthlyRemainsEmployees(from, to, shift),
+  movedown: (from, to, shift) => api.getMonthlyMovedownEmployees(from, to, shift),
+  refill: (from, to, shift) => api.getMonthlyRefillEmployees(from, to, shift),
+}
+
+// заголовок таблицы и префикс имени XLSX-файла
+const OP_LABELS = {
+  selection: { title: 'Производительность', file: 'производительность' },
+  placement: { title: 'Размещение', file: 'размещение' },
+  receiving: { title: 'Приёмка', file: 'приемка' },
+  remains: { title: 'Остатки', file: 'остатки' },
+  movedown: { title: 'Спуск', file: 'спуск' },
+  refill: { title: 'Пополнение', file: 'пополнение' },
 }
 
 // Перенесено из оригинала (MonthlyEmployeeTable.jsx) дословно — вкладка «За
@@ -75,7 +87,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] })
   const [error, setError] = useState('')
 
   const isOperationStats = operation !== 'selection'
-  const opLabel = operation === 'placement' ? 'Размещение' : operation === 'receiving' ? 'Приёмка' : operation === 'remains' ? 'Остатки' : 'Производительность'
+  const opLabel = (OP_LABELS[operation] || OP_LABELS.selection).title
   const totalLabel = isOperationStats ? 'Итого операций' : 'Итого СЗ'
   const rateHourLabel = isOperationStats ? 'Опер./ч' : 'СЗ/ч'
   const rateMinLabel = isOperationStats ? 'Опер./мин' : 'СЗ/мин'
@@ -186,7 +198,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] })
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url
-    a.download = `${operation === 'placement' ? 'размещение' : operation === 'receiving' ? 'приемка' : operation === 'remains' ? 'остатки' : 'производительность'}_${loadedRange?.from}_${loadedRange?.to}${operation === 'selection' && zone ? '_' + zone : ''}.xlsx`
+    a.download = `${(OP_LABELS[operation] || OP_LABELS.selection).file}_${loadedRange?.from}_${loadedRange?.to}${operation === 'selection' && zone ? '_' + zone : ''}.xlsx`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }

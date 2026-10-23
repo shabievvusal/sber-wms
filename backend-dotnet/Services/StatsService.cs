@@ -793,6 +793,11 @@ public class StatsService
             ? _db.WmsRemains.Where(x => x.Date == date && x.Hour >= 9 && x.Hour <= 20)
             : _db.WmsRemains.Where(x => (x.Date == date && x.Hour >= 21) || (x.Date == date.AddDays(1) && x.Hour <= 8));
 
+    private IQueryable<WmsPickingRefillEntity> PickingRefillInShift(DateOnly date, string shift) =>
+        shift == "day"
+            ? _db.WmsPickingRefill.Where(x => x.Date == date && x.Hour >= 9 && x.Hour <= 20)
+            : _db.WmsPickingRefill.Where(x => (x.Date == date && x.Hour >= 21) || (x.Date == date.AddDays(1) && x.Hour <= 8));
+
     public async Task<ShiftDataCounts> CountShiftDataAsync(string dateStr, string shift)
     {
         ValidateShiftArgs(dateStr, shift);
@@ -803,6 +808,7 @@ public class StatsService
             Placement = await PlacementInShift(date, shift).CountAsync(),
             Receiving = await ReceivingInShift(date, shift).CountAsync(),
             Remains = await RemainsInShift(date, shift).CountAsync(),
+            PickingRefill = await PickingRefillInShift(date, shift).CountAsync(),
         };
     }
 
@@ -816,6 +822,7 @@ public class StatsService
             Placement = await PlacementInShift(date, shift).ExecuteDeleteAsync(),
             Receiving = await ReceivingInShift(date, shift).ExecuteDeleteAsync(),
             Remains = await RemainsInShift(date, shift).ExecuteDeleteAsync(),
+            PickingRefill = await PickingRefillInShift(date, shift).ExecuteDeleteAsync(),
         };
     }
 
@@ -1484,6 +1491,147 @@ public class StatsService
     {
         var items = await GetRemainsItemsAsync(dateStr, fromHour, toHour, shift);
         var asPlacement = items.Select(RemainsAsPlacement).ToList();
+        if (!string.IsNullOrEmpty(filterExecutorNorm))
+            asPlacement = asPlacement.Where(it => NormalizeFioSummary(it.Executor) == filterExecutorNorm).ToList();
+        if (filterCompanies != null && filterCompanies.Count > 0 && idMap != null)
+        {
+            var allowed = new HashSet<string>(filterCompanies.Select(c => c.Trim().ToLowerInvariant()));
+            asPlacement = asPlacement.Where(it =>
+            {
+                var company = ResolveCompany(idMap, it.ExecutorId);
+                return !string.IsNullOrEmpty(company) && allowed.Contains(company.Trim().ToLowerInvariant());
+            }).ToList();
+        }
+        return BuildPlacementSummary(asPlacement, idMap);
+    }
+
+    // ─── Спуск/пополнение (MOVE_DOWN / MOVE_TO_PICKING) ─────────────────────────
+    // Одна выгрузка WMS movements/picking-refill/tasks содержит оба типа задач;
+    // пишутся в одну таблицу, саммари строится отдельно по TaskType через тот
+    // же BuildPlacementSummary, что у размещения и остатков. Час — по
+    // createdAt (другого времени задача в выгрузке не несёт), как у размещения.
+
+    public async Task<(int Added, int Skipped)> SavePickingRefillItemsAsync(List<System.Text.Json.JsonElement> rawItems)
+    {
+        int added = 0, skipped = 0;
+        // См. комментарий в IngestOpsAsync/SavePlacementItemsAsync — один запрос
+        // на уникальную (Date,Hour) вместо запроса на каждый элемент батча.
+        var dateHourPairs = new HashSet<(DateOnly, short)>();
+        foreach (var raw in rawItems)
+        {
+            var slotForPass = MoscowDateHour(ParseDate(GetStr(raw, "createdAt") ?? GetStr(raw, "completedAt") ?? GetStr(raw, "updatedAt")));
+            if (slotForPass != null) dateHourPairs.Add((slotForPass.Value.Date, (short)slotForPass.Value.Hour));
+        }
+        var batchByKey = new Dictionary<(DateOnly Date, short Hour, string MergeKey), WmsPickingRefillEntity>();
+        foreach (var (date, hour) in dateHourPairs)
+        {
+            var rows = await _db.WmsPickingRefill.Where(r => r.Date == date && r.Hour == hour).ToListAsync();
+            foreach (var row in rows) batchByKey[(date, hour, row.MergeKey)] = row;
+        }
+
+        foreach (var raw in rawItems)
+        {
+            var ru = GetObj(raw, "responsibleUser");
+            var responsibleUser = new ResponsibleUser
+            {
+                Id = ru != null ? (GetStr(ru.Value, "id") ?? "") : "",
+                FirstName = ru != null ? (GetStr(ru.Value, "firstName") ?? "") : "",
+                LastName = ru != null ? (GetStr(ru.Value, "lastName") ?? "") : "",
+                MiddleName = ru != null ? (GetStr(ru.Value, "middleName") ?? "") : "",
+            };
+            var createdAt = ParseDate(GetStr(raw, "createdAt") ?? GetStr(raw, "completedAt") ?? GetStr(raw, "updatedAt"));
+            if (createdAt == null) continue;
+            var slot = MoscowDateHour(createdAt);
+            if (slot == null) continue;
+
+            var executorId = responsibleUser.Id;
+            var executor = !string.IsNullOrEmpty(NormalizePlacementUser(responsibleUser)) ? NormalizePlacementUser(responsibleUser) : responsibleUser.Id;
+            var itemId = (GetStr(raw, "id") ?? "").Trim();
+            var taskType = GetStr(raw, "taskType") ?? "";
+            var handlingUnitBarcode = GetStr(raw, "handlingUnitBarcode") ?? "";
+            var sourceCell = GetObj(raw, "sourceCell");
+            var targetCell = GetObj(raw, "targetCell");
+            var sourceCellBarcode = sourceCell != null ? (GetStr(sourceCell.Value, "barcode") ?? "") : "";
+            var sourceCellName = sourceCell != null ? (GetStr(sourceCell.Value, "name") ?? "") : "";
+            var targetCellBarcode = targetCell != null ? (GetStr(targetCell.Value, "barcode") ?? "") : "";
+            var targetCellName = targetCell != null ? (GetStr(targetCell.Value, "name") ?? "") : "";
+
+            var mergeKey = itemId != "" ? itemId : $"{taskType}|{createdAt:o}|{executorId}|{handlingUnitBarcode}";
+            var key = (slot.Value.Date, (short)slot.Value.Hour, mergeKey);
+
+            var existing = batchByKey.TryGetValue(key, out var batched) ? batched : null;
+            if (existing != null)
+            {
+                existing.Status = GetStr(raw, "status") ?? "";
+                existing.TaskType = taskType != "" ? taskType : existing.TaskType;
+                existing.HandlingUnitBarcode = handlingUnitBarcode;
+                existing.SourceCellBarcode = sourceCellBarcode;
+                existing.SourceCellName = sourceCellName;
+                existing.TargetCellBarcode = targetCellBarcode;
+                existing.TargetCellName = targetCellName;
+                existing.ResponsibleUser = ru != null ? responsibleUser : existing.ResponsibleUser;
+                existing.ExecutorId = executorId != "" ? executorId : existing.ExecutorId;
+                existing.Executor = executor != "" ? executor : existing.Executor;
+                existing.CreatedAt = createdAt;
+                skipped++;
+                continue;
+            }
+
+            var newRow = new WmsPickingRefillEntity
+            {
+                Date = slot.Value.Date,
+                Hour = (short)slot.Value.Hour,
+                MergeKey = mergeKey,
+                ItemId = itemId,
+                Status = GetStr(raw, "status") ?? "",
+                TaskType = taskType,
+                HandlingUnitBarcode = handlingUnitBarcode,
+                SourceCellBarcode = sourceCellBarcode,
+                SourceCellName = sourceCellName,
+                TargetCellBarcode = targetCellBarcode,
+                TargetCellName = targetCellName,
+                ResponsibleUser = responsibleUser,
+                ExecutorId = executorId,
+                Executor = executor,
+                CreatedAt = createdAt,
+            };
+            _db.WmsPickingRefill.Add(newRow);
+            batchByKey[key] = newRow;
+            added++;
+        }
+        await _db.SaveChangesAsync();
+        return (added, skipped);
+    }
+
+    public async Task<List<WmsPickingRefillEntity>> GetPickingRefillItemsAsync(string taskType, string dateStr, int? fromHour, int? toHour, string? shift)
+    {
+        var date = DateOnly.Parse(dateStr);
+        var pairs = GetHoursToLoad(date, fromHour, toHour, shift);
+        var dates = pairs.Select(p => p.Date).Distinct().ToList();
+        var hours = pairs.Select(p => p.Hour).Distinct().ToList();
+        var candidates = await _db.WmsPickingRefill.AsNoTracking()
+            .Where(r => r.TaskType == taskType && dates.Contains(r.Date) && hours.Contains((int)r.Hour))
+            .ToListAsync();
+        var pairSet = new HashSet<(DateOnly, int)>(pairs);
+        var items = candidates.Where(r => pairSet.Contains((r.Date, (int)r.Hour))).ToList();
+        items.Sort((a, b) => Nullable.Compare(a.CreatedAt, b.CreatedAt));
+        return items;
+    }
+
+    private static WmsPlacementEntity PickingRefillAsPlacement(WmsPickingRefillEntity r) => new()
+    {
+        ItemId = r.ItemId,
+        HandlingUnitBarcode = r.HandlingUnitBarcode,
+        TargetCellAddress = r.TargetCellName,
+        Executor = r.Executor,
+        ExecutorId = r.ExecutorId,
+        CreatedAt = r.CreatedAt,
+    };
+
+    public async Task<object> GetPickingRefillSummaryAsync(string taskType, string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap)
+    {
+        var items = await GetPickingRefillItemsAsync(taskType, dateStr, fromHour, toHour, shift);
+        var asPlacement = items.Select(PickingRefillAsPlacement).ToList();
         if (!string.IsNullOrEmpty(filterExecutorNorm))
             asPlacement = asPlacement.Where(it => NormalizeFioSummary(it.Executor) == filterExecutorNorm).ToList();
         if (filterCompanies != null && filterCompanies.Count > 0 && idMap != null)

@@ -318,6 +318,81 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
+        // ─── Спуск/пополнение ───────────────────────────────────────────────
+        // В отличие от остальных доменов — без Node и JSON-файлов: браузер
+        // шлёт выгрузку WMS прямо сюда (через Caddy), пишется только в PG.
+
+        app.MapPost("/api/stats/picking-refill/save", async (PickingRefillSaveRequest body, StatsService svc) =>
+        {
+            try
+            {
+                var items = body.Items ?? (body.Value.HasValue && body.Value.Value.ValueKind == JsonValueKind.Object && body.Value.Value.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array
+                    ? itemsEl.EnumerateArray().ToList() : new List<JsonElement>());
+                var (added, skipped) = await svc.SavePickingRefillItemsAsync(items);
+                return Results.Json(new { ok = true, operation = "picking-refill", added, skipped, itemsCount = items.Count });
+            }
+            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // movedown — спуск (MOVE_DOWN), refill — пополнение (MOVE_TO_PICKING)
+        foreach (var (op, taskType) in new[] { ("movedown", "MOVE_DOWN"), ("refill", "MOVE_TO_PICKING") })
+        {
+            app.MapGet($"/api/date/{{date}}/{op}/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
+            {
+                try
+                {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(date, @"^\d{4}-\d{2}-\d{2}$"))
+                        return Results.Json(new { error = "Неверный формат даты (YYYY-MM-DD)" }, statusCode: 400);
+                    var normalizedShift = shift == "day" || shift == "night" ? shift : null;
+                    var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
+                    if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
+                    {
+                        if (normalizedShift != null && normalizedShift != session.ShiftType)
+                            return Results.Json(new { error = "Доступ только к своей смене" }, statusCode: 403);
+                        normalizedShift = session.ShiftType;
+                    }
+                    var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
+                    var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
+                    var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
+                    var idMap = await svc.GetIdMapAsync();
+                    var summary = await svc.GetPickingRefillSummaryAsync(taskType, date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                    return Results.Json(Merge(new { date, shift = (object?)normalizedShift }, summary));
+                }
+                catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+            });
+
+            app.MapGet($"/api/stats/{op}/monthly-employees", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
+            {
+                try
+                {
+                    var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
+                    var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
+                    var normalizedShift = shift == "day" || shift == "night" ? shift : null;
+                    var dates = StatsService.GetDateRangeList(from, to);
+                    if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
+                    var idMap = await svc.GetIdMapAsync();
+                    var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
+                    var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
+                    var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
+                    var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
+                    var rows = new List<object>();
+                    foreach (var dateStr in dates)
+                    {
+                        var summary = (dynamic)await svc.GetPickingRefillSummaryAsync(taskType, dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                        var hb = summary.hourlyByEmployee;
+                        foreach (var row in hb.rows)
+                        {
+                            var byHour = (Dictionary<string, int>)row.byHour;
+                            var hoursCount = byHour.Values.Count(v => v > 0);
+                            rows.Add(new { date = dateStr, company = row.company ?? "—", name = row.name, total = row.total is int t ? t : 0, workedMinutes = hoursCount * 60, firstAt = row.firstAt, lastAt = row.lastAt });
+                        }
+                    }
+                    return Results.Json(new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
+                }
+                catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+            });
+        }
+
         // ─── Смены ──────────────────────────────────────────────────────────
 
         app.MapGet("/api/shifts", async (HttpContext ctx, StatsService svc, SessionService sessions) =>

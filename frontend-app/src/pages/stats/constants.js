@@ -19,6 +19,8 @@ export const OPERATIONS = [
   { value: 'placement', label: 'Размещение' },
   { value: 'receiving', label: 'Приёмка' },
   { value: 'remains', label: 'Остатки' },
+  { value: 'movedown', label: 'Спуск' },
+  { value: 'refill', label: 'Пополнение' },
 ]
 
 // «Сотрудники по часам» — 4 режима, как в оригинале. Оригинал ещё содержит

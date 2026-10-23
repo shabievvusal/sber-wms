@@ -581,6 +581,38 @@ export async function fetchRemainsViaBrowser(token, { dateFrom, dateTo, pageSize
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0, newEmployees: saveRes.newEmployees || [] }
 }
 
+// Спуск (MOVE_DOWN) и пополнение (MOVE_TO_PICKING) — одна выгрузка без
+// фильтра по taskType, бэкенд сам раскладывает по типам. pageSize 100 — с
+// таким размером страницы WMS отдаёт эту выгрузку в веб-интерфейсе.
+export async function fetchPickingRefillViaBrowser(token, { dateFrom, dateTo, pageSize = 100 } = {}) {
+  const size = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 100))
+  const buildParams = pageNumber => {
+    const p = new URLSearchParams()
+    if (dateFrom) p.set('dateFrom', dateFrom)
+    if (dateTo) p.set('dateTo', dateTo)
+    p.set('status', 'COMPLETED')
+    p.set('pageNumber', String(pageNumber))
+    p.set('pageSize', String(size))
+    return p
+  }
+  const getPage = async params => {
+    const data = await samokatGet(token, MOVEMENTS_URL, params)
+    const value = data?.value || data
+    return { items: Array.isArray(value?.items) ? value.items : [], total: value?.total ?? data?.totalElements ?? null }
+  }
+  const first = await getPage(buildParams(1))
+  let allItems = [...first.items]
+  const total = first.total ?? allItems.length
+  const pages = Math.ceil(total / size)
+  for (let page = 2; page <= pages; page++) {
+    const next = await getPage(buildParams(page))
+    allItems = allItems.concat(next.items)
+  }
+  const saveRes = await postOwnBackend('/api/stats/picking-refill/save', { items: allItems, total: allItems.length }, token)
+  if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения спуска/пополнения')
+  return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0 }
+}
+
 // ─── Отчёты / анализ / поставки ─────────────────────────────────────────────
 // Общая библиотека WMS-запросов, шарится между AnalysisPage/HourlyReport/
 // SuppliesPage/EoSearchPage/SupplyDetailPage.

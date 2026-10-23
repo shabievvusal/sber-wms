@@ -169,6 +169,30 @@ public class WmsRemainsEntity
     public DateTime? CreatedAt { get; set; }
 }
 
+// ─── Спуск/пополнение (wms_picking_refill) ─────────────────────────────────
+// Задачи WMS movements/picking-refill: MOVE_DOWN — спуск, MOVE_TO_PICKING —
+// пополнение. Оба типа в одной таблице, саммари фильтрует по TaskType.
+
+public class WmsPickingRefillEntity
+{
+    public long Id { get; set; }
+    public DateOnly Date { get; set; }
+    public short Hour { get; set; }
+    public string MergeKey { get; set; } = "";
+    public string ItemId { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string TaskType { get; set; } = "";
+    public string HandlingUnitBarcode { get; set; } = "";
+    public string SourceCellBarcode { get; set; } = "";
+    public string SourceCellName { get; set; } = "";
+    public string TargetCellBarcode { get; set; } = "";
+    public string TargetCellName { get; set; } = "";
+    public ResponsibleUser ResponsibleUser { get; set; } = new();
+    public string ExecutorId { get; set; } = "";
+    public string Executor { get; set; } = "";
+    public DateTime? CreatedAt { get; set; }
+}
+
 // ─── product_weights ────────────────────────────────────────────────────────
 
 public class ProductWeightEntity
@@ -203,7 +227,8 @@ public class ShiftDataCounts
     public int Placement { get; set; }
     public int Receiving { get; set; }
     public int Remains { get; set; }
-    public int Total => Ops + Placement + Receiving + Remains;
+    public int PickingRefill { get; set; }
+    public int Total => Ops + Placement + Receiving + Remains + PickingRefill;
 }
 
 public class OpsIngestRequest
@@ -224,5 +249,13 @@ public class ReceivingSaveRequest
 
 public class RemainsSaveRequest
 {
+    public List<System.Text.Json.JsonElement>? Items { get; set; }
+}
+
+// POST /api/stats/picking-refill/save — браузер шлёт { value: { items } }
+// (postOwnBackend в wmsFetch.js), плоский { items } тоже принимается.
+public class PickingRefillSaveRequest
+{
+    public System.Text.Json.JsonElement? Value { get; set; }
     public List<System.Text.Json.JsonElement>? Items { get; set; }
 }

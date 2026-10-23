@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
-import { getStoredToken, fetchDataViaBrowser, fetchPlacementViaBrowser, fetchRemainsViaBrowser } from '@/lib/wmsFetch'
+import { getStoredToken, fetchDataViaBrowser, fetchPlacementViaBrowser, fetchRemainsViaBrowser, fetchPickingRefillViaBrowser } from '@/lib/wmsFetch'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +33,8 @@ const API_SUMMARY_BY_OP = {
   placement: (dateStr, shift) => api.getPlacementDateSummary(dateStr, { shift }),
   receiving: (dateStr, shift) => api.getReceivingDateSummary(dateStr, { shift }),
   remains: (dateStr, shift) => api.getRemainsDateSummary(dateStr, { shift }),
+  movedown: (dateStr, shift) => api.getMovedownDateSummary(dateStr, { shift }),
+  refill: (dateStr, shift) => api.getRefillDateSummary(dateStr, { shift }),
 }
 
 const LS_AUTO_FETCH_ENABLED = 'vs_auto_fetch_enabled'
@@ -214,15 +216,17 @@ export default function StatsPage() {
         }
         const opts = { operationCompletedAtFrom: fromDate.toISOString(), operationCompletedAtTo: toDate.toISOString() }
 
-        const [selectionRes, placementRes, remainsRes] = await Promise.all([
+        const [selectionRes, placementRes, remainsRes, refillRes] = await Promise.all([
           fetchDataViaBrowser(token, opts),
           fetchPlacementViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
           fetchRemainsViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
+          fetchPickingRefillViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
         ])
         if (!silent) {
           const placementText = placementRes?.__error ? ' · размещение не загружено' : ` · размещение: ${placementRes.fetched ?? '?'}/${placementRes.added ?? '?'}`
           const remainsText = remainsRes?.__error ? ' · остатки не загружены' : ` · остатки: ${remainsRes.fetched ?? '?'}/${remainsRes.added ?? '?'}`
-          toast.success(`Комплектация: получено ${selectionRes.fetched ?? '?'}, добавлено ${selectionRes.added ?? '?'}${placementText}${remainsText}`)
+          const refillText = refillRes?.__error ? ' · спуск/пополнение не загружены' : ` · спуск/пополнение: ${refillRes.fetched ?? '?'}/${refillRes.added ?? '?'}`
+          toast.success(`Комплектация: получено ${selectionRes.fetched ?? '?'}, добавлено ${selectionRes.added ?? '?'}${placementText}${remainsText}${refillText}`)
           const enginePart = selectionRes.engine === 'dotnet' ? '.NET' : selectionRes.engine === 'node' ? 'Node' : (selectionRes.engine || 'Браузер')
           const totalMsPart = selectionRes.timings?.totalMs ? ` · итого ${(selectionRes.timings.totalMs / 1000).toFixed(1)}с` : ''
           setEngineNote(`${enginePart}${totalMsPart} · комплектация +${selectionRes.added ?? 0}`)

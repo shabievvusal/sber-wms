@@ -1,0 +1,2107 @@
+{
+    "value": {
+        "items": [
+            {
+                "id": "48b7ec13-998d-47d4-a9e3-2638e1c54a0f",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115391",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "78232841",
+                    "name": "HH-3-45-1-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:49:09.535015Z"
+            },
+            {
+                "id": "ecd1a878-3399-4fee-921e-92e27e56ec76",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201114465",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "32847145",
+                    "name": "HH-4-43-3-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:50:15.200005Z"
+            },
+            {
+                "id": "957ba34d-402c-49e1-b95e-d0d4d2b897b1",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201114463",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "32549033",
+                    "name": "HH-3-43-2-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:51:44.969560Z"
+            },
+            {
+                "id": "b8925451-f731-4c4e-a341-7c925cc6ae34",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115380",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "67709240",
+                    "name": "HH-4-45-3-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:53:08.127378Z"
+            },
+            {
+                "id": "ff543e15-bbc7-4683-a304-4066cdfc7f7c",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115379",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "29663966",
+                    "name": "HH-5-43-3-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:54:32.256032Z"
+            },
+            {
+                "id": "a6635e45-ba18-477a-925e-09e36fe639c7",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201114466",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "05622245",
+                    "name": "HH-3-55-1-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:55:56.408843Z"
+            },
+            {
+                "id": "4a4926df-2bd2-41f3-b1f0-e8543b0a1118",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201114461",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "93568287",
+                    "name": "HH-6-29-2-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:57:30.845018Z"
+            },
+            {
+                "id": "c145951c-dc13-4fd0-b84f-c2585a78a6bd",
+                "taskType": "MOVE_TO_PICKING",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201114485",
+                "sourceCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "targetCell": {
+                    "barcode": "92449765",
+                    "name": "HH-4-1-1-1"
+                },
+                "responsibleUser": {
+                    "id": "65fdebb2-131c-4d1a-a6bd-25f52234e518",
+                    "firstName": "Сергей",
+                    "lastName": "Захаров",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-22T22:58:37.586951Z"
+            },
+            {
+                "id": "17c0da33-8c30-458e-bfd9-da1ed105415c",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118911",
+                "sourceCell": {
+                    "barcode": "60128991",
+                    "name": "HH-4-53-2-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.726137Z"
+            },
+            {
+                "id": "2fbffbca-7505-4048-a95a-dbf307e044d1",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118050",
+                "sourceCell": {
+                    "barcode": "56832800",
+                    "name": "HH-5-55-3-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.744777Z"
+            },
+            {
+                "id": "85a5be31-3703-4eef-983c-85e622c67c2d",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118053",
+                "sourceCell": {
+                    "barcode": "01679523",
+                    "name": "HH-5-60-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.761211Z"
+            },
+            {
+                "id": "26c3bf24-133b-4373-b098-3edff49e38c8",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118917",
+                "sourceCell": {
+                    "barcode": "62290646",
+                    "name": "HH-5-58-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.774346Z"
+            },
+            {
+                "id": "df9a21b9-04b5-42da-8ec1-4665a6348c4e",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118918",
+                "sourceCell": {
+                    "barcode": "68888361",
+                    "name": "HH-2-59-2-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.782986Z"
+            },
+            {
+                "id": "f1e6b244-d4d1-498a-9451-dfb02cb5f610",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084020",
+                "sourceCell": {
+                    "barcode": "41427881",
+                    "name": "HH-4-1-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.785725Z"
+            },
+            {
+                "id": "3ca5541d-c154-47df-b7db-3b09bd275e16",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118768",
+                "sourceCell": {
+                    "barcode": "29504985",
+                    "name": "HH-3-59-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:36.803309Z"
+            },
+            {
+                "id": "21f4e3ca-ffb6-475f-8580-fc77b28de235",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119057",
+                "sourceCell": {
+                    "barcode": "36789200",
+                    "name": "HH-5-22-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.813169Z"
+            },
+            {
+                "id": "8d2dda0e-ab1e-4a9f-95fe-fe787a4caaed",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118913",
+                "sourceCell": {
+                    "barcode": "50582623",
+                    "name": "HH-5-57-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.822994Z"
+            },
+            {
+                "id": "20a0aea2-5a7c-47b9-95d7-ceef1fc36425",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118914",
+                "sourceCell": {
+                    "barcode": "89824319",
+                    "name": "HH-5-58-1-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.823111Z"
+            },
+            {
+                "id": "6560f03e-48d8-461b-979d-3982eea64c81",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120638",
+                "sourceCell": {
+                    "barcode": "33400656",
+                    "name": "HH-5-11-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.832591Z"
+            },
+            {
+                "id": "31500b17-0284-40da-a257-5e9668964915",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201083873",
+                "sourceCell": {
+                    "barcode": "27607876",
+                    "name": "HH-3-3-1-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.840492Z"
+            },
+            {
+                "id": "9e87de77-6ec5-475a-a35f-b926bd806e56",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115413",
+                "sourceCell": {
+                    "barcode": "70695284",
+                    "name": "HH-6-12-3-4"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.850652Z"
+            },
+            {
+                "id": "0cd57ee0-0df7-4f6e-a85d-cc386ec5eb15",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118915",
+                "sourceCell": {
+                    "barcode": "08936819",
+                    "name": "HH-5-57-1-3"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.853770Z"
+            },
+            {
+                "id": "ec9f2fe3-b469-4ee9-be62-b52422eeffbc",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118912",
+                "sourceCell": {
+                    "barcode": "61714680",
+                    "name": "HH-5-58-3-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.864823Z"
+            },
+            {
+                "id": "6b9282ac-4a0b-4a5a-af9b-8508a56ee06f",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120648",
+                "sourceCell": {
+                    "barcode": "73720830",
+                    "name": "HH-5-17-3-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.873303Z"
+            },
+            {
+                "id": "686cf16b-5372-44b3-be7d-dddfea68a651",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119052",
+                "sourceCell": {
+                    "barcode": "67640658",
+                    "name": "HH-4-3-3-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.873400Z"
+            },
+            {
+                "id": "3159d68d-01a7-4934-8c62-c1472e3cec1d",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118085",
+                "sourceCell": {
+                    "barcode": "41172133",
+                    "name": "HH-3-6-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:36.882958Z"
+            },
+            {
+                "id": "d1602d03-1968-4d04-8355-f1ae235f4515",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120562",
+                "sourceCell": {
+                    "barcode": "13470994",
+                    "name": "HH-4-28-3-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.886442Z"
+            },
+            {
+                "id": "3275953e-0b25-4d60-94aa-5145968e8f94",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118346",
+                "sourceCell": {
+                    "barcode": "16291003",
+                    "name": "HH-5-4-1-3"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.904292Z"
+            },
+            {
+                "id": "190ce1d2-5d83-4b98-a980-bd834dc47a28",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118767",
+                "sourceCell": {
+                    "barcode": "41991762",
+                    "name": "HH-4-57-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.906500Z"
+            },
+            {
+                "id": "fd2e6a6e-0048-45b1-9c67-4b02d42fedb1",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118076",
+                "sourceCell": {
+                    "barcode": "94106763",
+                    "name": "HH-5-24-3-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:36.913782Z"
+            },
+            {
+                "id": "88bd7882-2e12-4efb-bc5e-3aaf2d52e9d3",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115408",
+                "sourceCell": {
+                    "barcode": "05702700",
+                    "name": "HH-3-1-3-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:36.940159Z"
+            },
+            {
+                "id": "4237df03-e2f4-43a8-b15e-80ab697482ef",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115415",
+                "sourceCell": {
+                    "barcode": "37811818",
+                    "name": "HH-6-16-1-2"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.954068Z"
+            },
+            {
+                "id": "8d32c4b0-cb81-4f52-a8f6-7b597c1d3d72",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120565",
+                "sourceCell": {
+                    "barcode": "19027280",
+                    "name": "HH-3-8-2-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:36.954202Z"
+            },
+            {
+                "id": "cd0ec5ca-dc0b-4c8e-b73e-4bbfeaf5d828",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120657",
+                "sourceCell": {
+                    "barcode": "42909780",
+                    "name": "HH-2-16-2-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.973447Z"
+            },
+            {
+                "id": "3ed81d31-eec4-423b-b368-bafd0664c0e9",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120592",
+                "sourceCell": {
+                    "barcode": "51438595",
+                    "name": "HH-4-26-2-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.984307Z"
+            },
+            {
+                "id": "573ce82e-a082-4ef3-aa12-e723f9dff7a3",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120658",
+                "sourceCell": {
+                    "barcode": "61771979",
+                    "name": "HH-2-16-1-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:36.991326Z"
+            },
+            {
+                "id": "4c48a19c-cbb1-45ca-bc79-ecc5aa3745c5",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119086",
+                "sourceCell": {
+                    "barcode": "35723013",
+                    "name": "HH-3-2-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:36.991476Z"
+            },
+            {
+                "id": "a66a1830-9f59-4b8c-855d-e8c9e186d1f0",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084031",
+                "sourceCell": {
+                    "barcode": "74324767",
+                    "name": "HH-4-8-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.013492Z"
+            },
+            {
+                "id": "f4e64362-5142-4713-a2fc-18d7f0b98a73",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120602",
+                "sourceCell": {
+                    "barcode": "86537837",
+                    "name": "HH-3-13-2-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.022861Z"
+            },
+            {
+                "id": "15c29bbf-3f6f-4c9e-89a2-2be4ee4a8f0f",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118086",
+                "sourceCell": {
+                    "barcode": "72998894",
+                    "name": "HH-4-10-1-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.023123Z"
+            },
+            {
+                "id": "0aa8f010-c145-455d-9421-14f890c3c0c5",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118070",
+                "sourceCell": {
+                    "barcode": "61013296",
+                    "name": "HH-6-15-1-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.023286Z"
+            },
+            {
+                "id": "419879ea-126f-47fe-846a-247e7d2d00e4",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120589",
+                "sourceCell": {
+                    "barcode": "72367097",
+                    "name": "HH-3-16-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.052588Z"
+            },
+            {
+                "id": "add65178-9543-4048-a43b-fe06d6034e87",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201083874",
+                "sourceCell": {
+                    "barcode": "10040030",
+                    "name": "HH-4-7-2-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.052648Z"
+            },
+            {
+                "id": "ebd5bc2c-61d2-4814-b043-ecd06305adc3",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120600",
+                "sourceCell": {
+                    "barcode": "00448185",
+                    "name": "HH-5-7-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.064179Z"
+            },
+            {
+                "id": "6b268bdd-b9bf-494d-8836-beca5ba037b2",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120636",
+                "sourceCell": {
+                    "barcode": "67129878",
+                    "name": "HH-2-8-2-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.066205Z"
+            },
+            {
+                "id": "e342fe5c-8dcc-4b64-ba38-e3bf68cab988",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115410",
+                "sourceCell": {
+                    "barcode": "01660954",
+                    "name": "HH-6-12-2-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.088510Z"
+            },
+            {
+                "id": "fe9be646-e05b-4fc0-936e-f2bfebb30cfc",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119049",
+                "sourceCell": {
+                    "barcode": "53192489",
+                    "name": "HH-4-27-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.089707Z"
+            },
+            {
+                "id": "1579c32d-943e-4aa4-bc8c-140191a586fd",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118764",
+                "sourceCell": {
+                    "barcode": "23509436",
+                    "name": "HH-4-59-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.099452Z"
+            },
+            {
+                "id": "4a55ae60-9706-46fa-b478-4aaa62933652",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118347",
+                "sourceCell": {
+                    "barcode": "14861747",
+                    "name": "HH-3-4-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:37.099756Z"
+            },
+            {
+                "id": "de4eaa58-a1ac-4166-bdbb-ade0a3c712dc",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119043",
+                "sourceCell": {
+                    "barcode": "98213417",
+                    "name": "HH-4-3-2-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.116847Z"
+            },
+            {
+                "id": "49a96cd5-e00d-4cf6-aada-a1a0fb6d5fe1",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120660",
+                "sourceCell": {
+                    "barcode": "55068485",
+                    "name": "HH-3-13-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.128571Z"
+            },
+            {
+                "id": "869dc745-d68f-472b-8733-7c86dffded68",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119042",
+                "sourceCell": {
+                    "barcode": "02971067",
+                    "name": "HH-3-7-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.139886Z"
+            },
+            {
+                "id": "5da8b725-67ac-4567-90c1-ea2778fbbcd1",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119037",
+                "sourceCell": {
+                    "barcode": "23987822",
+                    "name": "HH-4-8-1-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.149658Z"
+            },
+            {
+                "id": "15960106-cba3-4430-945d-c987a74efc24",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118344",
+                "sourceCell": {
+                    "barcode": "32394085",
+                    "name": "HH-6-16-2-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "89210a73-a992-4afa-8471-51a711a30b1f",
+                    "firstName": "Михаил",
+                    "lastName": "Загревских",
+                    "middleName": "Витальевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.162430Z"
+            },
+            {
+                "id": "50577679-946f-4bb4-bc51-41fcf43125c5",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118763",
+                "sourceCell": {
+                    "barcode": "61671089",
+                    "name": "HH-4-56-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.171379Z"
+            },
+            {
+                "id": "11d1e84d-1ba1-4563-8611-53bdf935c03e",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115401",
+                "sourceCell": {
+                    "barcode": "35812185",
+                    "name": "HH-2-8-1-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.179652Z"
+            },
+            {
+                "id": "f31858bf-c6cc-49d2-9cd6-0ec27c232935",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118348",
+                "sourceCell": {
+                    "barcode": "34676959",
+                    "name": "HH-6-16-1-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.198558Z"
+            },
+            {
+                "id": "076ba6f9-64e0-45c5-b4e7-0d6b0cc7f1fd",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120637",
+                "sourceCell": {
+                    "barcode": "21682471",
+                    "name": "HH-2-24-1-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.223355Z"
+            },
+            {
+                "id": "ac6a82ed-a627-4b65-b14d-ab7e57396b91",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118343",
+                "sourceCell": {
+                    "barcode": "21207778",
+                    "name": "HH-6-15-3-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.223610Z"
+            },
+            {
+                "id": "604a1036-02b3-4694-9307-1dd6f2871bec",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120561",
+                "sourceCell": {
+                    "barcode": "32222259",
+                    "name": "HH-3-7-2-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.227737Z"
+            },
+            {
+                "id": "46eb796c-2bf8-43a9-94b0-b7cd10c2d82f",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118765",
+                "sourceCell": {
+                    "barcode": "54024870",
+                    "name": "HH-5-59-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:37.232620Z"
+            },
+            {
+                "id": "7ea0e791-5b29-48f9-bd30-9a1780f3be1a",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118342",
+                "sourceCell": {
+                    "barcode": "38997864",
+                    "name": "HH-6-10-1-2"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.236229Z"
+            },
+            {
+                "id": "5fa5e1e4-9f02-4a8b-be18-5d900878959a",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084081",
+                "sourceCell": {
+                    "barcode": "96025959",
+                    "name": "HH-4-16-3-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.257179Z"
+            },
+            {
+                "id": "b4af1e1d-5dd0-431d-8aa6-49dac6acbae6",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120652",
+                "sourceCell": {
+                    "barcode": "08505626",
+                    "name": "HH-2-24-3-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.257208Z"
+            },
+            {
+                "id": "c0f7efe1-14a9-47e3-8eac-89c34f91ca61",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118919",
+                "sourceCell": {
+                    "barcode": "36759115",
+                    "name": "HH-4-53-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.273158Z"
+            },
+            {
+                "id": "2d9833a7-6b79-4971-adf6-f734d940b000",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118909",
+                "sourceCell": {
+                    "barcode": "32957472",
+                    "name": "HH-1-49-3-2"
+                },
+                "targetCell": {
+                    "barcode": "58607201",
+                    "name": "HH-1"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.287490Z"
+            },
+            {
+                "id": "f194300f-f379-443d-9bdc-4c41885b9a97",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201101672",
+                "sourceCell": {
+                    "barcode": "38039937",
+                    "name": "HH-4-7-1-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.305174Z"
+            },
+            {
+                "id": "4792c008-5b86-4ffd-8753-82df6ff6cce3",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118079",
+                "sourceCell": {
+                    "barcode": "80865958",
+                    "name": "HH-5-24-1-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:37.313653Z"
+            },
+            {
+                "id": "15525fcc-423f-4a68-8509-b62929ddd8e5",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118051",
+                "sourceCell": {
+                    "barcode": "09408852",
+                    "name": "HH-4-51-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.333454Z"
+            },
+            {
+                "id": "eb71c703-3328-4f90-9047-ea09db994abd",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120644",
+                "sourceCell": {
+                    "barcode": "72000554",
+                    "name": "HH-3-13-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.333490Z"
+            },
+            {
+                "id": "c580a134-ee0f-4b25-a310-441417ccdae0",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118757",
+                "sourceCell": {
+                    "barcode": "67911880",
+                    "name": "HH-2-59-3-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.336477Z"
+            },
+            {
+                "id": "06145f50-d913-40df-b378-036e4b988638",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084023",
+                "sourceCell": {
+                    "barcode": "70796695",
+                    "name": "HH-4-2-3-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.342070Z"
+            },
+            {
+                "id": "afe1dbf8-ad26-4103-98bd-fda153d36b62",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201101677",
+                "sourceCell": {
+                    "barcode": "18071924",
+                    "name": "HH-4-5-2-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.400275Z"
+            },
+            {
+                "id": "533acb74-61c0-4cfa-9233-239b0b492650",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119046",
+                "sourceCell": {
+                    "barcode": "30806693",
+                    "name": "HH-3-22-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.435445Z"
+            },
+            {
+                "id": "74428f9b-be7f-498d-9fd1-32620999bc70",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115409",
+                "sourceCell": {
+                    "barcode": "08664054",
+                    "name": "HH-6-13-2-2"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.440499Z"
+            },
+            {
+                "id": "7a66cd54-00a6-4fce-a9f9-9901d7e9fa94",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118916",
+                "sourceCell": {
+                    "barcode": "52366125",
+                    "name": "HH-4-53-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.462587Z"
+            },
+            {
+                "id": "699f19e7-b171-4b2d-a8eb-52981b528fa5",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120559",
+                "sourceCell": {
+                    "barcode": "56187465",
+                    "name": "HH-2-18-2-2"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.534885Z"
+            },
+            {
+                "id": "069c1945-f084-45e2-8624-16ecf180e559",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201119038",
+                "sourceCell": {
+                    "barcode": "98913216",
+                    "name": "HH-3-8-3-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.574494Z"
+            },
+            {
+                "id": "49302915-8a28-479a-b0c6-2d0a50fbaa5f",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084063",
+                "sourceCell": {
+                    "barcode": "92004003",
+                    "name": "HH-6-18-2-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "89210a73-a992-4afa-8471-51a711a30b1f",
+                    "firstName": "Михаил",
+                    "lastName": "Загревских",
+                    "middleName": "Витальевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.595441Z"
+            },
+            {
+                "id": "6c8fae42-99d4-4fdc-bfff-fddc22de4ab2",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115827",
+                "sourceCell": {
+                    "barcode": "42706308",
+                    "name": "HH-5-47-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "36239770-0cc0-4be4-a39f-26eec54818d9",
+                    "firstName": "Станислав",
+                    "lastName": "Соломин",
+                    "middleName": "Владимирович"
+                },
+                "createdAt": "2026-10-23T05:39:37.640646Z"
+            },
+            {
+                "id": "e38eec95-e562-42f3-a46c-2a3259442bc3",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201101681",
+                "sourceCell": {
+                    "barcode": "15794673",
+                    "name": "HH-4-55-2-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.642524Z"
+            },
+            {
+                "id": "39e13a84-fc1f-47a3-b7ec-5dde55a7be2e",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120601",
+                "sourceCell": {
+                    "barcode": "11081551",
+                    "name": "HH-3-10-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.679252Z"
+            },
+            {
+                "id": "8d664f7b-4b26-4506-8f69-b8100f5ad1f8",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120596",
+                "sourceCell": {
+                    "barcode": "71496564",
+                    "name": "HH-3-11-2-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.744682Z"
+            },
+            {
+                "id": "0b61e78c-7a99-4f95-9260-5ede72e34bd2",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120633",
+                "sourceCell": {
+                    "barcode": "32339350",
+                    "name": "HH-4-36-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.744785Z"
+            },
+            {
+                "id": "462aa916-6079-420e-a5d6-e98883ad74e1",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120645",
+                "sourceCell": {
+                    "barcode": "12851499",
+                    "name": "HH-2-4-3-3"
+                },
+                "targetCell": {
+                    "barcode": "43560558",
+                    "name": "HH-2"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.778200Z"
+            },
+            {
+                "id": "570e767a-54de-43cd-aff6-525e5d5bcf0e",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201039900",
+                "sourceCell": {
+                    "barcode": "62233770",
+                    "name": "HH-6-12-3-2"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "f5346143-0d49-4f14-81e2-35495e26da8c",
+                    "firstName": "Сергей",
+                    "lastName": "Салынский",
+                    "middleName": "Сергеевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.849967Z"
+            },
+            {
+                "id": "ff965b56-b0bb-4c1a-90fd-deb45851a64e",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084078",
+                "sourceCell": {
+                    "barcode": "10709212",
+                    "name": "HH-6-17-1-3"
+                },
+                "targetCell": {
+                    "barcode": "89268378",
+                    "name": "HH-6"
+                },
+                "responsibleUser": {
+                    "id": "89210a73-a992-4afa-8471-51a711a30b1f",
+                    "firstName": "Михаил",
+                    "lastName": "Загревских",
+                    "middleName": "Витальевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.850948Z"
+            },
+            {
+                "id": "c7bf9f8d-34d8-4370-99ce-cae3743ed0d2",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201093416",
+                "sourceCell": {
+                    "barcode": "59798500",
+                    "name": "HH-3-11-1-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.851882Z"
+            },
+            {
+                "id": "eb449a8a-0a7b-42a2-b758-abad27ff4799",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120588",
+                "sourceCell": {
+                    "barcode": "86080021",
+                    "name": "HH-3-12-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.955402Z"
+            },
+            {
+                "id": "8e2f2272-1fae-4d51-beee-2f1c29659640",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115411",
+                "sourceCell": {
+                    "barcode": "95336374",
+                    "name": "HH-5-4-1-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:37.960723Z"
+            },
+            {
+                "id": "968b320c-d71d-4f27-854c-1cf01e98ce73",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120659",
+                "sourceCell": {
+                    "barcode": "48255467",
+                    "name": "HH-3-7-3-3"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:37.989397Z"
+            },
+            {
+                "id": "22eae6b3-eb30-4242-9ea1-5df8d4ae0ea8",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084026",
+                "sourceCell": {
+                    "barcode": "74742974",
+                    "name": "HH-4-1-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.057476Z"
+            },
+            {
+                "id": "b84a086c-fa72-445b-8163-4f6c1874f18b",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120646",
+                "sourceCell": {
+                    "barcode": "56178197",
+                    "name": "HH-3-17-1-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:38.061081Z"
+            },
+            {
+                "id": "26016ef5-07f1-4e71-bca5-f97c6a708993",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120563",
+                "sourceCell": {
+                    "barcode": "67557095",
+                    "name": "HH-5-9-2-2"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.094117Z"
+            },
+            {
+                "id": "85d6a62f-817c-40df-a411-c1cc98f04ac7",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201118769",
+                "sourceCell": {
+                    "barcode": "05953432",
+                    "name": "HH-3-60-2-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:38.155369Z"
+            },
+            {
+                "id": "b73daef9-d52c-406c-a585-c79773840e77",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084024",
+                "sourceCell": {
+                    "barcode": "76577214",
+                    "name": "HH-4-4-2-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.160884Z"
+            },
+            {
+                "id": "021a0a02-2eb2-45b9-8e61-869458b444f0",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120560",
+                "sourceCell": {
+                    "barcode": "24555461",
+                    "name": "HH-5-4-2-3"
+                },
+                "targetCell": {
+                    "barcode": "26591734",
+                    "name": "HH-5"
+                },
+                "responsibleUser": {
+                    "id": "1e195f7c-8170-44c7-8ce3-8065f4c2b485",
+                    "firstName": "Хайрулло",
+                    "lastName": "Мардонов",
+                    "middleName": "Амриллоевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.168226Z"
+            },
+            {
+                "id": "fead0735-a91a-4e81-b0b2-bac5c3289511",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201084025",
+                "sourceCell": {
+                    "barcode": "45258097",
+                    "name": "HH-4-10-1-2"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.260255Z"
+            },
+            {
+                "id": "14cede23-4071-4e6c-be3f-99b2c77e42fa",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201120576",
+                "sourceCell": {
+                    "barcode": "69929672",
+                    "name": "HH-4-21-1-3"
+                },
+                "targetCell": {
+                    "barcode": "02672829",
+                    "name": "HH-4"
+                },
+                "responsibleUser": {
+                    "id": "467be5df-b372-4635-8361-5f5be5dc480e",
+                    "firstName": "Андрей",
+                    "lastName": "Янтураев",
+                    "middleName": "Николаевич"
+                },
+                "createdAt": "2026-10-23T05:39:38.265970Z"
+            },
+            {
+                "id": "f12ac8d2-9267-4d3e-a22b-2fa03746b917",
+                "taskType": "MOVE_DOWN",
+                "status": "COMPLETED",
+                "handlingUnitBarcode": "012201115404",
+                "sourceCell": {
+                    "barcode": "29283046",
+                    "name": "HH-3-18-1-2"
+                },
+                "targetCell": {
+                    "barcode": "06975898",
+                    "name": "HH-3"
+                },
+                "responsibleUser": {
+                    "id": "33c63326-28d1-4b3b-8bbb-5a3207c6be18",
+                    "firstName": "Александр",
+                    "lastName": "Реппо",
+                    "middleName": "Александрович"
+                },
+                "createdAt": "2026-10-23T05:39:38.267007Z"
+            }
+        ],
+        "total": 774
+    }
+}

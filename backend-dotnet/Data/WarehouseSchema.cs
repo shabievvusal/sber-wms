@@ -20,7 +20,7 @@ public static class WarehouseSchema
     // таблица → её ключ/уникальность (с warehouse_id первым столбцом)
     private static readonly string[] Tables =
     {
-        "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_storage_agg",
+        "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_picking_refill", "wms_storage_agg",
         "employees", "employee_account_checks", "routes",
         "tsd_assignments", "tsd_manual_employees", "tsd_settings",
         "motivation_people", "motivation_settings",
@@ -65,6 +65,29 @@ public static class WarehouseSchema
             await Exec($"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {t}_pkey; ALTER TABLE {t} ADD PRIMARY KEY ({cols});");
         }
 
+        // 0) спуск/пополнение — новая таблица без бэкфилла из JSON, поэтому
+        // создаётся здесь (сразу со складом; уникальность слияния — в шаге 2)
+        await Exec($@"
+            CREATE TABLE IF NOT EXISTS wms_picking_refill (
+              id BIGSERIAL PRIMARY KEY,
+              warehouse_id TEXT NOT NULL DEFAULT '{def}',
+              date DATE NOT NULL,
+              hour SMALLINT NOT NULL,
+              merge_key TEXT NOT NULL,
+              item_id TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL DEFAULT '',
+              task_type TEXT NOT NULL DEFAULT '',
+              handling_unit_barcode TEXT NOT NULL DEFAULT '',
+              source_cell_barcode TEXT NOT NULL DEFAULT '',
+              source_cell_name TEXT NOT NULL DEFAULT '',
+              target_cell_barcode TEXT NOT NULL DEFAULT '',
+              target_cell_name TEXT NOT NULL DEFAULT '',
+              responsible_user JSONB,
+              executor_id TEXT NOT NULL DEFAULT '',
+              executor TEXT NOT NULL DEFAULT '',
+              created_at TIMESTAMPTZ
+            )");
+
         // 1) столбец склада
         foreach (var t in Tables)
         {
@@ -73,7 +96,7 @@ public static class WarehouseSchema
         }
 
         // 2) уникальность слияния операций: (date, hour, merge_key) → со складом
-        foreach (var t in new[] { "wms_ops", "wms_placement", "wms_receiving", "wms_remains" })
+        foreach (var t in new[] { "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_picking_refill" })
         {
             if (!await TableExists(t)) continue;
             await Exec($@"

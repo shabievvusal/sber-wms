@@ -42,6 +42,7 @@ public class AppDbContext : DbContext
     public DbSet<WmsPlacementEntity> WmsPlacement => Set<WmsPlacementEntity>();
     public DbSet<WmsReceivingEntity> WmsReceiving => Set<WmsReceivingEntity>();
     public DbSet<WmsRemainsEntity> WmsRemains => Set<WmsRemainsEntity>();
+    public DbSet<WmsPickingRefillEntity> WmsPickingRefill => Set<WmsPickingRefillEntity>();
     public DbSet<ProductWeightEntity> ProductWeights => Set<ProductWeightEntity>();
     public DbSet<WmsStorageAggEntity> WmsStorageAgg => Set<WmsStorageAggEntity>();
     public DbSet<MotivationPersonEntity> MotivationPeople => Set<MotivationPersonEntity>();
@@ -163,6 +164,29 @@ public class AppDbContext : DbContext
                 v => JsonSerializer.Serialize(v, JsonOptions.Default),
                 v => string.IsNullOrEmpty(v) ? new List<JsonElement>() : JsonSerializer.Deserialize<List<JsonElement>>(v, JsonOptions.Default) ?? new List<JsonElement>());
         consolidationItems.Metadata.SetValueComparer(ListComparer<JsonElement>());
+
+        // Спуск/пополнение — таблица создаётся при старте (WarehouseSchema).
+        var refill = modelBuilder.Entity<WmsPickingRefillEntity>();
+        refill.ToTable("wms_picking_refill");
+        refill.HasKey(r => r.Id);
+        Scoped(refill);
+        refill.Property(r => r.Id).HasColumnName("id");
+        refill.Property(r => r.Date).HasColumnName("date");
+        refill.Property(r => r.Hour).HasColumnName("hour");
+        refill.Property(r => r.MergeKey).HasColumnName("merge_key");
+        refill.Property(r => r.ItemId).HasColumnName("item_id");
+        refill.Property(r => r.Status).HasColumnName("status");
+        refill.Property(r => r.TaskType).HasColumnName("task_type");
+        refill.Property(r => r.HandlingUnitBarcode).HasColumnName("handling_unit_barcode");
+        refill.Property(r => r.SourceCellBarcode).HasColumnName("source_cell_barcode");
+        refill.Property(r => r.SourceCellName).HasColumnName("source_cell_name");
+        refill.Property(r => r.TargetCellBarcode).HasColumnName("target_cell_barcode");
+        refill.Property(r => r.TargetCellName).HasColumnName("target_cell_name");
+        refill.Property(r => r.ExecutorId).HasColumnName("executor_id");
+        refill.Property(r => r.Executor).HasColumnName("executor");
+        refill.Property(r => r.CreatedAt).HasColumnName("created_at");
+        refill.Property(r => r.ResponsibleUser).HasColumnName("responsible_user").HasColumnType("jsonb")
+            .HasConversion(JsonConverter<ResponsibleUser>()).Metadata.SetValueComparer(ObjectComparer<ResponsibleUser>());
 
         var weights = modelBuilder.Entity<ProductWeightEntity>();
         weights.ToTable("product_weights");

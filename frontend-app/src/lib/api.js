@@ -485,6 +485,8 @@ function monthlyOpEmployees(path) {
 export const getMonthlyPlacementEmployees = monthlyOpEmployees('placement')
 export const getMonthlyReceivingEmployees = monthlyOpEmployees('receiving')
 export const getMonthlyRemainsEmployees = monthlyOpEmployees('remains')
+export const getMonthlyMovedownEmployees = monthlyOpEmployees('movedown')
+export const getMonthlyRefillEmployees = monthlyOpEmployees('refill')
 
 export async function getMonthlyCompany(year, month, shift) {
   const params = new URLSearchParams({ year, month })
@@ -504,6 +506,8 @@ function opDateSummary(path) {
 export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
+export const getMovedownDateSummary = opDateSummary('movedown')
+export const getRefillDateSummary = opDateSummary('refill')
 
 export async function getStatus() {
   return req('/api/status')
