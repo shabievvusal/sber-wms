@@ -495,11 +495,13 @@ export async function getMonthlyCompany(year, month, shift) {
 }
 
 function opDateSummary(path) {
-  return async (dateStr, { shift, fromHour, toHour } = {}) => {
+  return async (dateStr, { shift, fromHour, toHour, completedFrom, completedTo } = {}) => {
     const params = new URLSearchParams()
     if (shift) params.set('shift', shift)
     if (fromHour != null) params.set('fromHour', fromHour)
     if (toHour != null) params.set('toHour', toHour)
+    // интервал времени завершения (ISO) — сейчас только у приёмки
+    if (completedFrom && completedTo) { params.set('completedFrom', completedFrom); params.set('completedTo', completedTo) }
     return req(`/api/date/${dateStr}/${path}/summary?${params}`)
   }
 }

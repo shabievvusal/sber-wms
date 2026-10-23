@@ -6,6 +6,7 @@ import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStock
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateTimeRangePicker } from '@/components/ui/date-picker'
 import { Spinner } from '@/components/ui/spinner'
 import { StatsToolbar } from './StatsToolbar'
 import { StatsCard } from './StatsCard'
@@ -19,7 +20,7 @@ import { MonthlyEmployeeTable } from './MonthlyEmployeeTable'
 import { MissingWeightPanel } from './MissingWeightPanel'
 import {
   ACTIONS_BY_ROLE, HE_MODES, IDLE_THRESHOLD_DEFAULT, ALLOWED_IDLE_DEFAULT,
-  LS_ALLOWED_IDLE, LS_HE_MODE, LS_IDLE_THRESHOLD,
+  LS_ALLOWED_IDLE, LS_HE_MODE, LS_IDLE_THRESHOLD, completedRangeCols,
 } from './constants'
 import {
   buildFullZoneCatalog, buildRollingRange, buildZoneCatalog, computeWorkedMinutesInShift, getCurrentShiftInfo,
@@ -31,7 +32,7 @@ import { cn } from '@/lib/utils'
 const API_SUMMARY_BY_OP = {
   selection: (dateStr, shift, idleThresholdMinutes) => api.getDateSummaryFull(dateStr, { shift, idleThresholdMinutes }),
   placement: (dateStr, shift) => api.getPlacementDateSummary(dateStr, { shift }),
-  receiving: (dateStr, shift) => api.getReceivingDateSummary(dateStr, { shift }),
+  receiving: (dateStr, shift, _idle, { receivingRangeIso } = {}) => api.getReceivingDateSummary(dateStr, { shift, ...(receivingRangeIso || {}) }),
   remains: (dateStr, shift) => api.getRemainsDateSummary(dateStr, { shift }),
   movedown: (dateStr, shift) => api.getMovedownDateSummary(dateStr, { shift }),
   refill: (dateStr, shift) => api.getRefillDateSummary(dateStr, { shift }),
@@ -97,6 +98,17 @@ export default function StatsPage() {
   const [heTableMode, setHeTableMode] = useState(() => readLs(LS_HE_MODE, 'sz'))
   const [idleThresholdMinutes, setIdleThresholdMinutes] = useState(() => Number(readLs(LS_IDLE_THRESHOLD, IDLE_THRESHOLD_DEFAULT)))
   const [allowedIdleMinutes, setAllowedIdleMinutes] = useState(() => Number(readLs(LS_ALLOWED_IDLE, ALLOWED_IDLE_DEFAULT)))
+  // Приёмка, фильтр «Дата завершения» — интервал с датой и временем
+  // ("YYYY-MM-DDTHH:mm", по Москве). Задан — сводка приёмки строится по нему
+  // вместо даты/смены (например, 08:00–21:00, чтобы слить ранний выход).
+  const [receivingRange, setReceivingRange] = useState({ from: '', to: '' })
+  const receivingRangeIso = useMemo(() => {
+    if (operation !== 'receiving' || !receivingRange.from || !receivingRange.to) return null
+    return {
+      completedFrom: new Date(`${receivingRange.from}:00+03:00`).toISOString(),
+      completedTo: new Date(`${receivingRange.to}:00+03:00`).toISOString(),
+    }
+  }, [operation, receivingRange])
   const idleDebounceRef = useRef(null)
   const monthlyExportRef = useRef(null)
 
@@ -119,7 +131,7 @@ export default function StatsPage() {
     if (!silent) setLoading(true)
     await withMinDuration(async () => {
       try {
-        const data = await API_SUMMARY_BY_OP[operation](dateStr, shift, idleThresholdMinutes)
+        const data = await API_SUMMARY_BY_OP[operation](dateStr, shift, idleThresholdMinutes, { receivingRangeIso })
         if (reqId !== summaryReqRef.current) return
         setSummary(data)
         setError('')
@@ -130,9 +142,9 @@ export default function StatsPage() {
       }
     })
     if (reqId === summaryReqRef.current) setLoading(false)
-  }, [dateStr, shift, operation, idleThresholdMinutes])
+  }, [dateStr, shift, operation, idleThresholdMinutes, receivingRangeIso])
 
-  useEffect(() => { loadSummary() }, [dateStr, shift, operation]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadSummary() }, [dateStr, shift, operation, receivingRangeIso]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Часы выгрузки — под выбранную смену (см. комментарий у useState выше).
   // Ручную правку часов не затирает: срабатывает только на смену shift.
@@ -392,7 +404,12 @@ export default function StatsPage() {
       }))
   }, [summary, filterCompany])
 
-  const hours = getShiftHours(shift)
+  // Приёмка — ранние часы до начала смены (выбор «Показывать с») идут
+  // отдельными колонками перед обычными часами смены.
+  const hours = useMemo(
+    () => receivingRangeIso ? completedRangeCols(receivingRangeIso.completedFrom, receivingRangeIso.completedTo) : getShiftHours(shift),
+    [receivingRangeIso, shift]
+  )
 
   // «Пики по часам» должны учитывать фильтр по компании (CompanyFilter) —
   // не готовый агрегат с бэкенда (`summary.hourly`, всегда по всем
@@ -682,6 +699,19 @@ export default function StatsPage() {
       />
 
       {!isOperationStats && <StatsCards summary={summary} shift={shift} dateStr={dateStr} loading={reloading} />}
+      {operation === 'receiving' && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs text-muted-foreground">Дата завершения:</span>
+          <DateTimeRangePicker
+            className="h-8 w-72"
+            from={receivingRange.from}
+            to={receivingRange.to}
+            onChange={setReceivingRange}
+            placeholder="По дате и смене сверху"
+          />
+          {receivingRangeIso && <span className="text-xs text-muted-foreground">Показана приёмка за этот интервал — дата и смена сверху не учитываются</span>}
+        </div>
+      )}
       {operation === 'receiving' && <ReceivingStatsCards summary={summary} loading={reloading} />}
 
       {!isOperationStats && <MissingWeightPanel />}

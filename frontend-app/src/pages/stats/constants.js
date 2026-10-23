@@ -13,6 +13,18 @@
 // «лишнего» бакета 22 у дня/10 у ночи).
 export const DAY_HOURS = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 export const NIGHT_HOURS = [22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+// Приёмка, фильтр «Дата завершения» (дата+время, по Москве): колонки-бакеты
+// (col = час + 1) от часа начала интервала, по порядку, не больше 24 —
+// интервал длиннее суток складывается по часу дня.
+export function completedRangeCols(fromIso, toIso) {
+  const start = new Date(fromIso), end = new Date(toIso)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return []
+  const hourStart = Math.floor(start.getTime() / 3_600_000)
+  const hourEnd = Math.floor((Math.max(end.getTime() - 1, start.getTime())) / 3_600_000)
+  const n = Math.min(24, hourEnd - hourStart + 1)
+  const startMskHour = (start.getUTCHours() + 3) % 24
+  return Array.from({ length: n }, (_, i) => (startMskHour + i + 1) % 24)
+}
 
 export const OPERATIONS = [
   { value: 'selection', label: 'Комплектация' },

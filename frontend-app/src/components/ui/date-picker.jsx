@@ -119,6 +119,98 @@ function DateRangePicker({ from, to, onChange, placeholder = 'Выберите �
   )
 }
 
+/**
+ * Период с датой и временем — тот же компактный триггер, что у
+ * DateRangePicker, но в попапе ещё время начала и конца. from/to — строки
+ * "YYYY-MM-DDTHH:mm" (как у <input type="datetime-local">). Пока попап
+ * открыт, правится черновик — onChange вызывается один раз, по «Готово».
+ */
+function DateTimeRangePicker({ from, to, onChange, placeholder = 'Выберите период', className, disabled, defaultFromTime = '09:00', defaultToTime = '21:00' }) {
+  const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState({ from: '', to: '', fromTime: defaultFromTime, toTime: defaultToTime })
+
+  React.useEffect(() => {
+    if (!open) return
+    setDraft({
+      from: (from || '').slice(0, 10),
+      to: (to || from || '').slice(0, 10),
+      fromTime: (from || '').slice(11, 16) || defaultFromTime,
+      toTime: (to || '').slice(11, 16) || defaultToTime,
+    })
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fromDate = parseISO(from)
+  const toDate = parseISO(to)
+  const hasValue = !!fromDate
+  const fromTimeLabel = (from || '').slice(11, 16)
+  const toTimeLabel = (to || '').slice(11, 16)
+  const label = !hasValue
+    ? placeholder
+    : toDate && toISO(toDate) !== toISO(fromDate)
+      ? `${format(fromDate, 'd MMM', { locale: ru })} ${fromTimeLabel} – ${format(toDate, 'd MMM', { locale: ru })} ${toTimeLabel}`
+      : `${format(fromDate, 'd MMM', { locale: ru })}, ${fromTimeLabel}–${toTimeLabel}`
+
+  const range = { from: parseISO(draft.from), to: parseISO(draft.to) }
+  const canApply = !!draft.from && !!draft.fromTime && !!draft.toTime
+  const apply = () => {
+    const toDay = draft.to || draft.from
+    onChange?.({ from: `${draft.from}T${draft.fromTime}`, to: `${toDay}T${draft.toTime}` })
+    setOpen(false)
+  }
+  const timeCls = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums'
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className={cn('justify-start gap-2 font-normal', !hasValue && 'text-muted-foreground', className)}
+        >
+          <CalendarIcon className="size-4 shrink-0 opacity-70" />
+          <span className="truncate">{label}</span>
+          {hasValue && !disabled && (
+            <span
+              role="button"
+              tabIndex={-1}
+              className="ml-auto rounded-sm p-0.5 opacity-60 hover:opacity-100 hover:bg-muted"
+              onClick={e => { e.stopPropagation(); onChange?.({ from: '', to: '' }) }}
+            >
+              <X className="size-3.5" />
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="range"
+          numberOfMonths={2}
+          selected={range}
+          defaultMonth={range.from}
+          onSelect={r => setDraft(d => ({ ...d, from: toISO(r?.from), to: toISO(r?.to) }))}
+        />
+        <div className="flex flex-wrap items-center gap-3 border-t px-3 pt-3 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="text-muted-foreground">Начало</span>
+            <input type="time" className={timeCls} value={draft.fromTime} onChange={e => setDraft(d => ({ ...d, fromTime: e.target.value }))} />
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="text-muted-foreground">Конец</span>
+            <input type="time" className={timeCls} value={draft.toTime} onChange={e => setDraft(d => ({ ...d, toTime: e.target.value }))} />
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-2 p-3">
+          <Button type="button" variant="ghost" size="sm" onClick={() => { onChange?.({ from: '', to: '' }); setOpen(false) }}>
+            Сбросить
+          </Button>
+          <Button type="button" size="sm" disabled={!canApply} onClick={apply}>Готово</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 const MONTH_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 const MONTH_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
@@ -180,4 +272,4 @@ function MonthPicker({ value, onChange, placeholder = 'Выберите меся
   )
 }
 
-export { DatePicker, DateRangePicker, MonthPicker }
+export { DatePicker, DateRangePicker, DateTimeRangePicker, MonthPicker }

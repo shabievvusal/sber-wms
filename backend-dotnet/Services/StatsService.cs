@@ -1410,9 +1410,24 @@ public class StatsService
         };
     }
 
-    public async Task<object> GetReceivingSummaryAsync(string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap)
+    // Приёмка за произвольный интервал времени завершения (фильтр «Дата
+    // завершения» с датой и временем): часть приёмщиков выходит раньше начала
+    // смены (например, к 8:00 на дневную) — так их работу можно собрать в
+    // одну сводку, не разрываясь на границе смен.
+    private async Task<List<WmsReceivingEntity>> GetReceivingItemsByCompletedAsync(DateTime fromUtc, DateTime toUtc)
     {
-        var items = await GetReceivingItemsAsync(dateStr, fromHour, toHour, shift);
+        var items = await _db.WmsReceiving.AsNoTracking()
+            .Where(r => r.CompletedAt >= fromUtc && r.CompletedAt <= toUtc)
+            .ToListAsync();
+        items.Sort((a, b) => Nullable.Compare(a.CompletedAt, b.CompletedAt));
+        return items;
+    }
+
+    public async Task<object> GetReceivingSummaryAsync(string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc = null, DateTime? completedToUtc = null)
+    {
+        var items = completedFromUtc != null && completedToUtc != null
+            ? await GetReceivingItemsByCompletedAsync(completedFromUtc.Value, completedToUtc.Value)
+            : await GetReceivingItemsAsync(dateStr, fromHour, toHour, shift);
         if (!string.IsNullOrEmpty(filterExecutorNorm))
             items = items.Where(it => NormalizeFioSummary(it.Executor) == filterExecutorNorm).ToList();
         if (filterCompanies != null && filterCompanies.Count > 0 && idMap != null)

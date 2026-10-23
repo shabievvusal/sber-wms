@@ -206,7 +206,9 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        app.MapGet("/api/date/{date}/receiving/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
+        // completedFrom/completedTo (ISO) — интервал времени завершения вместо
+        // даты/смены (фильтр «Дата завершения» на странице статистики).
+        app.MapGet("/api/date/{date}/receiving/summary", async (string date, int? fromHour, int? toHour, string? shift, string? completedFrom, string? completedTo, HttpContext ctx, StatsService svc, SessionService sessions) =>
         {
             try
             {
@@ -224,7 +226,18 @@ public static class StatsEndpoints
                 var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
                 var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
                 var idMap = await svc.GetIdMapAsync();
-                var summary = await svc.GetReceivingSummaryAsync(date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                DateTime? completedFromUtc = null, completedToUtc = null;
+                // Супервайзеру — только своя смена (выше), интервал её не обходит.
+                if (session?.Role != "supervisor"
+                    && DateTimeOffset.TryParse(completedFrom, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var cf)
+                    && DateTimeOffset.TryParse(completedTo, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var ct))
+                {
+                    if (ct < cf) return Results.Json(new { error = "Конец интервала раньше начала" }, statusCode: 400);
+                    if (ct - cf > TimeSpan.FromDays(31)) return Results.Json(new { error = "Интервал не больше 31 дня" }, statusCode: 400);
+                    completedFromUtc = cf.UtcDateTime;
+                    completedToUtc = ct.UtcDateTime;
+                }
+                var summary = await svc.GetReceivingSummaryAsync(date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc);
                 return Results.Json(Merge(new { date, shift = (object?)normalizedShift }, summary));
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
