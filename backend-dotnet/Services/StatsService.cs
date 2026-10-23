@@ -1108,7 +1108,13 @@ public class StatsService
                 rec = (name, executorId, idMap != null ? (ResolveCompany(idMap, executorId) ?? "—") : "—", new Dictionary<string, int>(), new HashSet<string>(), null, null);
             }
             rec.TotalKeys.Add(taskKey);
-            rec.ByHour[hour.ToString()] = rec.ByHour.GetValueOrDefault(hour.ToString()) + 1;
+            // Таблица «По СЗ» — часовые бакеты col = (час + 1) % 24, как у
+            // комплектации (BuildDateSummary; DAY_HOURS 10..21 на фронте):
+            // с сырым часом операции 9:00–10:00 (ключ 9) в дневную смену не
+            // попадали ни в одну колонку, а остальные стояли на колонку левее.
+            // `hourly` (график) остаётся по сырому часу — тоже как у комплектации.
+            var col = ((hour + 1) % 24).ToString();
+            rec.ByHour[col] = rec.ByHour.GetValueOrDefault(col) + 1;
             if (rec.FirstAt == null || ts < rec.FirstAt) rec.FirstAt = ts;
             if (rec.LastAt == null || ts > rec.LastAt) rec.LastAt = ts;
             byExecutor[dictKey] = rec;
@@ -1307,8 +1313,10 @@ public class StatsService
                 rec = (name, executorId, idMap != null ? (ResolveCompany(idMap, executorId) ?? "—") : "—", new Dictionary<string, int>(), new Dictionary<string, decimal>(), new HashSet<string>(), 0, null, null);
             }
             rec.TotalKeys.Add(taskKey);
-            rec.ByHour[hour.ToString()] = rec.ByHour.GetValueOrDefault(hour.ToString()) + 1;
-            rec.SecondaryByHour[hour.ToString()] = rec.SecondaryByHour.GetValueOrDefault(hour.ToString()) + eoCount;
+            // бакет col = (час + 1) % 24 — см. BuildPlacementSummary
+            var col = ((hour + 1) % 24).ToString();
+            rec.ByHour[col] = rec.ByHour.GetValueOrDefault(col) + 1;
+            rec.SecondaryByHour[col] = rec.SecondaryByHour.GetValueOrDefault(col) + eoCount;
             rec.SecondaryTotal += eoCount;
             if (rec.FirstAt == null || ts < rec.FirstAt) rec.FirstAt = ts;
             if (rec.LastAt == null || ts > rec.LastAt) rec.LastAt = ts;
