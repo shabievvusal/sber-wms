@@ -14,7 +14,7 @@ namespace BackendDotnet.Services;
 // employees с Фазы 2) — свежий SQL-запрос один раз за HTTP-запрос
 // (GetIdMapAsync), без кэша, тот же принцип, что закреплён в Фазе 2 для
 // getCompanyLookupMaps()/getCompanyByIdOrFioSync().
-public class StatsService
+public partial class StatsService
 {
     private readonly AppDbContext _db;
     private const long MoscowUtcOffsetMinutes = 3 * 60;
@@ -1697,6 +1697,7 @@ public class StatsService
                 TargetHandlingUnitBarcode = target != null ? (GetStr(target.Value, "handlingUnitBarcode") ?? "") : "",
                 NomenclatureCode = product != null ? (GetStr(product.Value, "nomenclatureCode") ?? "") : "",
                 ProductName = product != null ? (GetStr(product.Value, "name") ?? "") : "",
+                ProductId = product != null ? (GetStr(product.Value, "productId") ?? "") : "",
                 Quantity = (GetNum(targetQty, "newQuantity") ?? 0) - (GetNum(targetQty, "oldQuantity") ?? 0),
                 ResponsibleUser = responsibleUser,
                 ExecutorId = responsibleUser.Id,

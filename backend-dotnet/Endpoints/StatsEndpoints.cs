@@ -233,6 +233,47 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
+        // Данные Excel-отчётов и вкладки «За период» по операциям:
+        // movedown/refill/placement/remains — построчно, selection — агрегаты
+        // (см. StatsService.Reports.cs). shift пустой — обе смены каждой даты.
+        app.MapGet("/api/stats/report/{op}", async (string op, string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
+        {
+            try
+            {
+                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
+                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
+                var dates = StatsService.GetDateRangeList(from, to);
+                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
+                // комплектация тяжелее остальных — короче предел периода
+                var maxDays = op == "selection" ? 31 : 92;
+                if (dates.Count > maxDays) return Results.Json(new { error = $"Период не больше {maxDays} дней" }, statusCode: 400);
+                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
+                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
+                if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
+                {
+                    if (normalizedShift != null && normalizedShift != session.ShiftType)
+                        return Results.Json(new { error = "Доступ только к своей смене" }, statusCode: 403);
+                    normalizedShift = session.ShiftType;
+                }
+                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
+                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
+                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
+                var idMap = await svc.GetIdMapAsync();
+                object data = op switch
+                {
+                    "movedown" => await svc.GetStockMoveRowsAsync(StatsService.OpDescent, from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap),
+                    "refill" => await svc.GetStockMoveRowsAsync(StatsService.OpReplenishment, from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap),
+                    "placement" => await svc.GetStockMoveRowsAsync(StatsService.OpStoragePlacement, from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap),
+                    "remains" => await svc.GetRemainsRowsAsync(from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap),
+                    "selection" => await svc.GetSelectionReportAsync(from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap),
+                    _ => null!,
+                };
+                if (data == null) return Results.Json(new { error = "Неизвестная операция" }, statusCode: 400);
+                return Results.Json(op == "selection" ? data : new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows = data });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
         // Поставки построчно за период (вкладка «За период» приёмки и её Excel).
         // shift пустой — обе смены каждой даты (09:00 → 09:00 следующего дня).
         app.MapGet("/api/stats/receiving/period-rows", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
@@ -558,6 +599,19 @@ public static class StatsEndpoints
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
+
+        // Товары без веса за последние days дней (по умолчанию 120) — список для
+        // дозапроса веса из WMS (Настройки → Веса товаров). Сохраняет веса Node
+        // (/api/vs/admin/product-weights/wms), там же источник справочника.
+        app.MapGet("/api/product-weights/missing", async (int? days, StatsService svc) =>
+        {
+            try
+            {
+                var items = await svc.GetMissingWeightProductsAsync(Math.Clamp(days ?? 120, 1, 400));
+                return Results.Json(new { items });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
     }
 
     private record ReceivingQuery(string? Shift, string? FilterExecutorNorm, List<string>? FilterCompanies, Dictionary<string, string> IdMap, DateTime? CompletedFromUtc, DateTime? CompletedToUtc);

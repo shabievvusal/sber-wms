@@ -9,6 +9,11 @@ import { Input } from '@/components/ui/input'
 import { DateTimeRangePicker } from '@/components/ui/date-picker'
 import { exportReceivingXlsx } from './receivingExport'
 import { ReceivingPeriodStats } from './ReceivingPeriodStats'
+import { OpsPeriodStats } from './OpsPeriodStats'
+import { OP_META, exportMovesXlsx, exportSelectionXlsx, groupMoves, remainsOps } from './opsExport'
+
+// Операции с отчётом по строкам журнала (opsExport.js): XLSX за смену и вкладка «За период».
+const OPS_WITH_REPORT = ['movedown', 'refill', 'placement', 'remains']
 import { Spinner } from '@/components/ui/spinner'
 import { StatsToolbar } from './StatsToolbar'
 import { StatsCard } from './StatsCard'
@@ -113,6 +118,8 @@ export default function StatsPage() {
   }, [operation, receivingRange])
   const idleDebounceRef = useRef(null)
   const monthlyExportRef = useRef(null)
+  // период/смена, выбранные во вкладке «За период» комплектации — для «Отчёт»
+  const monthlyRangeRef = useRef(null)
 
   const actions = ACTIONS_BY_ROLE[currentUser?.role] || []
   const canEditThresholds = actions.includes('edit_thresholds')
@@ -674,10 +681,56 @@ export default function StatsPage() {
     }
   }
 
+  // Спуск/пополнение/размещение/остатки за смену — полный отчёт (opsExport.js).
+  const handleExportOps = async () => {
+    try {
+      const res = await api.getOpReport(operation, dateStr, dateStr, shift)
+      let ops = operation === 'remains' ? remainsOps(res?.rows || []) : groupMoves(res?.rows || [])
+      if (filterCompany === '__none__') ops = ops.filter(o => !o.company || o.company === '—')
+      else if (filterCompany !== '__all__') ops = ops.filter(o => o.company === filterCompany)
+      if (!ops.length) { toast.info('Нет данных для экспорта'); return }
+      const shiftLbl = shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'
+      const companyLbl = filterCompany === '__all__' ? '' : ` · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`
+      await exportMovesXlsx(operation, ops, {
+        periodLabel: `${dateStr.split('-').reverse().join('.')} · ${shiftLbl}${companyLbl}`,
+        fileName: `${OP_META[operation].file}_${dateStr}_${shift}.xlsx`,
+      })
+    } catch (err) {
+      toast.error('Не удалось выгрузить отчёт: ' + (err.message || err))
+    }
+  }
+
+  // Комплектация — отчёт по агрегатам с сервера: за смену сверху или (во
+  // вкладке «За период») за выбранный там период. Отдельная кнопка — прежний
+  // XLSX «Сотрудники по часам» остаётся как был.
+  const [selectionReportBusy, setSelectionReportBusy] = useState(false)
+  const handleSelectionReport = async () => {
+    const range = effectiveHeMode === 'monthly' ? monthlyRangeRef.current : null
+    const from = range?.dateFrom || dateStr
+    const to = range?.dateTo || range?.dateFrom || dateStr
+    const sh = range ? (range.shift || undefined) : shift
+    setSelectionReportBusy(true)
+    try {
+      const report = await api.getOpReport('selection', from, to, sh)
+      if (!report?.totals?.tasks) { toast.info('Нет данных для отчёта'); return }
+      const shiftLbl = sh === 'day' ? 'дневная смена' : sh === 'night' ? 'ночная смена' : 'все смены'
+      const fmt = d => d.split('-').reverse().join('.')
+      await exportSelectionXlsx(report, {
+        periodLabel: from === to ? `${fmt(from)} · ${shiftLbl}` : `${fmt(from)} — ${fmt(to)} · ${shiftLbl}`,
+        fileName: `комплектация_${from === to ? from : from + '_' + to}${sh ? '_' + sh : ''}.xlsx`,
+      })
+    } catch (err) {
+      toast.error('Не удалось выгрузить отчёт: ' + (err.message || err))
+    } finally {
+      setSelectionReportBusy(false)
+    }
+  }
+
   const handleExportClick = () => {
     if (effectiveHeMode === 'idles') return handleExportIdles()
     if (effectiveHeMode === 'monthly') return monthlyExportRef.current?.()
     if (operation === 'receiving') return handleExportReceiving()
+    if (OPS_WITH_REPORT.includes(operation)) return handleExportOps()
     return handleExportHourly()
   }
 
@@ -796,13 +849,20 @@ export default function StatsPage() {
             <Button size="sm" variant="secondary" className="h-[26px] px-3 text-xs" onClick={handleExportClick}>
               <Download className="size-3.5" /> XLSX
             </Button>
+            {operation === 'selection' && (
+              <Button size="sm" variant="secondary" className="h-[26px] px-3 text-xs" onClick={handleSelectionReport} disabled={selectionReportBusy} title="Полный отчёт: сотрудники, компании, зоны, часы, товары, ячейки">
+                <Download className="size-3.5" /> {selectionReportBusy ? 'Отчёт…' : 'Отчёт'}
+              </Button>
+            )}
           </div>
         }
       >
         {effectiveHeMode === 'monthly' ? (
           operation === 'receiving'
             ? <ReceivingPeriodStats exportRef={monthlyExportRef} />
-            : <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} zoneCatalog={dayZoneCatalog} />
+            : OPS_WITH_REPORT.includes(operation)
+              ? <OpsPeriodStats operation={operation} exportRef={monthlyExportRef} />
+              : <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} rangeRef={monthlyRangeRef} zoneCatalog={dayZoneCatalog} />
         ) : (
           <div className={busyCls} aria-busy={reloading}>
           <HourlyEmployeeTable

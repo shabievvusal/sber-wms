@@ -10,6 +10,11 @@ const fs = require('fs');
 const DATA_DIR = path.join(__dirname, 'data');
 const EXCEL_PATH = path.join(DATA_DIR, 'product-weights.xlsx');
 const LEGACY_EXCEL_PATH = path.join(__dirname, 'data.xlsx');
+// Веса, дозапрошенные из WMS (stocks/overview → measurements.weight) для
+// товаров, которых нет в Excel: { article: { grams, productId, name, fetchedAt } }.
+// Отдельный файл — чтобы новая загрузка Excel их не стирала. В справочник
+// попадают только артикулы, которых нет в Excel (Excel главнее).
+const WMS_WEIGHTS_PATH = path.join(DATA_DIR, 'product-weights-wms.json');
 
 let weightMap = null; // Map<article, grams>
 
@@ -69,9 +74,31 @@ async function syncMapToPg(map) {
   }
 }
 
-async function clearPg() {
-  if (!pgPool) return;
-  await pgPool.query('TRUNCATE product_weights');
+// Дописать/обновить отдельные артикулы, не трогая остальные (веса из WMS).
+async function upsertPg(entries) {
+  if (!pgPool || !entries.length) return;
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [article, grams] of entries) {
+      await client.query('INSERT INTO product_weights (article, grams) VALUES ($1, $2) ON CONFLICT (article) DO UPDATE SET grams = $2', [article, grams]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[product-weights] Postgres upsert failed:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
+function loadWmsWeights() {
+  try {
+    if (fs.existsSync(WMS_WEIGHTS_PATH)) return JSON.parse(fs.readFileSync(WMS_WEIGHTS_PATH, 'utf8')) || {};
+  } catch (err) {
+    console.warn('[product-weights] product-weights-wms.json:', err.message);
+  }
+  return {};
 }
 
 function ensureExcelDir() {
@@ -108,7 +135,7 @@ function loadWeightMap() {
   migrateLegacyExcel();
   if (!fs.existsSync(EXCEL_PATH)) {
     console.warn('[product-weights] product-weights.xlsx not found at', EXCEL_PATH);
-    return new Map();
+    return withWmsWeights(new Map());
   }
   const xlsx = require('xlsx');
   const wb = xlsx.readFile(EXCEL_PATH);
@@ -144,7 +171,44 @@ function loadWeightMap() {
   }
 
   console.log(`[product-weights] Loaded ${map.size} articles from product-weights.xlsx`);
+  return withWmsWeights(map);
+}
+
+// Дополнить карту из Excel весами из WMS — только отсутствующие артикулы.
+function withWmsWeights(map) {
+  let added = 0;
+  for (const [article, rec] of Object.entries(loadWmsWeights())) {
+    const grams = Number(rec && rec.grams) || 0;
+    if (grams > 0 && !map.has(article)) { map.set(article, grams); added++; }
+  }
+  if (added) console.log(`[product-weights] +${added} articles from WMS (product-weights-wms.json)`);
   return map;
+}
+
+/** Сохранить веса из WMS: entries — [{ article, grams, productId, name }]. Возвращает число записанных. */
+function addWmsWeights(entries) {
+  const wms = loadWmsWeights();
+  const now = new Date().toISOString();
+  const toPg = [];
+  const excel = getMap();
+  let saved = 0;
+  for (const e of entries || []) {
+    const article = String((e && e.article) || '').trim();
+    const grams = Number(e && e.grams) || 0;
+    if (!article || grams <= 0) continue;
+    wms[article] = { grams, productId: e.productId || null, name: e.name || '', fetchedAt: now };
+    saved++;
+    // в справочник — только если веса нет (вес из Excel главнее)
+    if (!excel.has(article)) { excel.set(article, grams); toPg.push([article, grams]); }
+  }
+  ensureExcelDir();
+  fs.writeFileSync(WMS_WEIGHTS_PATH, JSON.stringify(wms), 'utf8');
+  upsertPg(toPg).catch(err => console.error('[product-weights] upsertPg:', err.message));
+  return saved;
+}
+
+function wmsWeightsCount() {
+  return Object.keys(loadWmsWeights()).length;
 }
 
 function getMap() {
@@ -174,8 +238,8 @@ function saveExcelBuffer(buffer) {
 
 function deleteExcel() {
   if (fs.existsSync(EXCEL_PATH)) fs.unlinkSync(EXCEL_PATH);
-  weightMap = null;
-  clearPg().catch(err => console.error('[product-weights] clearPg:', err.message));
+  // без Excel в справочнике остаются только веса из WMS
+  reload();
 }
 
-module.exports = { EXCEL_PATH, getWeightGrams, getMap, reload, saveExcelBuffer, deleteExcel, initPg };
+module.exports = { EXCEL_PATH, getWeightGrams, getMap, reload, saveExcelBuffer, deleteExcel, initPg, addWmsWeights, wmsWeightsCount };

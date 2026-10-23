@@ -133,6 +133,9 @@
 	handle /api/stats/remains/monthly-employees {
 		reverse_proxy dotnet:5080
 	}
+	handle /api/stats/report/* {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/stats/receiving/period-rows {
 		reverse_proxy dotnet:5080
 	}
@@ -155,6 +158,9 @@
 		reverse_proxy dotnet:5080
 	}
 	handle /api/product-weights {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/product-weights/missing {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/vs/auth/* {

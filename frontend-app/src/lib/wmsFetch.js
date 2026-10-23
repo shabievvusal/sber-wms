@@ -4,7 +4,7 @@
 // ../../zlp-main-main/frontend/app/src/api/index.js (fetchRkFromWms), без
 // логики уровня приложения — только сеть.
 
-import { apiHeaders } from '@/lib/api'
+import { apiHeaders, saveWmsWeights } from '@/lib/api'
 
 const WMS_ROUTES_BASE = 'https://api-p01.samokat.ru/wmsout-wwh/shipments/routes'
 const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/handling-units-in-progress'
@@ -19,6 +19,8 @@ const SHIPMENT_ORDERS_URL = 'https://api-p01.samokat.ru/wmsout-wwh/shipment-orde
 // склад, выбранный сейчас в WMS у учётки (у учётки он один на все её сессии)
 const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
 const WMS_SHIFTS_URL = 'https://api.samokat.ru/wmsin-wwh/shifts'
+const PRODUCTS_SEARCH_URL = 'https://api.samokat.ru/wmsops-wwh/products/search'
+const STOCKS_OVERVIEW_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/overview'
 const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage_dc' }
 
 const LS_ACCESS_KEY = 'wms_access_token'
@@ -604,7 +606,7 @@ function _slimStockMove(it) {
   return {
     id: it.id,
     operationType: it.operationType,
-    product: { nomenclatureCode: it.product?.nomenclatureCode, name: it.product?.name },
+    product: { nomenclatureCode: it.product?.nomenclatureCode, name: it.product?.name, productId: it.product?.productId },
     sourceAddress: it.sourceAddress,
     targetAddress: it.targetAddress,
     operationStartedAt: it.operationStartedAt,
@@ -703,6 +705,64 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
     added: saveRes.added ?? 0,
     newEmployees: saveRes.newEmployees || [],
   }
+}
+
+// ─── Веса товаров из WMS ────────────────────────────────────────────────────
+// Вес единицы — stocks/overview/{productId} → product.measurements.weight (г).
+// Нет productId — сначала products/search по артикулу.
+
+async function findWmsProductId(token, code) {
+  const r = await fetch(PRODUCTS_SEARCH_URL, {
+    method: 'POST',
+    headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
+    body: JSON.stringify({ productFilter: { type: 'PRODUCT_NOMENCLATURE_CODE', nomenclatureCode: code }, pageSize: 30, pageNumber: 1 }),
+  })
+  if (!r.ok) throw new Error(`WMS products/search ${r.status}`)
+  const data = await r.json()
+  const list = data?.value?.data || []
+  return (list.find(p => p.nomenclatureCode === code) || list[0])?.id || null
+}
+
+export async function fetchWmsProductWeight(token, { code, productId }) {
+  const id = productId || await findWmsProductId(token, code)
+  if (!id) return { productId: null, grams: 0 }
+  const data = await samokatGet(token, `${STOCKS_OVERVIEW_URL}/${id}`, '')
+  const product = data?.value?.product || {}
+  return { productId: id, grams: Number(product.measurements?.weight) || 0, name: product.name || '' }
+}
+
+// Дозапросить вес у WMS по списку [{ code, name, productId }] и сохранить
+// найденное в справочник (пачками — прогресс не теряется при обрыве).
+// Токен — свежий на каждую пачку (живёт ~5 минут, AuthContext продлевает).
+export async function fillWeightsFromWms(items, { onProgress, shouldStop } = {}) {
+  const BATCH = 5
+  const SAVE_EVERY = 50
+  let pending = []
+  let checked = 0, saved = 0
+  const notFound = []
+  const flush = async () => {
+    if (!pending.length) return
+    const res = await saveWmsWeights(pending)
+    saved += res?.saved ?? pending.length
+    pending = []
+  }
+  for (let i = 0; i < items.length; i += BATCH) {
+    if (shouldStop?.()) break
+    const token = getStoredToken()
+    if (!token) throw new Error('WMS-токен истёк — войдите паролем от WMS')
+    const results = await Promise.all(items.slice(i, i + BATCH).map(async it => {
+      try { return { it, res: await fetchWmsProductWeight(token, it) } } catch (err) { return { it, err } }
+    }))
+    for (const { it, res, err } of results) {
+      checked++
+      if (res?.grams > 0) pending.push({ article: it.code, grams: res.grams, productId: res.productId, name: res.name || it.name })
+      else notFound.push({ ...it, reason: err ? err.message : res?.productId ? 'в WMS не указан вес' : 'товар не найден в WMS' })
+    }
+    if (pending.length >= SAVE_EVERY) await flush()
+    onProgress?.({ checked, total: items.length, found: saved + pending.length, notFound: notFound.length })
+  }
+  await flush()
+  return { checked, saved, notFound }
 }
 
 // ─── Отчёты / анализ / поставки ─────────────────────────────────────────────

@@ -198,6 +198,8 @@ public class WmsStockMoveEntity
     public string TargetHandlingUnitBarcode { get; set; } = "";
     public string NomenclatureCode { get; set; } = "";
     public string ProductName { get; set; } = "";
+    // GUID товара в WMS (product.productId) — для дозапроса веса (stocks/overview/{id})
+    public string ProductId { get; set; } = "";
     public decimal Quantity { get; set; }
     public ResponsibleUser ResponsibleUser { get; set; } = new();
     public string ExecutorId { get; set; } = "";

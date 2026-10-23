@@ -1317,7 +1317,7 @@ app.get('/api/vs/admin/product-weights/info', vsSessionRequired, vsAdminRequired
     if (!exists) return res.json({ exists: false, count: 0 });
     const stat = fs.statSync(EXCEL_PATH);
     const count = productWeights.getMap().size;
-    res.json({ exists: true, updatedAt: stat.mtime.toISOString(), sizeBytes: stat.size, count });
+    res.json({ exists: true, updatedAt: stat.mtime.toISOString(), sizeBytes: stat.size, count, wmsCount: productWeights.wmsWeightsCount() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1328,6 +1328,18 @@ app.post('/api/vs/admin/product-weights/upload', vsSessionRequired, vsAdminRequi
     if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
     const map = productWeights.saveExcelBuffer(req.file.buffer);
     res.json({ ok: true, count: map.size });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Веса, которые браузер дозапросил у WMS (stocks/overview → measurements.weight)
+// для товаров без веса в Excel: [{ article, grams, productId, name }].
+app.post('/api/vs/admin/product-weights/wms', vsSessionRequired, vsAdminRequired, (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const saved = productWeights.addWmsWeights(items);
+    res.json({ ok: true, saved, count: productWeights.getMap().size });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

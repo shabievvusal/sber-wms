@@ -74,7 +74,7 @@ const OP_LABELS = {
 // XLSX-экспорт через exportRef. Список зон в фильтре — `zoneCatalog`,
 // переданный сверху из StatsPage.jsx (собран из уже загруженной сводки дня,
 // без хардкода — см. format.js: buildZoneCatalog).
-export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] }) {
+export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatalog = [] }) {
   const [dateFrom, setDateFrom] = useState(monthStartStr())
   const [dateTo, setDateTo] = useState(todayStr())
   const [shift, setShift] = useState('')
@@ -204,6 +204,8 @@ export function MonthlyEmployeeTable({ operation, exportRef, zoneCatalog = [] })
   }
 
   useEffect(() => { if (exportRef) exportRef.current = handleExport })
+  // выбранный период — наружу, для кнопки «Отчёт» комплектации (StatsPage)
+  useEffect(() => { if (rangeRef) rangeRef.current = { dateFrom, dateTo, shift } })
 
   return (
     <div className="space-y-3">

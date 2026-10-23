@@ -82,6 +82,7 @@ public static class WarehouseSchema
               target_handling_unit_barcode TEXT NOT NULL DEFAULT '',
               nomenclature_code TEXT NOT NULL DEFAULT '',
               product_name TEXT NOT NULL DEFAULT '',
+              product_id TEXT NOT NULL DEFAULT '',
               quantity NUMERIC NOT NULL DEFAULT 0,
               responsible_user JSONB,
               executor_id TEXT NOT NULL DEFAULT '',
@@ -89,6 +90,9 @@ public static class WarehouseSchema
               started_at TIMESTAMPTZ,
               completed_at TIMESTAMPTZ
             )");
+
+        // таблица могла быть создана до появления product_id (2026-10-24)
+        await Exec("ALTER TABLE wms_stock_moves ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''");
 
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))

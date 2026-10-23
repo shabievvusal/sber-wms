@@ -6,21 +6,21 @@
 
 import { STATUS_LABELS, TYPE_LABELS } from '@/pages/supplies/constants'
 
-const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-const SUBHDR_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1D5DB' } }
+export const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+export const SUBHDR_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1D5DB' } }
 const TOTAL_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
-const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+export const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
 
 const MSK_MS = 3 * 60 * 60 * 1000
 const toMsk = iso => (iso ? new Date(new Date(iso).getTime() + MSK_MS) : null)
-const mskHour = iso => toMsk(iso)?.getUTCHours()
+export const mskHour = iso => toMsk(iso)?.getUTCHours()
 // дата для Excel: «стеночное» московское время как дата без пояса
-const excelDate = iso => {
+export const excelDate = iso => {
   const d = toMsk(iso)
   return d ? new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds())) : null
 }
 export const kg = grams => Math.round((Number(grams) || 0) / 10) / 100
-const hourLabel = h => `${String(h).padStart(2, '0')}–${String((h + 1) % 24).padStart(2, '0')}`
+export const hourLabel = h => `${String(h).padStart(2, '0')}–${String((h + 1) % 24).padStart(2, '0')}`
 // длительность приёмки, мин (начало → завершение); нет начала — null
 export const durationMin = r => {
   if (!r.startedAt || !r.completedAt) return null
@@ -61,7 +61,7 @@ export const round1 = v => (v == null ? null : Math.round(v * 10) / 10)
 
 // ── оформление ───────────────────────────────────────────────────────────────
 
-function titleRows(ws, title, subtitle, ncols) {
+export function titleRows(ws, title, subtitle, ncols) {
   ws.addRow([title])
   ws.mergeCells(1, 1, 1, Math.max(ncols, 1))
   ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { vertical: 'middle' } }
@@ -74,7 +74,7 @@ function titleRows(ws, title, subtitle, ncols) {
 
 // columns: [{ header, key, width, numFmt }] → таблица с шапкой, итогом,
 // автофильтром и закреплённой шапкой; возвращает номер строки шапки.
-function addTable(ws, columns, data, { total = null, freezeCols = 0 } = {}) {
+export function addTable(ws, columns, data, { total = null, freezeCols = 0 } = {}) {
   const headerRow = ws.addRow(columns.map(c => c.header))
   headerRow.eachCell(cell => { cell.style = { font: { bold: true }, fill: SUBHDR_FILL, border: BORDER, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } } })
   headerRow.height = 30
@@ -99,12 +99,12 @@ function addTable(ws, columns, data, { total = null, freezeCols = 0 } = {}) {
   return hr
 }
 
-const NUM = '#,##0'
-const KG = '#,##0.00'
-const DEC1 = '#,##0.0'
-const PCT = '0.0%'
-const DT = 'dd.mm.yy hh:mm'
-const TM = 'hh:mm'
+export const NUM = '#,##0'
+export const KG = '#,##0.00'
+export const DEC1 = '#,##0.0'
+export const PCT = '0.0%'
+export const DT = 'dd.mm.yy hh:mm'
+export const TM = 'hh:mm'
 
 // ── отчёт ────────────────────────────────────────────────────────────────────
 

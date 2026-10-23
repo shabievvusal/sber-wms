@@ -183,6 +183,7 @@ public class AppDbContext : DbContext
         moves.Property(m => m.TargetHandlingUnitBarcode).HasColumnName("target_handling_unit_barcode");
         moves.Property(m => m.NomenclatureCode).HasColumnName("nomenclature_code");
         moves.Property(m => m.ProductName).HasColumnName("product_name");
+        moves.Property(m => m.ProductId).HasColumnName("product_id");
         moves.Property(m => m.Quantity).HasColumnName("quantity");
         moves.Property(m => m.ExecutorId).HasColumnName("executor_id");
         moves.Property(m => m.Executor).HasColumnName("executor");

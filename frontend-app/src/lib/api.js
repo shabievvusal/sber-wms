@@ -405,6 +405,21 @@ export async function deleteProductWeightsExcel() {
   return req('/api/vs/admin/product-weights', { method: 'DELETE' })
 }
 
+// Товары без веса в справочнике (комплектация + спуск/пополнение/размещение
+// за последние days дней) — для дозапроса веса из WMS.
+export async function getMissingWeightProducts(days = 120) {
+  return req(`/api/product-weights/missing?days=${days}`)
+}
+
+// Сохранить веса, полученные из WMS: [{ article, grams, productId, name }].
+export async function saveWmsWeights(items) {
+  return req('/api/vs/admin/product-weights/wms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+}
+
 // ─── Отчёты: объединение остатков ────────────────────────────────────────────
 
 export async function uploadStockConsolidationReport(tasksCsvFile, stockXlsxFile, temperature) {
@@ -508,6 +523,14 @@ function opDateSummary(path) {
 export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
+
+// Данные отчёта по операции за период (movedown/refill/placement/remains —
+// строки, selection — агрегаты); shift пустой — обе смены каждой даты.
+export async function getOpReport(op, dateFrom, dateTo, shift) {
+  const params = new URLSearchParams({ dateFrom, dateTo })
+  if (shift) params.set('shift', shift)
+  return req(`/api/stats/report/${op}?${params}`)
+}
 
 // Приёмка построчно за период (вкладка «За период»); shift пустой — обе смены.
 export async function getReceivingPeriodRows(dateFrom, dateTo, shift) {
