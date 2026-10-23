@@ -1433,25 +1433,47 @@ public class StatsService
     public async Task<List<object>> GetReceivingRowsAsync(string dateStr, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc = null, DateTime? completedToUtc = null)
     {
         var items = await GetReceivingFilteredItemsAsync(dateStr, null, null, shift, filterExecutorNorm, filterCompanies, idMap, completedFromUtc, completedToUtc);
-        return items.Select(r => (object)new
-        {
-            id = r.ItemId,
-            taskNumber = r.TaskNumber,
-            orderNumber = r.OrderNumber,
-            supplierName = r.SupplierName,
-            type = r.Type,
-            status = r.Status,
-            startedAt = r.StartedAt,
-            completedAt = r.CompletedAt,
-            executorId = r.ExecutorId,
-            executor = r.Executor,
-            company = ResolveCompany(idMap, r.ExecutorId) ?? "—",
-            eo = r.EoCount,
-            sku = r.SkuCount,
-            pieces = r.Pieces,
-            weightGrams = r.WeightInGrams,
-        }).ToList();
+        return items.Select(r => ReceivingRow(r, idMap, null, null)).ToList();
     }
+
+    // Поставки за период по датам смен: shift = day/night — только эта смена
+    // каждой даты; null — обе (09:00 даты → 09:00 следующего дня), чтобы
+    // соседние даты не пересекались. У строки — дата и смена, к которым она
+    // отнесена (лист «По дням» Excel-отчёта и таблица «За период»).
+    public async Task<List<object>> GetReceivingPeriodRowsAsync(string dateFrom, string dateTo, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap)
+    {
+        var result = new List<object>();
+        foreach (var dateStr in GetDateRangeList(dateFrom, dateTo))
+        {
+            foreach (var s in shift == null ? new[] { "day", "night" } : new[] { shift })
+            {
+                var items = await GetReceivingFilteredItemsAsync(dateStr, null, null, s, filterExecutorNorm, filterCompanies, idMap, null, null);
+                result.AddRange(items.Select(r => ReceivingRow(r, idMap, dateStr, s)));
+            }
+        }
+        return result;
+    }
+
+    private static object ReceivingRow(WmsReceivingEntity r, Dictionary<string, string>? idMap, string? shiftDate, string? shift) => new
+    {
+        shiftDate,
+        shift,
+        id = r.ItemId,
+        taskNumber = r.TaskNumber,
+        orderNumber = r.OrderNumber,
+        supplierName = r.SupplierName,
+        type = r.Type,
+        status = r.Status,
+        startedAt = r.StartedAt,
+        completedAt = r.CompletedAt,
+        executorId = r.ExecutorId,
+        executor = r.Executor,
+        company = ResolveCompany(idMap, r.ExecutorId) ?? "—",
+        eo = r.EoCount,
+        sku = r.SkuCount,
+        pieces = r.Pieces,
+        weightGrams = r.WeightInGrams,
+    };
 
     private async Task<List<WmsReceivingEntity>> GetReceivingFilteredItemsAsync(string dateStr, int? fromHour, int? toHour, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? completedFromUtc, DateTime? completedToUtc)
     {

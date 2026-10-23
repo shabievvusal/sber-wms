@@ -1,8 +1,8 @@
 // Excel-отчёт по приёмке — строится по списку поставок
 // (/api/date/:date/receiving/rows), не по готовой сводке: так считаются
 // разрезы, которых в сводке нет (компании, поставщики, типы, длительность).
-// Листы: Сводка · Приёмщики · Компании · По часам · Приёмщик × час ·
-// Поставщики · Поставки.
+// Листы: Сводка · Приёмщики · Компании · [По дням — для периода] · По часам ·
+// Приёмщик × час · Поставщики · Поставки.
 
 import { STATUS_LABELS, TYPE_LABELS } from '@/pages/supplies/constants'
 
@@ -19,22 +19,22 @@ const excelDate = iso => {
   const d = toMsk(iso)
   return d ? new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds())) : null
 }
-const kg = grams => Math.round((Number(grams) || 0) / 10) / 100
+export const kg = grams => Math.round((Number(grams) || 0) / 10) / 100
 const hourLabel = h => `${String(h).padStart(2, '0')}–${String((h + 1) % 24).padStart(2, '0')}`
 // длительность приёмки, мин (начало → завершение); нет начала — null
-const durationMin = r => {
+export const durationMin = r => {
   if (!r.startedAt || !r.completedAt) return null
   const m = (new Date(r.completedAt) - new Date(r.startedAt)) / 60000
   return m >= 0 ? m : null
 }
 
-function aggregate(rows, keyFn) {
+export function aggregate(rows, keyFn) {
   const map = new Map()
   for (const r of rows) {
     const key = keyFn(r)
     let a = map.get(key)
     if (!a) {
-      a = { key, deliveries: 0, eo: 0, sku: 0, pieces: 0, grams: 0, discrepancy: 0, durations: [], hours: new Set(), executors: new Set(), first: null, last: null, sample: r }
+      a = { key, deliveries: 0, eo: 0, sku: 0, pieces: 0, grams: 0, discrepancy: 0, durations: [], hours: new Set(), executors: new Set(), days: new Set(), first: null, last: null, sample: r }
       map.set(key, a)
     }
     a.deliveries += 1
@@ -52,11 +52,12 @@ function aggregate(rows, keyFn) {
       if (a.last == null || t > a.last) a.last = t
     }
     if (r.executorId || r.executor) a.executors.add(r.executorId || r.executor)
+    if (r.shiftDate) a.days.add(r.shiftDate)
   }
   return [...map.values()]
 }
-const avg = list => (list.length ? list.reduce((s, x) => s + x, 0) / list.length : null)
-const round1 = v => (v == null ? null : Math.round(v * 10) / 10)
+export const avg = list => (list.length ? list.reduce((s, x) => s + x, 0) / list.length : null)
+export const round1 = v => (v == null ? null : Math.round(v * 10) / 10)
 
 // ── оформление ───────────────────────────────────────────────────────────────
 
@@ -116,6 +117,9 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   const totals = aggregate(rows, () => 'all')[0] || { deliveries: 0, eo: 0, sku: 0, pieces: 0, grams: 0, discrepancy: 0, durations: [], executors: new Set() }
   const share = (part, whole) => (whole ? part / whole : 0)
+  // Выгрузка за период (у строк есть shiftDate — дата смены) — плюс разрез по дням.
+  const days = [...new Set(rows.map(r => r.shiftDate).filter(Boolean))].sort()
+  const multiDay = days.length > 1
 
   // 1. Сводка
   {
@@ -133,6 +137,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
       ['Средняя длительность приёмки, мин', round1(avg(totals.durations)), DEC1],
       ['Среднее ЕО на поставку', round1(share(totals.eo, totals.deliveries)), DEC1],
       ['Средний вес поставки, кг', kg(share(totals.grams, totals.deliveries)), KG],
+      ...(multiDay ? [['Дней в периоде', days.length, NUM], ['Среднее поставок в день', round1(share(totals.deliveries, days.length)), DEC1], ['Средний вес в день, кг', kg(share(totals.grams, days.length)), KG]] : []),
     ]
     const head = ws.addRow(['Показатель', 'Значение'])
     head.eachCell(c => { c.style = { font: { bold: true }, fill: SUBHDR_FILL, border: BORDER } })
@@ -171,6 +176,9 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
       return {
         company: a.sample.company || '—',
         name: a.sample.executor || '—',
+        days: a.days.size,
+        perDay: round1(share(a.deliveries, a.days.size)),
+        kgPerDay: kg(share(a.grams, a.days.size)),
         deliveries: a.deliveries,
         eo: a.eo,
         sku: a.sku,
@@ -193,6 +201,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
     const cols = [
       { header: 'Компания', key: 'company', width: 18 },
       { header: 'Приёмщик', key: 'name', width: 34 },
+      ...(multiDay ? [{ header: 'Дней', key: 'days', numFmt: NUM, width: 7 }] : []),
       { header: 'Поставок', key: 'deliveries', numFmt: NUM, width: 10 },
       { header: 'ЕО', key: 'eo', numFmt: NUM, width: 9 },
       { header: 'SKU', key: 'sku', numFmt: NUM, width: 9 },
@@ -200,13 +209,14 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
       { header: 'Вес, кг', key: 'weight', numFmt: KG, width: 13 },
       { header: 'Доля веса', key: 'weightShare', numFmt: PCT, width: 10 },
       { header: 'С расхожд.', key: 'discrepancy', numFmt: NUM, width: 10 },
+      ...(multiDay ? [{ header: 'Поставок / день', key: 'perDay', numFmt: DEC1, width: 10 }, { header: 'кг / день', key: 'kgPerDay', numFmt: KG, width: 12 }] : []),
       { header: 'Часов с приёмкой', key: 'hours', numFmt: NUM, width: 10 },
       { header: 'Поставок / час', key: 'perHour', numFmt: DEC1, width: 10 },
       { header: 'ЕО / час', key: 'eoPerHour', numFmt: DEC1, width: 9 },
       { header: 'кг / час', key: 'kgPerHour', numFmt: KG, width: 11 },
       { header: 'Ср. длит. приёмки, мин', key: 'avgDuration', numFmt: DEC1, width: 12 },
-      { header: 'Первая', key: 'first', numFmt: TM, width: 9 },
-      { header: 'Последняя', key: 'last', numFmt: TM, width: 10 },
+      { header: 'Первая', key: 'first', numFmt: multiDay ? DT : TM, width: multiDay ? 15 : 9 },
+      { header: 'Последняя', key: 'last', numFmt: multiDay ? DT : TM, width: multiDay ? 15 : 10 },
     ]
     titleRows(ws, 'Приёмка — по приёмщикам', `${sub} · «Часов с приёмкой» — часы, в которые приёмщик завершил хотя бы одну поставку`, cols.length)
     addTable(ws, cols, byExecutor, {
@@ -242,6 +252,36 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
     addTable(ws, cols, data, {
       freezeCols: 1,
       total: { company: 'Итого', executors: totals.executors.size, deliveries: totals.deliveries, share: 1, eo: totals.eo, sku: totals.sku, pieces: totals.pieces, weight: kg(totals.grams) },
+    })
+  }
+
+  // 3б. По дням — только для выгрузки за период
+  if (multiDay) {
+    const ws = wb.addWorksheet('По дням')
+    const byDay = new Map(aggregate(rows, r => r.shiftDate).map(a => [a.key, a]))
+    const data = days.map(d => {
+      const a = byDay.get(d)
+      return {
+        date: new Date(`${d}T00:00:00Z`), deliveries: a.deliveries, eo: a.eo, sku: a.sku, pieces: a.pieces, weight: kg(a.grams),
+        executors: a.executors.size, perExecutor: round1(share(a.deliveries, a.executors.size)), discrepancy: a.discrepancy, avgDuration: round1(avg(a.durations)),
+      }
+    })
+    const cols = [
+      { header: 'Дата смены', key: 'date', numFmt: 'dd.mm.yy', width: 12 },
+      { header: 'Поставок', key: 'deliveries', numFmt: NUM, width: 10 },
+      { header: 'ЕО', key: 'eo', numFmt: NUM, width: 9 },
+      { header: 'SKU', key: 'sku', numFmt: NUM, width: 9 },
+      { header: 'Штук', key: 'pieces', numFmt: NUM, width: 11 },
+      { header: 'Вес, кг', key: 'weight', numFmt: KG, width: 13 },
+      { header: 'Приёмщиков', key: 'executors', numFmt: NUM, width: 11 },
+      { header: 'Поставок на приёмщика', key: 'perExecutor', numFmt: DEC1, width: 12 },
+      { header: 'С расхожд.', key: 'discrepancy', numFmt: NUM, width: 10 },
+      { header: 'Ср. длит. приёмки, мин', key: 'avgDuration', numFmt: DEC1, width: 12 },
+    ]
+    titleRows(ws, 'Приёмка — по дням', `${sub} · дата смены: ночная смена относится к дате её начала (21:00)`, cols.length)
+    addTable(ws, cols, data, {
+      freezeCols: 1,
+      total: { date: 'Итого', deliveries: totals.deliveries, eo: totals.eo, sku: totals.sku, pieces: totals.pieces, weight: kg(totals.grams), executors: totals.executors.size, discrepancy: totals.discrepancy, avgDuration: round1(avg(totals.durations)) },
     })
   }
 

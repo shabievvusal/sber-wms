@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateTimeRangePicker } from '@/components/ui/date-picker'
 import { exportReceivingXlsx } from './receivingExport'
+import { ReceivingPeriodStats } from './ReceivingPeriodStats'
 import { Spinner } from '@/components/ui/spinner'
 import { StatsToolbar } from './StatsToolbar'
 import { StatsCard } from './StatsCard'
@@ -799,7 +800,9 @@ export default function StatsPage() {
         }
       >
         {effectiveHeMode === 'monthly' ? (
-          <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} zoneCatalog={dayZoneCatalog} />
+          operation === 'receiving'
+            ? <ReceivingPeriodStats exportRef={monthlyExportRef} />
+            : <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} zoneCatalog={dayZoneCatalog} />
         ) : (
           <div className={busyCls} aria-busy={reloading}>
           <HourlyEmployeeTable

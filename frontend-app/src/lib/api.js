@@ -509,6 +509,13 @@ export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
 
+// Приёмка построчно за период (вкладка «За период»); shift пустой — обе смены.
+export async function getReceivingPeriodRows(dateFrom, dateTo, shift) {
+  const params = new URLSearchParams({ dateFrom, dateTo })
+  if (shift) params.set('shift', shift)
+  return req(`/api/stats/receiving/period-rows?${params}`)
+}
+
 // Приёмка построчно (поставки) — для Excel-отчёта; те же shift/интервал, что у сводки.
 export async function getReceivingRows(dateStr, { shift, completedFrom, completedTo } = {}) {
   const params = new URLSearchParams()
