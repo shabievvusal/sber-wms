@@ -66,7 +66,7 @@ function DatePicker({ value, onChange, placeholder = 'Выберите дату'
  * Период (from/to) как ОДИН контрол с одним триггером — вместо двух отдельных
  * полей + ручной кнопки сброса. onChange отдаёт { from, to } строками "YYYY-MM-DD".
  */
-function DateRangePicker({ from, to, onChange, placeholder = 'Выберите период', className }) {
+function DateRangePicker({ from, to, onChange, placeholder = 'Выберите период', className, disabled }) {
   const [open, setOpen] = React.useState(false)
   const range = { from: parseISO(from), to: parseISO(to) }
   const hasValue = !!range.from
@@ -83,11 +83,12 @@ function DateRangePicker({ from, to, onChange, placeholder = 'Выберите �
         <Button
           type="button"
           variant="outline"
+          disabled={disabled}
           className={cn('justify-start gap-2 font-normal', !hasValue && 'text-muted-foreground', className)}
         >
           <CalendarIcon className="size-4 shrink-0 opacity-70" />
           <span className="truncate">{label}</span>
-          {hasValue && (
+          {hasValue && !disabled && (
             <span
               role="button"
               tabIndex={-1}

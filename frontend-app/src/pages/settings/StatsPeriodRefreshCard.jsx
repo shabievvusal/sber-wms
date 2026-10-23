@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, fetchReceivingViaBrowser } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
-import { DatePicker } from '@/components/ui/date-picker'
+import { DateRangePicker } from '@/components/ui/date-picker'
 import { SettingCard } from './SettingCard'
 import { Field } from './ui'
 import { CalendarRange, RefreshCw, Square } from 'lucide-react'
@@ -20,10 +20,12 @@ function datesBetween(from, to) {
   return out
 }
 
-// Сутки по Москве — операции сохраняются по времени завершения, так что
-// разбивка выгрузки на сутки ни на что не влияет, кроме размера запросов.
-function moscowDayRange(date) {
-  const from = new Date(`${date}T00:00:00+03:00`)
+// Обе смены даты целиком: дневная 09:00–21:00 + ночная 21:00–09:00 следующего
+// дня (по Москве) — так же, как смены считает вся статистика. Раньше грузились
+// сутки 00:00–24:00: у последнего дня периода терялась вторая половина ночи,
+// а первый день цеплял хвост ночи предыдущей, невыбранной даты.
+function moscowShiftsRange(date) {
+  const from = new Date(`${date}T09:00:00+03:00`)
   return { from: from.toISOString(), to: new Date(from.getTime() + 24 * 60 * 60 * 1000 - 1).toISOString() }
 }
 
@@ -73,7 +75,9 @@ export function StatsPeriodRefreshCard() {
   const [log, setLog] = useState([])
   const stopRef = useRef(false)
 
-  const days = dateFrom && dateTo && dateFrom <= dateTo ? datesBetween(dateFrom, dateTo) : []
+  // В календаре периода выбран только первый день — это период из одного дня.
+  const lastDay = dateTo || dateFrom
+  const days = dateFrom && lastDay >= dateFrom ? datesBetween(dateFrom, lastDay) : []
   const activeDomains = DOMAINS.filter(d => enabled[d.key])
   const canRun = !running && days.length > 0 && days.length <= MAX_DAYS && activeDomains.length > 0
 
@@ -88,7 +92,7 @@ export function StatsPeriodRefreshCard() {
       if (stopRef.current) break
       const date = days[i]
       setLog(prev => prev.map((row, j) => j === i ? { ...row, status: 'run' } : row))
-      const range = moscowDayRange(date)
+      const range = moscowShiftsRange(date)
       const parts = {}
       for (const d of activeDomains) {
         if (stopRef.current) break
@@ -120,11 +124,8 @@ export function StatsPeriodRefreshCard() {
       subtitle="Заново загружает данные из WMS по дням — для пропущенных или неполных дней"
     >
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="С">
-          <DatePicker className="w-44" value={dateFrom} onChange={e => setDateFrom(e.target.value)} disabled={running} />
-        </Field>
-        <Field label="По">
-          <DatePicker className="w-44" value={dateTo} onChange={e => setDateTo(e.target.value)} disabled={running} />
+        <Field label="Период">
+          <DateRangePicker className="w-56" from={dateFrom} to={dateTo} onChange={({ from, to }) => { setDateFrom(from); setDateTo(to) }} disabled={running} />
         </Field>
         {running
           ? <Button variant="outline" onClick={() => { stopRef.current = true }}><Square className="size-4" /> Остановить</Button>
@@ -146,7 +147,6 @@ export function StatsPeriodRefreshCard() {
       </div>
 
       {days.length > MAX_DAYS && <div className="mt-3 text-sm text-destructive">Не больше {MAX_DAYS} дней за раз.</div>}
-      {dateFrom && dateTo && dateFrom > dateTo && <div className="mt-3 text-sm text-destructive">Дата «С» позже даты «По».</div>}
 
       {log.length > 0 && (
         <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border p-3 text-sm">
@@ -165,7 +165,7 @@ export function StatsPeriodRefreshCard() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Цифры — «получено из WMS / добавлено новых». Повторная загрузка дня дублей не создаёт. Приёмка тяжёлая: по каждой новой поставке — отдельный запрос в WMS за приёмщиком.
+        Каждый день — обе его смены: дневная и ночная (до 09:00 следующего дня). Цифры — «получено из WMS / добавлено новых». Повторная загрузка дня дублей не создаёт. Приёмка тяжёлая: по каждой новой поставке — отдельный запрос в WMS за приёмщиком.
       </p>
     </SettingCard>
   )
