@@ -1690,6 +1690,33 @@ public class StatsService
         return (added, skipped);
     }
 
+    // Исполнители из выгрузки, которых нет в списке сотрудников склада, —
+    // для подсказки «Новые сотрудники из WMS» после обновления данных (как
+    // newEmployees у Node-маршрутов). Сверка только по executorId.
+    public async Task<List<object>> FindNewEmployeesAsync(List<System.Text.Json.JsonElement> rawItems)
+    {
+        var candidates = new Dictionary<string, string>();
+        foreach (var raw in rawItems)
+        {
+            var ru = GetObj(raw, "responsibleUser");
+            if (ru == null) continue;
+            var id = (GetStr(ru.Value, "id") ?? "").Trim();
+            if (id == "") continue;
+            var fio = NormalizePlacementUser(new ResponsibleUser
+            {
+                FirstName = GetStr(ru.Value, "firstName") ?? "",
+                LastName = GetStr(ru.Value, "lastName") ?? "",
+                MiddleName = GetStr(ru.Value, "middleName") ?? "",
+            });
+            if (fio == "") continue;
+            candidates.TryAdd(id, fio); // ФИО — как прислал WMS по этому ID
+        }
+        if (candidates.Count == 0) return new();
+        var ids = candidates.Keys.ToList();
+        var known = new HashSet<string>(await _db.Employees.AsNoTracking().Where(e => ids.Contains(e.ExecutorId)).Select(e => e.ExecutorId).ToListAsync());
+        return candidates.Where(kv => !known.Contains(kv.Key)).Select(kv => (object)new { executorId = kv.Key, fio = kv.Value }).ToList();
+    }
+
     // Строки журнала за часы запроса, схлопнутые в операции (ЕО + сотрудник +
     // время завершения), в форме WmsPlacementEntity для BuildPlacementSummary.
     private async Task<List<WmsPlacementEntity>> GetStockMoveOperationsAsync(string operationType, string dateStr, int? fromHour, int? toHour, string? shift)

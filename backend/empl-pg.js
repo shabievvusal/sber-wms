@@ -64,15 +64,6 @@ function normFio(fio) {
   return String(fio || '').trim().replace(/^-\s+/, '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-// Ключ реестра: "фамилия и" (совпадает с normPkForRegistry в server.js)
-function normPkForRegistry(fio) {
-  const norm = normFio(fio);
-  const parts = norm.split(' ').filter(Boolean);
-  if (!parts.length) return norm;
-  const init = parts.length > 1 ? parts[1].charAt(0) : '';
-  return (parts[0] + ' ' + init).trim();
-}
-
 // ─── Чтение ────────────────────────────────────────────────────────────────────
 
 /** Возвращает [{fio, company}] + [companies] */
@@ -142,26 +133,6 @@ async function addNewEmployees(executors) {
   return added;
 }
 
-/**
- * Обогатить ФИО — заменить краткое имя полным, если в registry есть более длинное.
- * registry — объект { normPk: fullFio }
- * Возвращает количество обновлённых строк.
- */
-async function enrichNames(registry) {
-  if (!registry || !Object.keys(registry).length) return 0;
-  const { rows } = await pool.query('SELECT executor_id, fio FROM employees WHERE warehouse_id = $1', [currentWarehouse()]);
-  let updated = 0;
-  for (const row of rows) {
-    const fullFio = registry[normPkForRegistry(row.fio)];
-    if (!fullFio) continue;
-    if (fullFio.split(/\s+/).length <= row.fio.split(/\s+/).length) continue;
-    const titled = fullFio.replace(/\S+/g, w => w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-    await pool.query('UPDATE employees SET fio = $1 WHERE executor_id = $2 AND warehouse_id = $3', [titled, row.executor_id, currentWarehouse()]);
-    updated++;
-  }
-  return updated;
-}
-
 /** Сохранить весь список сотрудников целиком (заменяет таблицу). */
 async function saveAll(employees) {
   const client = await pool.connect();
@@ -190,4 +161,4 @@ async function saveAll(employees) {
   }
 }
 
-module.exports = { init, getLookupMaps, listEmployees, upsertEmployee, addNewEmployees, enrichNames, saveAll };
+module.exports = { init, getLookupMaps, listEmployees, upsertEmployee, addNewEmployees, saveAll };

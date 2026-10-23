@@ -34,17 +34,28 @@ async function init() {
   await pool.query("ALTER TABLE IF EXISTS wms_ops ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''");
 }
 
+// Таблицы статистики с исполнителями: во всех executor — «фамилия имя
+// отчество» прямо из полей WMS (lastName/firstName/middleName).
+const EXECUTOR_TABLES = ['wms_ops', 'wms_placement', 'wms_stock_moves', 'wms_receiving', 'wms_remains'];
+
 /**
- * Все исполнители, встречавшиеся в операциях: executor_id -> самое полное ФИО.
+ * Все исполнители, встречавшиеся в статистике: executor_id -> ФИО из WMS.
  * Заменяет обход всех почасовых JSON в GET /api/empl/find-unregistered —
  * группировка выполняется в Postgres и не блокирует event loop Node.
+ * Раньше читалась только wms_ops (комплектация) — кто работал лишь на
+ * размещении/спуске/пополнении/приёмке/остатках, в поиск не попадал.
  */
 async function listExecutors() {
+  const { rows: existing } = await pool.query(
+    'SELECT t FROM unnest($1::text[]) AS t WHERE to_regclass(t) IS NOT NULL', [EXECUTOR_TABLES]);
+  if (!existing.length) return [];
+  const union = existing
+    .map(({ t }) => `SELECT executor_id, executor FROM ${t} WHERE executor_id <> '' AND executor <> '' AND warehouse_id = $1`)
+    .join(' UNION ');
   const { rows } = await pool.query(`
     SELECT executor_id,
            (array_agg(executor ORDER BY length(executor) DESC, executor))[1] AS executor
-      FROM wms_ops
-     WHERE executor_id <> '' AND executor <> '' AND warehouse_id = $1
+      FROM (${union}) AS e
      GROUP BY executor_id
   `, [currentWarehouse()]);
   return rows;

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, fetchReceivingViaBrowser } from '@/lib/wmsFetch'
+import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, fetchReceivingViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
+import { NewEmployeesNotice } from './NewEmployeesNotice'
 import { Button } from '@/components/ui/button'
 import { DateRangePicker } from '@/components/ui/date-picker'
 import { SettingCard } from './SettingCard'
@@ -31,27 +32,27 @@ function moscowShiftsRange(date) {
 
 const MAX_DAYS = 31
 
-// Разделы: run(token, {from, to}) → строка итога за день.
+// Разделы: run(token, {from, to}) → { text: итог за день, newEmployees }.
 const DOMAINS = [
   {
     key: 'selection', label: 'Комплектация', defaultOn: true,
     run: async (token, r) => {
       const res = await fetchDataViaBrowser(token, { operationCompletedAtFrom: r.from, operationCompletedAtTo: r.to })
-      return `${res.fetched}/+${res.added}`
+      return { text: `${res.fetched}/+${res.added}`, newEmployees: res.newEmployees }
     },
   },
   {
     key: 'remains', label: 'Остатки', defaultOn: true,
     run: async (token, r) => {
       const res = await fetchRemainsViaBrowser(token, { dateFrom: r.from, dateTo: r.to })
-      return `${res.fetched}/+${res.added}`
+      return { text: `${res.fetched}/+${res.added}`, newEmployees: res.newEmployees }
     },
   },
   {
     key: 'moves', label: 'Спуск, пополнение, размещение', defaultOn: true,
     run: async (token, r) => {
       const res = await fetchStockMovesViaBrowser(token, { dateFrom: r.from, dateTo: r.to })
-      return `${res.fetched}/+${res.added}`
+      return { text: `${res.fetched}/+${res.added}`, newEmployees: res.newEmployees }
     },
   },
   {
@@ -59,7 +60,7 @@ const DOMAINS = [
     key: 'receiving', label: 'Приёмка', defaultOn: false,
     run: async (token, r) => {
       const res = await fetchReceivingViaBrowser(token, { completedDateFrom: r.from, completedDateTo: r.to })
-      return `${res.fetched}/+${res.saved}`
+      return { text: `${res.fetched}/+${res.saved}`, newEmployees: res.newEmployees }
     },
   },
 ]
@@ -73,6 +74,7 @@ export function StatsPeriodRefreshCard() {
   const [enabled, setEnabled] = useState(() => Object.fromEntries(DOMAINS.map(d => [d.key, d.defaultOn])))
   const [running, setRunning] = useState(false)
   const [log, setLog] = useState([])
+  const [newEmployees, setNewEmployees] = useState([])
   const stopRef = useRef(false)
 
   // В календаре периода выбран только первый день — это период из одного дня.
@@ -102,7 +104,9 @@ export function StatsPeriodRefreshCard() {
           // загрузка периода падала бы с 401 через несколько минут.
           const fresh = getStoredToken()
           if (!fresh) throw new Error('WMS-токен истёк — войдите паролем от WMS')
-          parts[d.key] = await d.run(fresh, range)
+          const res = await d.run(fresh, range)
+          parts[d.key] = res.text
+          if (res.newEmployees?.length) setNewEmployees(prev => mergeNewEmployees(prev, res.newEmployees))
         } catch (err) {
           parts[d.key] = `ошибка: ${err.message}`
           failed++
@@ -163,6 +167,8 @@ export function StatsPeriodRefreshCard() {
           ))}
         </div>
       )}
+
+      <NewEmployeesNotice employees={newEmployees} onDone={() => setNewEmployees([])} />
 
       <p className="mt-4 text-xs text-muted-foreground">
         Каждый день — обе его смены: дневная и ночная (до 09:00 следующего дня). Цифры — «получено из WMS / добавлено новых». Повторная загрузка дня дублей не создаёт. Приёмка тяжёлая: по каждой новой поставке — отдельный запрос в WMS за приёмщиком.

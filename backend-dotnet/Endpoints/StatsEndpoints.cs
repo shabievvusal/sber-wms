@@ -344,7 +344,8 @@ public static class StatsEndpoints
                 var items = body.Items ?? (body.Value.HasValue && body.Value.Value.ValueKind == JsonValueKind.Object && body.Value.Value.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array
                     ? itemsEl.EnumerateArray().ToList() : new List<JsonElement>());
                 var (added, skipped) = await svc.SaveStockMovesAsync(items);
-                return Results.Json(new { ok = true, operation = "stock-moves", added, skipped, itemsCount = items.Count });
+                var newEmployees = await svc.FindNewEmployeesAsync(items);
+                return Results.Json(new { ok = true, operation = "stock-moves", added, skipped, itemsCount = items.Count, newEmployees });
             }
             catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();

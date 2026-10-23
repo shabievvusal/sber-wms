@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { getStoredToken, fetchReceivingViaBrowser } from '@/lib/wmsFetch'
+import { getStoredToken, fetchReceivingViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
+import { NewEmployeesNotice } from './NewEmployeesNotice'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SettingCard } from './SettingCard'
@@ -28,6 +29,7 @@ export function ReceivingRefreshCard() {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState(null)
   const [result, setResult] = useState(null)
+  const [newEmployees, setNewEmployees] = useState([])
 
   const handleRun = async () => {
     const token = getStoredToken()
@@ -38,6 +40,7 @@ export function ReceivingRefreshCard() {
     try {
       const res = await fetchReceivingViaBrowser(token, { ...dayRange(date), onProgress: setProgress })
       setResult(res)
+      if (res.newEmployees?.length) setNewEmployees(prev => mergeNewEmployees(prev, res.newEmployees))
       toast.success(`Приёмка обновлена: поставок ${res.fetched}, новых сохранено ${res.saved}`)
     } catch (err) {
       toast.error('Ошибка: ' + err.message)
@@ -72,6 +75,8 @@ export function ReceivingRefreshCard() {
           {result.noAcceptor > 0 && ` · без приёмщика: ${result.noAcceptor}`}
         </div>
       )}
+
+      <NewEmployeesNotice employees={newEmployees} onDone={() => setNewEmployees([])} />
 
       <p className="mt-4 text-xs text-muted-foreground">
         По каждой новой поставке — отдельный запрос в WMS за приёмщиком. Поставки, которые уже сохранены, повторно не запрашиваются.

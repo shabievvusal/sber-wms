@@ -429,96 +429,30 @@ const EMPL_CSV_PATH = path.join(__dirname, '..', 'empl.csv');
 // Файлы склада — в папке его данных (у СПБ-3 прежняя data/), см. warehouse-context.js
 const EMPL_IDS_PATH = () => path.join(dataDir(), 'empl-ids.json');
 const MISSING_WEIGHT_PATH = () => path.join(dataDir(), 'missing_weight.json');
-const NAMES_REGISTRY_PATH = () => path.join(dataDir(), 'names_registry.json');
-
-function normPkForRegistry(fio) {
-  const norm = String(fio || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  const parts = norm.split(' ').filter(Boolean);
-  if (!parts.length) return norm;
-  const init = parts.length > 1 ? parts[1].charAt(0) : '';
-  return (parts[0] + ' ' + init).trim();
-}
-
+// Новые исполнители из выгрузки WMS — те, кого нет в списке сотрудников по
+// executorId. ФИО — ровно как прислал WMS по этому ID: lastName firstName
+// middleName, без правки регистра и «дописывания» отчеств. Уже записанных
+// сотрудников система не меняет: ФИО правится только вручную в списке
+// сотрудников. (Раньше здесь вёлся реестр по «фамилия + инициал», по нему
+// переписывались ФИО в списке — чужими именами при совпадении ключа.)
 async function updateNamesRegistry(items) {
-  let registry = {};
-  try {
-    if (fs.existsSync(NAMES_REGISTRY_PATH()))
-      registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH(), 'utf8'));
-  } catch {}
-
-  let changed = false;
-  const itemNames = new Map(); // executorId/fallback pk -> { fio, executorId, pk }
+  const itemNames = new Map(); // executorId -> fio
   for (const item of (items || [])) {
     const ru = item.responsibleUser || {};
+    const id = String(ru.id || '').trim();
     const full = [ru.lastName, ru.firstName, ru.middleName].filter(Boolean).join(' ').trim();
-    if (!full) continue;
-    const pk = normPkForRegistry(full);
-    const existing = registry[pk];
-    if (!existing || full.split(/\s+/).length > existing.split(/\s+/).length) {
-      registry[pk] = full;
-      changed = true;
-    }
-    const itemKey = ru.id ? `id:${ru.id}` : `pk:${pk}`;
-    const cur = itemNames.get(itemKey);
-    if (!cur || full.split(/\s+/).length > cur.fio.split(/\s+/).length) {
-      itemNames.set(itemKey, { fio: full, executorId: ru.id || null, pk });
-    } else if (cur && !cur.executorId && ru.id) {
-      cur.executorId = ru.id;
-    }
+    if (!id || !full || itemNames.has(id)) continue;
+    itemNames.set(id, full);
   }
 
-  if (changed) {
-    try { fs.writeFileSync(NAMES_REGISTRY_PATH(), JSON.stringify(registry), 'utf8'); } catch {}
-  }
-
-  // Обновляем empl.csv — заменяем короткие имена на полные, собираем existingPks
-  const existingPks = new Set();
-  if (fs.existsSync(EMPL_CSV_PATH)) {
-    try {
-      const text = readEmplCsvText();
-      const lines = text.replace(/\r\n/g, '\n').split('\n');
-      let csvChanged = false;
-      const newLines = lines.map(line => {
-        const t = line.trim();
-        if (!t) return line;
-        const idx = t.indexOf(';');
-        const fio = idx >= 0 ? t.slice(0, idx).trim() : t.trim();
-        if (fio) existingPks.add(normPkForRegistry(fio));
-        if (idx < 0 || !fio) return line;
-        const company = t.slice(idx + 1).trim();
-        const fullFio = registry[normPkForRegistry(fio)];
-        if (fullFio && fullFio.split(/\s+/).length > fio.split(/\s+/).length) {
-          csvChanged = true;
-          const titled = fullFio.replace(/\S+/g, w => w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-          return titled + ';' + company;
-        }
-        return line;
-      });
-      if (csvChanged) {
-        fs.writeFileSync(EMPL_CSV_PATH, Buffer.from('\uFEFF' + newLines.join('\n'), 'utf8'));
-      }
-    } catch {}
-  }
-
-  // Для PG: fire-and-forget обогащение имён
-  if (emplPg && Object.keys(registry).length > 0) {
-    emplPg.enrichNames(registry).catch(err => console.error('empl-pg enrichNames:', err.message));
-  }
-
-  // Возвращаем исполнителей из текущей выгрузки, которых нет в хранилище.
-  // Сопоставляем только по executorId, без fallback по ФИО.
   const { idMap } = await getCompanyLookupMaps();
   const knownIds = idMap
     ? null
     : new Set(Object.keys(loadEmplIdRegistry()));
   const newEmployees = [];
-  for (const [, { fio, executorId }] of itemNames) {
-    if (!executorId) continue;
+  for (const [executorId, fio] of itemNames) {
     const known = idMap ? idMap.has(executorId) : knownIds.has(executorId);
-    if (!known) {
-      const titled = fio.replace(/\S+/g, w => w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-      newEmployees.push({ executorId, fio: titled });
-    }
+    if (!known) newEmployees.push({ executorId, fio });
   }
   return { newEmployees };
 }
@@ -1633,11 +1567,6 @@ function invalidateExecutorsCache() {
   executorsCacheBy.delete(currentWarehouse());
 }
 
-function titleCaseExecutorFio(fio) {
-  return fio.replace(/\S+/g, w =>
-    w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-}
-
 /** Исполнители из Postgres (wms_ops) — то же множество, что и в почасовых JSON. */
 async function collectExecutorsFromPg() {
   const rows = await wmsOpsPg.listExecutors();
@@ -1646,7 +1575,7 @@ async function collectExecutorsFromPg() {
     const executorId = String(row.executor_id || '').trim();
     const fio        = String(row.executor    || '').trim();
     if (!executorId || !fio) continue;
-    out.push({ executorId, fio: titleCaseExecutorFio(fio) });
+    out.push({ executorId, fio });
   }
   return out;
 }
@@ -1695,7 +1624,7 @@ async function collectExecutorsFromFiles() {
           const fio        = (item.executor   || '').trim();
           const executorId = (item.executorId || '').trim();
           if (!fio || !executorId || execs.has(executorId)) continue;
-          execs.set(executorId, titleCaseExecutorFio(fio));
+          execs.set(executorId, fio);
         }
       }
       executorsDirCache.set(dirKey, { stamp, execs });
@@ -1757,88 +1686,11 @@ app.post('/api/empl/upgrade-fio-ids', async (req, res) => {
   res.json({ ok: true, upgraded: 0 });
 });
 
-// POST /api/empl/enrich-names — обогатить ФИО отчествами из сырых WMS-файлов
+// POST /api/empl/enrich-names — legacy no-op: ФИО сотрудников система сама не
+// меняет (раньше «обогащала» по «фамилия + инициал» и переписывала чужими
+// именами); правится только вручную в списке сотрудников.
 app.post('/api/empl/enrich-names', async (req, res) => {
-  try {
-    // Читаем реестр имён (накапливается при каждом fetch из WMS)
-    let registry = {};
-    try {
-      if (fs.existsSync(NAMES_REGISTRY_PATH()))
-        registry = JSON.parse(fs.readFileSync(NAMES_REGISTRY_PATH(), 'utf8'));
-    } catch {}
-
-    // Также добавляем имена из raw_tmp (если там что-то осталось)
-    const RAW_TMP_DIR = path.join(dataDir(), 'raw_tmp');
-    if (fs.existsSync(RAW_TMP_DIR)) {
-      const rawFiles = fs.readdirSync(RAW_TMP_DIR).filter(f => f.endsWith('.json') && !f.startsWith('weights_'));
-      for (const file of rawFiles) {
-        try {
-          const raw = JSON.parse(fs.readFileSync(path.join(RAW_TMP_DIR, file), 'utf8'));
-          for (const item of (raw?.value?.items || raw?.items || [])) {
-            const ru = item.responsibleUser || {};
-            const full = [ru.lastName, ru.firstName, ru.middleName].filter(Boolean).join(' ').trim();
-            if (!full) continue;
-            const pk = normPkForRegistry(full);
-            const ex = registry[pk];
-            if (!ex || full.split(/\s+/).length > ex.split(/\s+/).length) registry[pk] = full;
-          }
-        } catch {}
-      }
-    }
-
-    if (emplPg) {
-      if (!Object.keys(registry).length) return res.json({ ok: true, updated: 0, employees: [], companies: [] });
-      const updated = await emplPg.enrichNames(registry);
-      const data = await emplPg.listEmployees();
-      return res.json({ ok: true, updated, ...data });
-    }
-
-    if (Object.keys(registry).length === 0 || !fs.existsSync(EMPL_CSV_PATH)) {
-      return res.json({ ok: true, updated: 0, employees: [], companies: [] });
-    }
-
-    const text = readEmplCsvText();
-    const lines = text.replace(/\r\n/g, '\n').split('\n');
-    let updated = 0;
-
-    const newLines = lines.map(line => {
-      const t = line.trim();
-      if (!t) return line;
-      const idx = t.indexOf(';');
-      if (idx < 0) return line;
-      const fio = t.slice(0, idx).trim();
-      const company = t.slice(idx + 1).trim();
-      if (!fio) return line;
-      const fullFio = registry[normPkForRegistry(fio)];
-      if (fullFio && fullFio.split(/\s+/).length > fio.split(/\s+/).length) {
-        updated++;
-        const titled = fullFio.replace(/\S+/g, w => w.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('-'));
-        return titled + ';' + company;
-      }
-      return line;
-    });
-
-    if (updated > 0) {
-      fs.writeFileSync(EMPL_CSV_PATH, Buffer.from('\uFEFF' + newLines.join('\n'), 'utf8'));
-    }
-
-    const employees = [];
-    const companySet = new Set();
-    for (const line of newLines) {
-      const t = line.trim();
-      if (!t) continue;
-      const idx = t.indexOf(';');
-      if (idx < 0) continue;
-      const fio = t.slice(0, idx).trim();
-      const company = t.slice(idx + 1).trim();
-      if (fio) { employees.push({ fio, company }); if (company) companySet.add(company); }
-    }
-
-    res.json({ ok: true, updated, employees, companies: [...companySet].sort() });
-  } catch (err) {
-    console.error('POST /api/empl/enrich-names', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
+  res.json({ ok: true, updated: 0 });
 });
 
 // ─── Авторизация /vs: сессия + роли ─────────────────────────────────────────────

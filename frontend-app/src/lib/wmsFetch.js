@@ -582,6 +582,17 @@ export async function fetchRemainsViaBrowser(token, { dateFrom, dateTo, pageSize
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0, newEmployees: saveRes.newEmployees || [] }
 }
 
+// Новые сотрудники из нескольких выгрузок (newEmployees: [{ executorId, fio }])
+// одним списком без повторов по executorId. ФИО — как пришло из WMS.
+export function mergeNewEmployees(...lists) {
+  const byId = new Map()
+  for (const e of lists.flat()) {
+    if (!e?.executorId || !e.fio || byId.has(e.executorId)) continue
+    byId.set(e.executorId, { executorId: e.executorId, fio: e.fio })
+  }
+  return [...byId.values()]
+}
+
 // Спуск, пополнение и размещение — из того же журнала stocks/changes, что и
 // комплектация, одной выгрузкой на три типа; сохраняются отдельно от неё
 // (/api/stats/stock-moves/save), бэкенд сам раскладывает по типам.
@@ -619,7 +630,7 @@ export async function fetchStockMovesViaBrowser(token, { dateFrom, dateTo, pageS
   }
   const saveRes = await postOwnBackend('/api/stats/stock-moves/save', { items: allItems, total: allItems.length }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения спуска/пополнения/размещения')
-  return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0 }
+  return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0, newEmployees: saveRes.newEmployees || [] }
 }
 
 // Приёмка — порт fetchReceivingViaBrowser из оригинала (frontend/app api).
@@ -690,6 +701,7 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
     saved: enriched.length,
     noAcceptor: toEnrich.length - enriched.length,
     added: saveRes.added ?? 0,
+    newEmployees: saveRes.newEmployees || [],
   }
 }
 

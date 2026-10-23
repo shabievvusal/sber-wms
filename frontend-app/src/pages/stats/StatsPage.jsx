@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
-import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser } from '@/lib/wmsFetch'
+import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -244,7 +244,11 @@ export default function StatsPage() {
           const totalMsPart = selectionRes.timings?.totalMs ? ` · итого ${(selectionRes.timings.totalMs / 1000).toFixed(1)}с` : ''
           setEngineNote(`${enginePart}${totalMsPart} · комплектация +${selectionRes.added ?? 0}`)
         }
-        if (selectionRes.newEmployees?.length) setNewEmployees(selectionRes.newEmployees)
+        // Новые сотрудники — из всех выгрузок, а не только комплектации: кто
+        // работает лишь на остатках/спуске/пополнении/размещении, раньше так
+        // ни разу и не предлагался к добавлению в список.
+        const found = mergeNewEmployees(selectionRes.newEmployees || [], remainsRes?.newEmployees || [], movesRes?.newEmployees || [])
+        if (found.length) setNewEmployees(prev => mergeNewEmployees(prev, found))
       } else if (!rangeOverride) {
         // Скользящее окно (rangeOverride) есть только у автообновления, а оно
         // без браузерного WMS-токена бессмысленно — серверный same-origin
