@@ -332,6 +332,10 @@ export default function SuppliesPage({ initialId }) {
 
   // Мердж сырых строк + карт обогащения — те же имена полей (pickStatus/
   // pickPct/acceptedBy), что уже ожидают getSortValue/renderCell выше.
+  // Плоские supplierName/gateNumber/…Pieces/…WeightG — из вложенных полей
+  // ответа WMS inbound/tasks (имена — как в оригинале, frontend/app
+  // SuppliesPage.jsx): при переносе таблица стала читать плоские имена,
+  // которых в ответе нет, и эти колонки (и карточка поставки) были пустыми.
   const supplies = useMemo(() => {
     const rows = allRows ?? []
     return rows.map(row => {
@@ -339,6 +343,15 @@ export default function SuppliesPage({ initialId }) {
       const respUser = respUsersMap[row.id]
       return {
         ...row,
+        supplierName: row.supplier?.name ?? '',
+        gateNumber: row.gateInfo?.gateNumber ?? null,
+        plannedWeightG: row.plannedTotalWeightInGrams ?? null,
+        actualWeightG: row.actualTotalWeight ?? null,
+        plannedPieces: row.plannedQuantities?.pieceProducts ?? null,
+        acceptedPieces: row.actualQuantities?.pieceProducts ?? null,
+        defectivePieces: row.actualDefectiveQuantities?.pieceProducts ?? null,
+        taskNumber: row.taskNumber ?? '',
+        orderNumber: row.orderNumber ?? '',
         pickStatus: ps && ps !== 'loading' ? ps.status : null,
         pickPct: ps && ps !== 'loading' ? ps.pct : null,
         acceptedBy: respUser && respUser !== 'loading' ? fioShort(respUser) : (row.acceptedBy ?? null),
