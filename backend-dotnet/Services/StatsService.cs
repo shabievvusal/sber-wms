@@ -1225,6 +1225,13 @@ public class StatsService
             var supplierObj = GetObj(raw, "supplier");
             var supplierName = (supplierObj != null ? GetStr(supplierObj.Value, "name") : null) ?? GetStr(raw, "supplierName") ?? "";
             var eoCount = GetTopNum(raw, "handlingUnitsQuantity") ?? GetTopNum(raw, "eoCount") ?? 0;
+            // Вес в ответе inbound/tasks — actualTotalWeight (граммы); прежние
+            // weightInGrams/actualWeightInGrams там не встречаются, из-за чего
+            // вес приёмки всегда был 0. SKU — плановое (фактического WMS не
+            // отдаёт), штуки — фактически принятые.
+            var weightGrams = GetTopNum(raw, "actualTotalWeight") ?? GetTopNum(raw, "weightInGrams") ?? GetTopNum(raw, "actualWeightInGrams");
+            var skuCount = GetTopNum(raw, "plannedSkuCount");
+            var pieces = GetNum(GetObj(raw, "actualQuantities"), "pieceProducts");
 
             var mergeKey = itemId != "" ? itemId : $"{completedAt:o}|{executorId}|{taskNumber}";
             var key = (slot.Value.Date, (short)slot.Value.Hour, mergeKey);
@@ -1243,8 +1250,10 @@ public class StatsService
                 existing.Executor = executor != "" ? executor : existing.Executor;
                 existing.CompletedAt = completedAt;
                 existing.VolumeInMilliliters = GetTopNum(raw, "volumeInMilliliters") ?? existing.VolumeInMilliliters;
-                existing.WeightInGrams = GetTopNum(raw, "weightInGrams") ?? GetTopNum(raw, "actualWeightInGrams") ?? existing.WeightInGrams;
+                existing.WeightInGrams = weightGrams ?? existing.WeightInGrams;
                 existing.EoCount = eoCount != 0 ? eoCount : existing.EoCount;
+                existing.SkuCount = skuCount ?? existing.SkuCount;
+                existing.Pieces = pieces ?? existing.Pieces;
                 skipped++;
                 continue;
             }
@@ -1266,8 +1275,10 @@ public class StatsService
                 Executor = executor,
                 CompletedAt = completedAt,
                 VolumeInMilliliters = GetTopNum(raw, "volumeInMilliliters") ?? 0,
-                WeightInGrams = GetTopNum(raw, "weightInGrams") ?? GetTopNum(raw, "actualWeightInGrams") ?? 0,
+                WeightInGrams = weightGrams ?? 0,
                 EoCount = eoCount,
+                SkuCount = skuCount ?? 0,
+                Pieces = pieces ?? 0,
             };
             _db.WmsReceiving.Add(newReceiving);
             batchByKey[key] = newReceiving;
@@ -1292,10 +1303,27 @@ public class StatsService
         return items;
     }
 
+    // Поставки, по которым приёмщик уже сохранён: за ним браузер ходит в WMS
+    // отдельным запросом на каждую поставку (responsible-users) — повторное
+    // обновление смены пропускает эти поставки и не грузит WMS заново.
+    // Строки, сохранённые до 2026-10-23, — без SKU/штук/веса: их не считаем
+    // известными, чтобы они один раз перезаписались с полными данными.
+    public async Task<List<string>> GetKnownReceivingIdsAsync(List<string> ids)
+    {
+        if (ids.Count == 0) return new();
+        return await _db.WmsReceiving.AsNoTracking()
+            .Where(r => ids.Contains(r.ItemId) && r.ExecutorId != "" && (r.SkuCount > 0 || r.Pieces > 0 || r.WeightInGrams > 0))
+            .Select(r => r.ItemId)
+            .Distinct()
+            .ToListAsync();
+    }
+
     public object BuildReceivingSummary(List<WmsReceivingEntity> items, Dictionary<string, string>? idMap)
     {
         var byExecutor = new Dictionary<string, (string Name, string ExecutorId, string Company, Dictionary<string, int> ByHour, Dictionary<string, decimal> SecondaryByHour, HashSet<string> TotalKeys, decimal SecondaryTotal, DateTime? FirstAt, DateTime? LastAt)>();
         var byHour = new Dictionary<int, (int Ops, decimal Secondary, HashSet<string> Employees)>();
+        // SKU / штуки / вес поставок — по сотруднику и по часу (бакет col)
+        var extraByExecutor = new Dictionary<string, Dictionary<string, (decimal Sku, decimal Pieces, decimal WeightGrams)>>();
         foreach (var item in items)
         {
             var executorId = item.ExecutorId ?? "";
@@ -1321,6 +1349,9 @@ public class StatsService
             if (rec.FirstAt == null || ts < rec.FirstAt) rec.FirstAt = ts;
             if (rec.LastAt == null || ts > rec.LastAt) rec.LastAt = ts;
             byExecutor[dictKey] = rec;
+            if (!extraByExecutor.TryGetValue(dictKey, out var extra)) extraByExecutor[dictKey] = extra = new();
+            var ex = extra.GetValueOrDefault(col);
+            extra[col] = (ex.Sku + item.SkuCount, ex.Pieces + item.Pieces, ex.WeightGrams + item.WeightInGrams);
 
             if (!byHour.TryGetValue(hour, out var hh)) hh = (0, 0, new HashSet<string>());
             hh.Ops += 1;
@@ -1328,20 +1359,31 @@ public class StatsService
             if (dictKey != "") hh.Employees.Add(dictKey);
             byHour[hour] = hh;
         }
-        var rows = byExecutor.Values.Select(r => new
+        var rows = byExecutor.Select(kv =>
         {
-            name = r.Name,
-            executorId = r.ExecutorId != "" ? r.ExecutorId : null,
-            company = r.Company,
-            byHour = r.ByHour,
-            secondaryByHour = r.SecondaryByHour,
-            secondaryTotal = r.SecondaryTotal,
-            byHourZone = new Dictionary<string, object?>(),
-            byZone = new Dictionary<string, object?>(),
-            weightByHour = new Dictionary<string, object?>(),
-            total = r.TotalKeys.Count,
-            firstAt = r.FirstAt,
-            lastAt = r.LastAt,
+            var r = kv.Value;
+            var extra = extraByExecutor.GetValueOrDefault(kv.Key) ?? new();
+            return new
+            {
+                name = r.Name,
+                executorId = r.ExecutorId != "" ? r.ExecutorId : null,
+                company = r.Company,
+                byHour = r.ByHour,
+                secondaryByHour = r.SecondaryByHour,
+                secondaryTotal = r.SecondaryTotal,
+                skuByHour = extra.ToDictionary(e => e.Key, e => e.Value.Sku),
+                piecesByHour = extra.ToDictionary(e => e.Key, e => e.Value.Pieces),
+                weightGramsByHour = extra.ToDictionary(e => e.Key, e => e.Value.WeightGrams),
+                skuTotal = extra.Values.Sum(e => e.Sku),
+                piecesTotal = extra.Values.Sum(e => e.Pieces),
+                weightGramsTotal = extra.Values.Sum(e => e.WeightGrams),
+                byHourZone = new Dictionary<string, object?>(),
+                byZone = new Dictionary<string, object?>(),
+                weightByHour = new Dictionary<string, object?>(),
+                total = r.TotalKeys.Count,
+                firstAt = r.FirstAt,
+                lastAt = r.LastAt,
+            };
         }).OrderByDescending(r => r.total).ThenBy(r => r.name, StringComparer.Create(new CultureInfo("ru-RU"), false)).ToList();
         var hoursList = rows.SelectMany(r => r.byHour.Keys.Select(int.Parse)).Distinct().OrderBy(h => h).ToList();
         var hourly = byHour.Select(kv => new
@@ -1359,6 +1401,9 @@ public class StatsService
         {
             totalOps = rows.Sum(r => r.total),
             totalSecondary = rows.Sum(r => r.secondaryTotal),
+            totalSku = rows.Sum(r => r.skuTotal),
+            totalPieces = rows.Sum(r => r.piecesTotal),
+            totalWeightGrams = rows.Sum(r => r.weightGramsTotal),
             executors = rows.Select(r => new { name = r.name, executorId = r.executorId, ops = r.total, secondary = r.secondaryTotal, firstAt = r.firstAt, lastAt = r.lastAt }).ToList(),
             hourly,
             hourlyByEmployee = new { hours = hoursList, rows },

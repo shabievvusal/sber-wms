@@ -196,6 +196,16 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
         });
 
+        app.MapPost("/api/stats/receiving/known", async (ReceivingKnownRequest body, StatsService svc) =>
+        {
+            try
+            {
+                var ids = (body.Ids ?? new()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+                return Results.Json(new { ids = await svc.GetKnownReceivingIdsAsync(ids) });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
         app.MapGet("/api/date/{date}/receiving/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
         {
             try

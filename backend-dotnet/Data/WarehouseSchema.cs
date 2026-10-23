@@ -90,6 +90,10 @@ public static class WarehouseSchema
               completed_at TIMESTAMPTZ
             )");
 
+        // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
+        if (await TableExists("wms_receiving"))
+            await Exec("ALTER TABLE wms_receiving ADD COLUMN IF NOT EXISTS sku_count NUMERIC NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS pieces NUMERIC NOT NULL DEFAULT 0");
+
         // 1) столбец склада
         foreach (var t in Tables)
         {

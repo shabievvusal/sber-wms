@@ -397,13 +397,14 @@ export async function fetchRkFromWms({ dateFrom, dateTo, token, onProgress }) {
 // new zlp — эти функции просто дают им реальные данные вместо демо-фетча).
 
 // Сохранение выгрузки у нас — со складом, выбранным сейчас в WMS (см. выше).
-// Не удалось узнать склад в WMS — выбранный на сайте.
-async function postOwnBackend(url, value, token) {
+// Не удалось узнать склад в WMS — выбранный на сайте. `wrap: false` — тело
+// уходит как есть, без обёртки { value }.
+async function postOwnBackend(url, value, token, { wrap = true } = {}) {
   const warehouseId = (await getWmsWarehouseId(token).catch(() => null)) || null
   const r = await fetch(url, {
     method: 'POST',
     headers: apiHeaders({ 'Content-Type': 'application/json', ...(warehouseId ? { 'X-Warehouse': warehouseId } : {}) }),
-    body: JSON.stringify({ value }),
+    body: JSON.stringify(wrap ? { value } : value),
     credentials: 'include',
   })
   const text = await r.text()
@@ -619,6 +620,77 @@ export async function fetchStockMovesViaBrowser(token, { dateFrom, dateTo, pageS
   const saveRes = await postOwnBackend('/api/stats/stock-moves/save', { items: allItems, total: allItems.length }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения спуска/пополнения/размещения')
   return { success: true, fetched: allItems.length, added: saveRes.added ?? 0, skipped: saveRes.skipped ?? 0 }
+}
+
+// Приёмка — порт fetchReceivingViaBrowser из оригинала (frontend/app api).
+// Список принятых поставок за период лёгкий (SKU/штуки/вес/ЕО уже в нём), а
+// приёмщика WMS отдаёт только отдельным запросом на каждую поставку — это и
+// грузило WMS. Поэтому: запускается только вручную (Настройки → Система,
+// admin/developer), и за приёмщиком ходим лишь по поставкам, которых ещё нет
+// у нас в базе (/api/stats/receiving/known).
+function _pickInboundAcceptedUser(responsibleUsers = []) {
+  const accepted = responsibleUsers.find(u => u.type === 'ACCEPTANCE_COMPLETED')
+    ?? responsibleUsers.find(u => u.type === 'ACCEPTANCE_STARTED')
+  return accepted?.user || null
+}
+
+export async function fetchReceivingViaBrowser(token, { completedDateFrom, completedDateTo, onProgress } = {}) {
+  const size = 100
+  const base = {
+    completedDateFrom,
+    completedDateTo,
+    statuses: ['COMPLETED_AS_PLANNED', 'COMPLETED_WITH_DISCREPANCY'],
+    types: ['IMPORT', 'CROSSDOCK', 'STORAGE', 'STORAGE_DC'],
+    pageSize: size,
+    sortField: 'PLANNED_ARRIVAL_DATE',
+    sortDirection: 'DESC',
+  }
+  const first = await getInboundTasks(token, { ...base, pageNumber: 1 })
+  const total = first?.value?.total ?? 0
+  let tasks = [...(first?.value?.items ?? [])]
+  const pages = Math.ceil(total / size)
+  for (let page = 2; page <= pages; page++) {
+    const next = await getInboundTasks(token, { ...base, pageNumber: page })
+    tasks = tasks.concat(next?.value?.items ?? [])
+  }
+
+  const known = await postOwnBackend('/api/stats/receiving/known', { ids: tasks.map(t => t.id) }, token, { wrap: false })
+  const knownIds = new Set(known?.ids || [])
+  const toEnrich = tasks.filter(t => !knownIds.has(t.id))
+  onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done: 0 })
+
+  const enriched = []
+  let done = 0
+  const BATCH = 8
+  for (let i = 0; i < toEnrich.length; i += BATCH) {
+    const rows = await Promise.all(toEnrich.slice(i, i + BATCH).map(async task => {
+      try {
+        const res = await getInboundTaskResponsibleUsers(token, { taskType: task.type, id: task.id })
+        const user = _pickInboundAcceptedUser(res?.value?.responsibleUsers ?? [])
+        return user ? { ...task, responsibleUser: user } : null
+      } catch {
+        return null
+      }
+    }))
+    enriched.push(...rows.filter(Boolean))
+    done += rows.length
+    onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done })
+  }
+
+  let saveRes = { added: 0, skipped: 0 }
+  if (enriched.length > 0) {
+    saveRes = await postOwnBackend('/api/stats/receiving/save', { items: enriched, total: enriched.length }, token)
+    if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения приёмки')
+  }
+  return {
+    success: true,
+    fetched: tasks.length,
+    known: knownIds.size,
+    requested: toEnrich.length,
+    saved: enriched.length,
+    noAcceptor: toEnrich.length - enriched.length,
+    added: saveRes.added ?? 0,
+  }
 }
 
 // ─── Отчёты / анализ / поставки ─────────────────────────────────────────────

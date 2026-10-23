@@ -145,6 +145,16 @@ public class WmsReceivingEntity
     public decimal VolumeInMilliliters { get; set; }
     public decimal WeightInGrams { get; set; }
     public decimal EoCount { get; set; }
+    // plannedSkuCount / actualQuantities.pieceProducts из inbound/tasks
+    // (столбцы добавлены 2026-10-23, см. WarehouseSchema)
+    public decimal SkuCount { get; set; }
+    public decimal Pieces { get; set; }
+}
+
+// POST /api/stats/receiving/known — какие поставки уже сохранены с приёмщиком
+public class ReceivingKnownRequest
+{
+    public List<string>? Ids { get; set; }
 }
 
 // ─── Remains (wms_remains) ─────────────────────────────────────────────────

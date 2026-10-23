@@ -135,6 +135,8 @@ public class AppDbContext : DbContext
         receiving.Property(r => r.VolumeInMilliliters).HasColumnName("volume_in_milliliters");
         receiving.Property(r => r.WeightInGrams).HasColumnName("weight_in_grams");
         receiving.Property(r => r.EoCount).HasColumnName("eo_count");
+        receiving.Property(r => r.SkuCount).HasColumnName("sku_count");
+        receiving.Property(r => r.Pieces).HasColumnName("pieces");
         receiving.Property(r => r.ResponsibleUser).HasColumnName("responsible_user").HasColumnType("jsonb")
             .HasConversion(JsonConverter<ResponsibleUser>()).Metadata.SetValueComparer(ObjectComparer<ResponsibleUser>());
 

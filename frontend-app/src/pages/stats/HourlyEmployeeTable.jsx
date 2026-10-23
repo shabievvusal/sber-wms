@@ -270,6 +270,9 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
                     hourRangeLabel(h),
                     isReceiving ? `${fmtNum(v)} поставок` : `${fmtNum(v)} оп.`,
                     isReceiving ? `${fmtNum(row.secondaryByHour?.[h] || 0)} ЕО` : null,
+                    isReceiving && row.skuByHour?.[h] ? `${fmtNum(row.skuByHour[h])} SKU` : null,
+                    isReceiving && row.piecesByHour?.[h] ? `${fmtNum(row.piecesByHour[h])} шт` : null,
+                    isReceiving && row.weightGramsByHour?.[h] ? fmtWeight(row.weightGramsByHour[h]) : null,
                     zoneKey ? zoneLabel(zoneKey) : null,
                     wg > 0 ? fmtWeight(wg) : null,
                   ].filter(Boolean).join(' — ') : undefined
@@ -292,9 +295,15 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
                   </TableCell>
                 )}
 
-                <TableCell className={`${tdCls} font-bold`}>
+                <TableCell
+                  className={`${tdCls} font-bold`}
+                  title={isReceiving ? `${fmtNum(row.total)} поставок — ${fmtNum(row.secondaryTotal || 0)} ЕО — ${fmtNum(row.skuTotal || 0)} SKU — ${fmtNum(row.piecesTotal || 0)} шт — ${fmtWeight(row.weightGramsTotal)}` : undefined}
+                >
                   {row.total}
                   {isReceiving && <div className="mt-px border-t border-current pt-px text-[10px] opacity-75">{fmtNum(row.secondaryTotal || 0)} ЕО</div>}
+                  {isReceiving && (row.skuTotal > 0 || row.piecesTotal > 0 || row.weightGramsTotal > 0) && (
+                    <div className="text-[10px] font-normal opacity-75">{fmtNum(row.skuTotal || 0)} SKU · {fmtNum(row.piecesTotal || 0)} шт · {fmtWeight(row.weightGramsTotal)}</div>
+                  )}
                 </TableCell>
                 <TableCell className={tdCls} title="Время в работе (смена − простои)">
                   {row._worked != null && row._worked > 0 ? `${Math.floor(row._worked / 60)}ч ${row._worked % 60}м` : '—'}

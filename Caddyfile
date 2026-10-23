@@ -42,7 +42,9 @@
 # 2026-10-23 — спуск/пополнение/размещение из журнала stocks/changes: POST
 # /api/stats/stock-moves/save и /api/stats/{movedown,refill}/monthly-employees
 # — целиком на dotnet (без Node и JSON-файлов); саммари идут через общий
-# /api/date/*.
+# /api/date/*. POST /api/stats/receiving/known — какие поставки уже сохранены
+# с приёмщиком (обновление приёмки из Настроек → Система); само сохранение
+# приёмки по-прежнему POST /api/stats/receiving/save на node (дуал-райт).
 # (app) — общие правила сайта, подключаются через `import app` в блок
 # robops.ru внизу файла.
 (app) {
@@ -129,6 +131,9 @@
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/remains/monthly-employees {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/receiving/known {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/stock-moves/save {

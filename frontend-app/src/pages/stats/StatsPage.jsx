@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { StatsToolbar } from './StatsToolbar'
 import { StatsCard } from './StatsCard'
-import { StatsCards } from './StatsCards'
+import { StatsCards, ReceivingStatsCards } from './StatsCards'
 import { CompanyFilter } from './CompanyFilter'
 import { HourlyChart } from './HourlyChart'
 import { CompanySummaryTable } from './CompanySummaryTable'
@@ -682,6 +682,7 @@ export default function StatsPage() {
       />
 
       {!isOperationStats && <StatsCards summary={summary} shift={shift} dateStr={dateStr} loading={reloading} />}
+      {operation === 'receiving' && <ReceivingStatsCards summary={summary} loading={reloading} />}
 
       {!isOperationStats && <MissingWeightPanel />}
 

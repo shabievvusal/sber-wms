@@ -46,3 +46,17 @@ export function StatsCards({ summary, shift, dateStr, loading }) {
     </div>
   )
 }
+
+// Плитки операции «Приёмка» — итоги смены по принятым поставкам.
+export function ReceivingStatsCards({ summary, loading }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
+      <Tile loading={loading} Icon={Package} label="Поставок" value={fmtNum(summary?.totalOps)} accent />
+      <Tile loading={loading} Icon={ClipboardList} label="ЕО" value={fmtNum(summary?.totalSecondary)} color="#2a78d6" />
+      <Tile loading={loading} Icon={Hash} label="SKU" value={fmtNum(summary?.totalSku)} color="#eb6834" />
+      <Tile loading={loading} Icon={Hash} label="Штук" value={fmtNum(summary?.totalPieces)} color="#7c3aed" />
+      <Tile loading={loading} Icon={Scale} label="Вес" value={fmtWeight(summary?.totalWeightGrams)} color="#1baf7a" />
+      <Tile loading={loading} Icon={HardHat} label="Приёмщиков" value={fmtNum(summary?.executors?.length)} color="#eda100" />
+    </div>
+  )
+}
