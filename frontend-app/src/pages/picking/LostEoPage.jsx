@@ -9,6 +9,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { Check, CloudDownload, RotateCcw, ScanBarcode, Search, Undo2, X } from 'lucide-react'
 import { fmtTime } from './format'
+import { LostEoLookup } from './LostEoLookup'
+
+// Режимы: подбор ЕО по товарам внутри; куда кидали товар; что кидали в ячейку.
+const MODES = [
+  { key: 'match', label: 'Подбор ЕО' },
+  { key: 'product', label: 'По товару' },
+  { key: 'cell', label: 'По ячейке' },
+]
 
 // "YYYY-MM-DDTHH:mm" по Москве
 function mskLocal(date) {
@@ -67,6 +75,7 @@ export default function LostEoPage() {
   const [progress, setProgress] = useState(null)
   const [scans, setScans] = useState([]) // [{ code, productIds:Set, name }]
   const [input, setInput] = useState('')
+  const [mode, setMode] = useState('match')
   // ячейка КДК → ЦФЗ (Настройки → «ЦФЗ по ячейкам КДК»)
   const [cellStores, setCellStores] = useState(new Map())
   const inputRef = useRef(null)
@@ -210,6 +219,25 @@ export default function LostEoPage() {
       {busy && !index && <Spinner label="Загрузка переводов в ЗГЗ…" />}
 
       {index && (
+        <div className="flex w-fit gap-1 rounded-md border bg-muted/30 p-0.5">
+          {MODES.map(m => (
+            <Button key={m.key} size="sm" className="h-8 px-4" variant={mode === m.key ? 'default' : 'ghost'} onClick={() => setMode(m.key)}>{m.label}</Button>
+          ))}
+        </div>
+      )}
+
+      {index && mode !== 'match' && (
+        <LostEoLookup
+          key={mode}
+          mode={mode}
+          index={index}
+          cellStores={cellStores}
+          resolveBarcode={resolveBarcode}
+          periodLabel={`Переводы в ЗГЗ: ${range.from.replace('T', ' ')} — ${range.to.replace('T', ' ')} (МСК)`}
+        />
+      )}
+
+      {index && mode === 'match' && (
         <>
           <form onSubmit={handleScan} className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card p-3 shadow-card">
             <ScanBarcode className="size-5 text-muted-foreground" />
