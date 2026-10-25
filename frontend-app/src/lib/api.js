@@ -524,6 +524,25 @@ export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
 
+// ЦФЗ по ячейкам КДК
+export async function getCellStores() {
+  return req('/api/cell-stores')
+}
+export async function syncCellStores(zoneId, zoneName, cells) {
+  return req('/api/cell-stores/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zoneId, zoneName, cells }),
+  })
+}
+export async function deleteCellStoreZone(zoneId) {
+  return req('/api/cell-stores/delete-zone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zoneId }),
+  })
+}
+
 // «Поиск потеряшек» — переводы ЕО в ЗГЗ на сервере
 export async function getZgzMoves(from, to) {
   return req(`/api/zgz/moves?${new URLSearchParams({ from, to })}`)

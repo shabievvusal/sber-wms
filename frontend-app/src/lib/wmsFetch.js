@@ -21,6 +21,7 @@ const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-
 const WMS_SHIFTS_URL = 'https://api.samokat.ru/wmsin-wwh/shifts'
 const PRODUCTS_SEARCH_URL = 'https://api.samokat.ru/wmsops-wwh/products/search'
 const STOCKS_OVERVIEW_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/overview'
+const TOPOLOGY_CELLS_FIND_URL = 'https://api.samokat.ru/wmsops-wwh/topology/v2/cells/find'
 const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage_dc' }
 
 const LS_ACCESS_KEY = 'wms_access_token'
@@ -763,6 +764,32 @@ export async function syncZgzFromWms(token, { from, to, onProgress } = {}) {
     onProgress?.({ stage: 'save', loaded: Math.min(i + CHUNK, rows.length), total: rows.length })
   }
   return { fetched: rows.length, added }
+}
+
+// ─── Ячейки зоны с ЦФЗ (topology/v2/cells/find) ─────────────────────────────
+// У ячеек КДК storeName — магазин (ЦФЗ), под который в ячейке собирают заказы.
+export async function fetchZoneCells(token, zoneId) {
+  const size = 100
+  const page = async pageNumber => {
+    const r = await fetch(TOPOLOGY_CELLS_FIND_URL, {
+      method: 'POST',
+      headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
+      body: JSON.stringify({
+        filter: { cellAddressSearch: null, cellIds: [], zoneId, locationId: null, types: [], rows: [], sections: null, levels: [], numbers: null, statuses: [], operationTypes: [], withCategories: null, updatedAtFrom: null, updatedAtTo: null },
+        pageNumber, pageSize: size, sortBy: 'CELL_ADDRESS', sortDirection: null,
+      }),
+    })
+    if (!r.ok) throw new Error(`WMS cells/find ${r.status}`)
+    const data = await r.json()
+    return { items: data?.value?.items || [], total: data?.value?.total ?? 0 }
+  }
+  const first = await page(1)
+  let items = [...first.items]
+  for (let p = 2; p <= Math.ceil(first.total / size); p++) items = items.concat((await page(p)).items)
+  return {
+    zoneName: items[0]?.zone?.name || '',
+    cells: items.map(c => ({ address: c.address, storeName: c.storeName || '' })),
+  }
 }
 
 // ─── Веса товаров из WMS ────────────────────────────────────────────────────

@@ -67,6 +67,8 @@ export default function LostEoPage() {
   const [progress, setProgress] = useState(null)
   const [scans, setScans] = useState([]) // [{ code, productIds:Set, name }]
   const [input, setInput] = useState('')
+  // ячейка КДК → ЦФЗ (Настройки → «ЦФЗ по ячейкам КДК»)
+  const [cellStores, setCellStores] = useState(new Map())
   const inputRef = useRef(null)
 
   const index = useMemo(() => (data ? buildIndex(data) : null), [data])
@@ -88,7 +90,11 @@ export default function LostEoPage() {
     }
   }
 
-  useEffect(() => { loadInfo(); show() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadInfo()
+    show()
+    api.getCellStores().then(r => setCellStores(new Map((r?.cells || []).map(c => [c.address, c.storeName])))).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncFromWms = async () => {
     const token = getStoredToken()
@@ -145,7 +151,8 @@ export default function LostEoPage() {
     // отсканировали саму этикетку ЕО
     if (index.hus.has(raw)) {
       const hu = index.hus.get(raw)
-      toast.success(`ЕО ${raw}: прибита в ${hu.targetCell || '—'}, из ${hu.sourceCell || '—'}`)
+      const store = cellStores.get(hu.sourceCell)
+      toast.success(`ЕО ${raw}: прибита в ${hu.targetCell || '—'}, из ${hu.sourceCell || '—'}${store ? ` · ЦФЗ ${store}` : ''}`)
       return
     }
     const found = resolveBarcode(index, raw)
@@ -265,6 +272,12 @@ export default function LostEoPage() {
                       <div className="text-xs text-muted-foreground">Из ячейки КДК</div>
                       <div className="text-lg font-semibold">{hu.sourceCell || '—'}</div>
                     </div>
+                    {cellStores.get(hu.sourceCell) && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">ЦФЗ</div>
+                        <div className="text-lg font-semibold">{cellStores.get(hu.sourceCell)}</div>
+                      </div>
+                    )}
                     <div className="text-sm text-muted-foreground">
                       перевёл {hu.executor || '—'} · {fmtTime(hu.completedAt)} · товаров в ЕО: {hu.total}
                     </div>

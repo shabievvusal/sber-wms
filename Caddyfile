@@ -134,6 +134,10 @@
 		reverse_proxy dotnet:5080
 	}
 	# «Поиск потеряшек» (2026-10-25) — переводы ЕО в ЗГЗ, см. ZgzEndpoints.cs
+	# ЦФЗ по ячейкам КДК (2026-10-25), см. CellStoreEndpoints.cs
+	handle /api/cell-stores* {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/zgz/* {
 		reverse_proxy dotnet:5080
 	}

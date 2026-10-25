@@ -116,6 +116,18 @@ public static class WarehouseSchema
             )");
         await Exec("CREATE INDEX IF NOT EXISTS wms_zgz_moves_completed_idx ON wms_zgz_moves (warehouse_id, completed_at)");
 
+        // 0г) ЦФЗ по ячейкам КДК (2026-10-25) — справочник из WMS topology
+        await Exec($@"
+            CREATE TABLE IF NOT EXISTS cell_stores (
+              warehouse_id TEXT NOT NULL DEFAULT '{def}',
+              address TEXT NOT NULL,
+              store_name TEXT NOT NULL DEFAULT '',
+              zone_id TEXT NOT NULL DEFAULT '',
+              zone_name TEXT NOT NULL DEFAULT '',
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY (warehouse_id, address)
+            )");
+
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))
             await Exec("ALTER TABLE wms_receiving ADD COLUMN IF NOT EXISTS sku_count NUMERIC NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS pieces NUMERIC NOT NULL DEFAULT 0");
