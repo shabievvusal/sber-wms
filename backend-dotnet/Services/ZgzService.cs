@@ -100,10 +100,11 @@ public class ZgzService
         public string Executors => string.Join(", ", Names);
     }
 
-    // Кто комплектовал: раскладка КДК (PICK_BY_LINE) в эту ЕО (target HU) этого
-    // товара — из wms_ops («Обновить данные» статистики). Ключ — (ЕО, товар) с
-    // тем же ключом товара, что в выгрузке ЗГЗ (productId, иначе артикул).
-    // Комплектуют раньше перевода в ЗГЗ — берём с запасом 2 дня до начала.
+    // Кто комплектовал: раскладка КДК (PICK_BY_LINE) и штучный отбор в хранении
+    // (PIECE_SELECTION_PICKING) в эту ЕО (target HU) этого товара — из wms_ops
+    // («Обновить данные» статистики). Ключ — (ЕО, товар) с тем же ключом
+    // товара, что в выгрузке ЗГЗ (productId, иначе артикул). Комплектуют
+    // раньше перевода в ЗГЗ — берём с запасом 2 дня до начала.
     private async Task<Dictionary<(string Hu, string Pid), PickInfo>> GetPicksAsync(List<string> hus, DateTime fromUtc, DateTime toUtc)
     {
         var result = new Dictionary<(string, string), PickInfo>();
@@ -111,7 +112,9 @@ public class ZgzService
         var fromDate = DateOnly.FromDateTime(ToMoscow(fromUtc)).AddDays(-2);
         var toDate = DateOnly.FromDateTime(ToMoscow(toUtc));
         var ops = await _db.WmsOps.AsNoTracking()
-            .Where(o => o.Date >= fromDate && o.Date <= toDate && o.OperationType == "PICK_BY_LINE" && hus.Contains(o.TargetBarcode))
+            .Where(o => o.Date >= fromDate && o.Date <= toDate
+                && (o.OperationType == "PICK_BY_LINE" || o.OperationType == "PIECE_SELECTION_PICKING")
+                && hus.Contains(o.TargetBarcode))
             .Select(o => new { o.TargetBarcode, o.ProductId, o.NomenclatureCode, o.ProductName, o.Executor, o.CompletedAt })
             .ToListAsync();
         foreach (var o in ops)
