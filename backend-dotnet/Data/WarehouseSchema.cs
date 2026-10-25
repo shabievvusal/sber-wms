@@ -20,7 +20,7 @@ public static class WarehouseSchema
     // таблица → её ключ/уникальность (с warehouse_id первым столбцом)
     private static readonly string[] Tables =
     {
-        "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_stock_moves", "wms_storage_agg",
+        "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_stock_moves", "wms_zgz_moves", "wms_storage_agg",
         "employees", "employee_account_checks", "routes",
         "tsd_assignments", "tsd_manual_employees", "tsd_settings",
         "motivation_people", "motivation_settings",
@@ -94,6 +94,28 @@ public static class WarehouseSchema
         // таблица могла быть создана до появления product_id (2026-10-24)
         await Exec("ALTER TABLE wms_stock_moves ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''");
 
+        // 0в) переводы ЕО в ЗГЗ — «Поиск потеряшек» (2026-10-25)
+        await Exec($@"
+            CREATE TABLE IF NOT EXISTS wms_zgz_moves (
+              id BIGSERIAL PRIMARY KEY,
+              warehouse_id TEXT NOT NULL DEFAULT '{def}',
+              date DATE NOT NULL,
+              hour SMALLINT NOT NULL,
+              merge_key TEXT NOT NULL,
+              hu TEXT NOT NULL DEFAULT '',
+              source_cell TEXT NOT NULL DEFAULT '',
+              target_cell TEXT NOT NULL DEFAULT '',
+              product_id TEXT NOT NULL DEFAULT '',
+              product_name TEXT NOT NULL DEFAULT '',
+              nomenclature_code TEXT NOT NULL DEFAULT '',
+              barcodes TEXT NOT NULL DEFAULT '',
+              quantity NUMERIC NOT NULL DEFAULT 0,
+              executor_id TEXT NOT NULL DEFAULT '',
+              executor TEXT NOT NULL DEFAULT '',
+              completed_at TIMESTAMPTZ
+            )");
+        await Exec("CREATE INDEX IF NOT EXISTS wms_zgz_moves_completed_idx ON wms_zgz_moves (warehouse_id, completed_at)");
+
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))
             await Exec("ALTER TABLE wms_receiving ADD COLUMN IF NOT EXISTS sku_count NUMERIC NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS pieces NUMERIC NOT NULL DEFAULT 0");
@@ -106,7 +128,7 @@ public static class WarehouseSchema
         }
 
         // 2) уникальность слияния операций: (date, hour, merge_key) → со складом
-        foreach (var t in new[] { "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_stock_moves" })
+        foreach (var t in new[] { "wms_ops", "wms_placement", "wms_receiving", "wms_remains", "wms_stock_moves", "wms_zgz_moves" })
         {
             if (!await TableExists(t)) continue;
             await Exec($@"

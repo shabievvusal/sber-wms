@@ -43,6 +43,7 @@ public class AppDbContext : DbContext
     public DbSet<WmsReceivingEntity> WmsReceiving => Set<WmsReceivingEntity>();
     public DbSet<WmsRemainsEntity> WmsRemains => Set<WmsRemainsEntity>();
     public DbSet<WmsStockMoveEntity> WmsStockMoves => Set<WmsStockMoveEntity>();
+    public DbSet<WmsZgzMoveEntity> WmsZgzMoves => Set<WmsZgzMoveEntity>();
     public DbSet<ProductWeightEntity> ProductWeights => Set<ProductWeightEntity>();
     public DbSet<WmsStorageAggEntity> WmsStorageAgg => Set<WmsStorageAggEntity>();
     public DbSet<MotivationPersonEntity> MotivationPeople => Set<MotivationPersonEntity>();
@@ -191,6 +192,27 @@ public class AppDbContext : DbContext
         moves.Property(m => m.CompletedAt).HasColumnName("completed_at");
         moves.Property(m => m.ResponsibleUser).HasColumnName("responsible_user").HasColumnType("jsonb")
             .HasConversion(JsonConverter<ResponsibleUser>()).Metadata.SetValueComparer(ObjectComparer<ResponsibleUser>());
+
+        // Переводы ЕО в ЗГЗ («Поиск потеряшек») — таблица создаётся при старте (WarehouseSchema).
+        var zgz = modelBuilder.Entity<WmsZgzMoveEntity>();
+        zgz.ToTable("wms_zgz_moves");
+        zgz.HasKey(z => z.Id);
+        Scoped(zgz);
+        zgz.Property(z => z.Id).HasColumnName("id");
+        zgz.Property(z => z.Date).HasColumnName("date");
+        zgz.Property(z => z.Hour).HasColumnName("hour");
+        zgz.Property(z => z.MergeKey).HasColumnName("merge_key");
+        zgz.Property(z => z.Hu).HasColumnName("hu");
+        zgz.Property(z => z.SourceCell).HasColumnName("source_cell");
+        zgz.Property(z => z.TargetCell).HasColumnName("target_cell");
+        zgz.Property(z => z.ProductId).HasColumnName("product_id");
+        zgz.Property(z => z.ProductName).HasColumnName("product_name");
+        zgz.Property(z => z.NomenclatureCode).HasColumnName("nomenclature_code");
+        zgz.Property(z => z.Barcodes).HasColumnName("barcodes");
+        zgz.Property(z => z.Quantity).HasColumnName("quantity");
+        zgz.Property(z => z.ExecutorId).HasColumnName("executor_id");
+        zgz.Property(z => z.Executor).HasColumnName("executor");
+        zgz.Property(z => z.CompletedAt).HasColumnName("completed_at");
 
         var weights = modelBuilder.Entity<ProductWeightEntity>();
         weights.ToTable("product_weights");

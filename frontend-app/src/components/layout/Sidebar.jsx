@@ -3,7 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import {
-  BarChart2, Monitor, ScanBarcode, Package,
+  BarChart2, Monitor, ScanBarcode, ScanSearch, Package,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
   ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
 } from 'lucide-react'
@@ -42,6 +42,7 @@ export const NAV_ITEMS = [
       { key: 'picking-kdk-layout', Icon: LayoutGrid, label: 'Раскладка КДК', page: 'picking-kdk-layout', module: 'picking' },
       { key: 'picking-kdk', Icon: Boxes, label: 'Зависшие задачи', page: 'picking-kdk', module: 'picking' },
       { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo', module: 'picking' },
+      { key: 'picking-lost-eo', Icon: ScanSearch, label: 'Поиск потеряшек', page: 'picking-lost-eo', module: 'picking' },
       { key: 'picking-gaps', Icon: AlertTriangle, label: 'Пропуски в отборе', page: 'picking-gaps', module: 'picking' },
     ],
   },

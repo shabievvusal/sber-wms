@@ -133,6 +133,10 @@
 	handle /api/stats/remains/monthly-employees {
 		reverse_proxy dotnet:5080
 	}
+	# «Поиск потеряшек» (2026-10-25) — переводы ЕО в ЗГЗ, см. ZgzEndpoints.cs
+	handle /api/zgz/* {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/stats/report/* {
 		reverse_proxy dotnet:5080
 	}

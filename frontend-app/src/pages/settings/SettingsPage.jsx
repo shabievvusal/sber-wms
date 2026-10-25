@@ -18,6 +18,7 @@ import { ZonesSettingsCard } from './ZonesSettingsCard'
 import { DeleteShiftDataCard } from './DeleteShiftDataCard'
 import { ReceivingRefreshCard } from './ReceivingRefreshCard'
 import { StatsPeriodRefreshCard } from './StatsPeriodRefreshCard'
+import { ZgzDataCard } from './ZgzDataCard'
 import { Users, Lock, FileText, Settings as SettingsIcon } from 'lucide-react'
 
 const TAB_DEFS = [
@@ -115,6 +116,7 @@ export default function SettingsPage() {
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <StatsPeriodRefreshCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ReceivingRefreshCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
+            {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ZgzDataCard />}
           </TabsContent>
         </Tabs>
       )}

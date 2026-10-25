@@ -524,6 +524,27 @@ export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
 
+// «Поиск потеряшек» — переводы ЕО в ЗГЗ на сервере
+export async function getZgzMoves(from, to) {
+  return req(`/api/zgz/moves?${new URLSearchParams({ from, to })}`)
+}
+export async function getZgzInfo() {
+  return req('/api/zgz/info')
+}
+export async function getZgzCount(dateFrom, dateTo) {
+  const params = new URLSearchParams()
+  if (dateFrom) params.set('dateFrom', dateFrom)
+  if (dateTo) params.set('dateTo', dateTo)
+  return req(`/api/zgz/count?${params}`)
+}
+export async function deleteZgz(dateFrom, dateTo) {
+  return req('/api/zgz/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dateFrom: dateFrom || null, dateTo: dateTo || null }),
+  })
+}
+
 // Данные отчёта по операции за период (movedown/refill/placement/remains —
 // строки, selection — агрегаты); shift пустой — обе смены каждой даты.
 export async function getOpReport(op, dateFrom, dateTo, shift) {

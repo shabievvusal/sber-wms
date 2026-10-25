@@ -44,6 +44,7 @@ builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<WarehouseService>();
 builder.Services.AddScoped<MotivationService>();
+builder.Services.AddScoped<ZgzService>();
 builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<S3Service>();
 builder.Services.AddSingleton<PhotoService>();
@@ -85,6 +86,7 @@ app.MapStatsEndpoints();
 app.MapAuthEndpoints();
 app.MapStockConsolidationEndpoints();
 app.MapMotivationEndpoints();
+app.MapZgzEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";
 app.Run($"http://0.0.0.0:{port}");

@@ -25,6 +25,7 @@ import PieceSelectionPage from '@/pages/picking/PieceSelectionPage'
 import KdkLayoutPage from '@/pages/picking/KdkLayoutPage'
 import KdkPlacementPage from '@/pages/picking/KdkPlacementPage'
 import EoSearchPage from '@/pages/picking/EoSearchPage'
+import LostEoPage from '@/pages/picking/LostEoPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
 import MotivationPage from '@/pages/motivation/MotivationPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
@@ -52,6 +53,7 @@ const PAGES = {
   'picking-kdk': KdkLayoutPage,
   'picking-kdk-layout': KdkPlacementPage,
   'picking-eo': EoSearchPage,
+  'picking-lost-eo': LostEoPage,
   'picking-gaps': PickingGapsPage,
   motivation: MotivationPage,
   violations: ViolationsPage,
