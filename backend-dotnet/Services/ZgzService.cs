@@ -71,6 +71,7 @@ public class ZgzService
             if (r.CompletedAt > hu.At) hus[r.Hu] = hu = (hu.Source, r.TargetCell, r.Executor, r.CompletedAt, hu.Items);
             hu.Items[pid] = hu.Items.GetValueOrDefault(pid) + r.Quantity;
         }
+        var picks = await GetPicksAsync(hus.Keys.ToList(), fromUtc, toUtc);
         return new
         {
             rows = rows.Count,
@@ -82,9 +83,45 @@ public class ZgzService
                 targetCell = kv.Value.Target,
                 executor = kv.Value.Executor,
                 completedAt = kv.Value.At,
-                items = kv.Value.Items.Select(i => new object[] { i.Key, i.Value }).ToList(),
+                // [товар, штук, кто комплектовал, когда (последняя раскладка)]
+                items = kv.Value.Items.Select(i =>
+                {
+                    var p = picks.GetValueOrDefault((kv.Key, i.Key));
+                    return new object?[] { i.Key, i.Value, p?.Executors, p?.LastAt };
+                }).ToList(),
             }).ToList(),
         };
+    }
+
+    private sealed class PickInfo
+    {
+        public HashSet<string> Names = new();
+        public DateTime? LastAt;
+        public string Executors => string.Join(", ", Names);
+    }
+
+    // Кто комплектовал: раскладка КДК (PICK_BY_LINE) в эту ЕО (target HU) этого
+    // товара — из wms_ops («Обновить данные» статистики). Ключ — (ЕО, товар) с
+    // тем же ключом товара, что в выгрузке ЗГЗ (productId, иначе артикул).
+    // Комплектуют раньше перевода в ЗГЗ — берём с запасом 2 дня до начала.
+    private async Task<Dictionary<(string Hu, string Pid), PickInfo>> GetPicksAsync(List<string> hus, DateTime fromUtc, DateTime toUtc)
+    {
+        var result = new Dictionary<(string, string), PickInfo>();
+        if (hus.Count == 0) return result;
+        var fromDate = DateOnly.FromDateTime(ToMoscow(fromUtc)).AddDays(-2);
+        var toDate = DateOnly.FromDateTime(ToMoscow(toUtc));
+        var ops = await _db.WmsOps.AsNoTracking()
+            .Where(o => o.Date >= fromDate && o.Date <= toDate && o.OperationType == "PICK_BY_LINE" && hus.Contains(o.TargetBarcode))
+            .Select(o => new { o.TargetBarcode, o.ProductId, o.NomenclatureCode, o.ProductName, o.Executor, o.CompletedAt })
+            .ToListAsync();
+        foreach (var o in ops)
+        {
+            var pid = o.ProductId != "" ? o.ProductId : (o.NomenclatureCode != "" ? o.NomenclatureCode : o.ProductName);
+            if (!result.TryGetValue((o.TargetBarcode, pid), out var p)) result[(o.TargetBarcode, pid)] = p = new PickInfo();
+            if (!string.IsNullOrEmpty(o.Executor)) p.Names.Add(o.Executor);
+            if (o.CompletedAt != null && (p.LastAt == null || o.CompletedAt > p.LastAt)) p.LastAt = o.CompletedAt;
+        }
+        return result;
     }
 
     // Что лежит на сервере: строки, ЕО, диапазон времени переводов.

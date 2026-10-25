@@ -25,6 +25,7 @@ function mskLocal(date) {
 const toIso = local => new Date(`${local}:00+03:00`).toISOString()
 const fmtMsk = iso => (iso ? new Date(iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
 const SHOW_LIMIT = 30
+const fmtDt = iso => (iso ? new Date(iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
 
 // Индекс по выгрузке с сервера ({ products, hus }): ЕО → состав, штрихкод → товары.
 function buildIndex(data) {
@@ -39,12 +40,17 @@ function buildIndex(data) {
   for (const h of data.hus || []) {
     const items = new Map()
     let total = 0
-    for (const [pid, qty] of h.items) {
+    const pickers = new Set()
+    let pickedAt = null
+    // [товар, штук, кто комплектовал, когда] — см. ZgzService.GetAsync
+    for (const [pid, qty, pickedBy, itemPickedAt] of h.items) {
       const p = data.products[pid] || {}
-      items.set(pid, { productId: pid, name: p.name, code: p.code, barcodes: p.barcodes || [], qty: Number(qty) || 0 })
+      items.set(pid, { productId: pid, name: p.name, code: p.code, barcodes: p.barcodes || [], qty: Number(qty) || 0, pickedBy: pickedBy || '', pickedAt: itemPickedAt || null })
       total += Number(qty) || 0
+      for (const n of (pickedBy || '').split(', ').filter(Boolean)) pickers.add(n)
+      if (itemPickedAt && (!pickedAt || itemPickedAt > pickedAt)) pickedAt = itemPickedAt
     }
-    hus.set(h.hu, { ...h, items, total })
+    hus.set(h.hu, { ...h, items, total, pickedBy: [...pickers].join(', '), pickedAt })
   }
   return { hus, byBarcode }
 }
@@ -307,7 +313,7 @@ export default function LostEoPage() {
                       </div>
                     )}
                     <div className="text-sm text-muted-foreground">
-                      перевёл {hu.executor || '—'} · {fmtTime(hu.completedAt)} · товаров в ЕО: {hu.total}
+                      скомплектовал {hu.pickedBy || '—'}{hu.pickedAt ? ` · ${fmtTime(hu.pickedAt)}` : ''} · перевёл {hu.executor || '—'} · {fmtTime(hu.completedAt)} · товаров в ЕО: {hu.total}
                     </div>
                   </div>
                   <div className="mt-3 overflow-x-auto">
@@ -317,6 +323,8 @@ export default function LostEoPage() {
                           <th className="py-1 pr-3 font-normal">Товар</th>
                           <th className="py-1 pr-3 font-normal">Штрихкод</th>
                           <th className="py-1 pr-3 text-right font-normal">В ЕО</th>
+                          <th className="py-1 pr-3 font-normal">Кто комплектовал</th>
+                          <th className="py-1 pr-3 font-normal">Дата комплектации</th>
                           <th className="py-1 text-right font-normal">Отсканировано</th>
                         </tr>
                       </thead>
@@ -328,6 +336,8 @@ export default function LostEoPage() {
                               <td className="py-1 pr-3">{it.name || it.code}</td>
                               <td className="py-1 pr-3 font-mono text-xs text-muted-foreground">{it.barcodes[0] || '—'}</td>
                               <td className="py-1 pr-3 text-right tabular-nums">{it.qty}</td>
+                              <td className="py-1 pr-3">{it.pickedBy || '—'}</td>
+                              <td className="py-1 pr-3 whitespace-nowrap">{it.pickedAt ? fmtDt(it.pickedAt) : '—'}</td>
                               <td className="py-1 text-right tabular-nums">
                                 {sc > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-success"><Check className="size-3.5" />{sc}</span> : '—'}
                               </td>

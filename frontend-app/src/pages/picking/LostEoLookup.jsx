@@ -19,6 +19,8 @@ const COLUMNS = {
     { key: 'targetCell', label: 'Ячейка ЗГЗ', text: true },
     { key: 'hu', label: 'ЕО', text: true },
     { key: 'qty', label: 'Штук' },
+    { key: 'pickedBy', label: 'Кто комплектовал', text: true },
+    { key: 'pickedAt', label: 'Дата комплектации', date: true },
     { key: 'completedAt', label: 'Перевод в ЗГЗ', date: true },
     { key: 'executor', label: 'Кто переводил', text: true },
   ],
@@ -31,6 +33,8 @@ const COLUMNS = {
     { key: 'sourceCell', label: 'Ячейка КДК', text: true },
     { key: 'targetCell', label: 'Ячейка ЗГЗ', text: true },
     { key: 'store', label: 'ЦФЗ', text: true },
+    { key: 'pickedBy', label: 'Кто комплектовал', text: true },
+    { key: 'pickedAt', label: 'Дата комплектации', date: true },
     { key: 'executor', label: 'Кто переводил', text: true },
   ],
 }
@@ -68,8 +72,16 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
     if (mode === 'product') {
       for (const hu of index.hus.values()) {
         let qty = 0
-        for (const id of query.productIds) qty += hu.items.get(id)?.qty || 0
-        if (qty > 0) out.push({ hu: hu.hu, sourceCell: hu.sourceCell, targetCell: hu.targetCell, store: cellStores.get(hu.sourceCell) || '', qty, completedAt: hu.completedAt, executor: hu.executor })
+        const pickers = new Set()
+        let pickedAt = null
+        for (const id of query.productIds) {
+          const it = hu.items.get(id)
+          if (!it) continue
+          qty += it.qty
+          for (const n of it.pickedBy.split(', ').filter(Boolean)) pickers.add(n)
+          if (it.pickedAt && (!pickedAt || it.pickedAt > pickedAt)) pickedAt = it.pickedAt
+        }
+        if (qty > 0) out.push({ hu: hu.hu, sourceCell: hu.sourceCell, targetCell: hu.targetCell, store: cellStores.get(hu.sourceCell) || '', qty, pickedBy: [...pickers].join(', '), pickedAt, completedAt: hu.completedAt, executor: hu.executor })
       }
       return out
     }
@@ -79,7 +91,7 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
     if (!hus.length) hus = all.filter(h => h.sourceCell?.toUpperCase().startsWith(q) || h.targetCell?.toUpperCase().startsWith(q))
     for (const hu of hus) {
       for (const it of hu.items.values()) {
-        out.push({ completedAt: hu.completedAt, name: it.name || it.code, barcode: it.barcodes[0] || '', qty: it.qty, hu: hu.hu, sourceCell: hu.sourceCell, targetCell: hu.targetCell, store: cellStores.get(hu.sourceCell) || '', executor: hu.executor })
+        out.push({ completedAt: hu.completedAt, name: it.name || it.code, barcode: it.barcodes[0] || '', qty: it.qty, hu: hu.hu, sourceCell: hu.sourceCell, targetCell: hu.targetCell, store: cellStores.get(hu.sourceCell) || '', pickedBy: it.pickedBy, pickedAt: it.pickedAt, executor: hu.executor })
       }
     }
     return out
@@ -112,10 +124,10 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
     const cols = columns.map(c => ({
       header: c.label, key: c.key,
       numFmt: c.date ? DT : c.text ? undefined : NUM,
-      width: c.key === 'name' ? 50 : c.key === 'store' ? 34 : c.key === 'executor' ? 30 : c.date ? 15 : 14,
+      width: c.key === 'name' ? 50 : c.key === 'store' ? 34 : c.key === 'executor' || c.key === 'pickedBy' ? 30 : c.date ? 15 : 14,
     }))
     titleRows(ws, `Поиск потеряшек — ${title}`, `${periodLabel} · строк ${sorted.length} · штук ${totalQty} · выгружено ${new Date().toLocaleString('ru-RU')}`, cols.length)
-    addTable(ws, cols, sorted.map(r => ({ ...r, completedAt: excelDate(r.completedAt) })), { freezeCols: 1, total: { [cols[0].key]: 'Итого', qty: totalQty } })
+    addTable(ws, cols, sorted.map(r => ({ ...r, completedAt: excelDate(r.completedAt), pickedAt: excelDate(r.pickedAt) })), { freezeCols: 1, total: { [cols[0].key]: 'Итого', qty: totalQty } })
     const buf = await wb.xlsx.writeBuffer()
     const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const a = document.createElement('a')
