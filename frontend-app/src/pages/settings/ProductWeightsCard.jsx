@@ -112,7 +112,7 @@ export function ProductWeightsCard() {
           {info?.exists ? (
             <>
               <div className="tabular text-sm font-medium">{info.count.toLocaleString('ru-RU')} артикулов</div>
-              <div className="text-xs text-muted-foreground">обновлено {fmtDateTime(info.updatedAt)} · {(info.sizeBytes / 1024).toFixed(0)} КБ{info.wmsCount ? ` · из WMS: ${info.wmsCount.toLocaleString('ru-RU')}` : ''}</div>
+              <div className="text-xs text-muted-foreground">обновлено {fmtDateTime(info.updatedAt)} · {(info.sizeBytes / 1024).toFixed(0)} КБ{info.wmsCount ? ` · из WMS: ${info.wmsCount.toLocaleString('ru-RU')}` : ''}{info.barcodes ? ` · штрихкодов: ${info.barcodes.toLocaleString('ru-RU')}` : ''}</div>
             </>
           ) : (
             <>

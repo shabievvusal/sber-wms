@@ -128,6 +128,10 @@ public static class WarehouseSchema
               PRIMARY KEY (warehouse_id, address)
             )");
 
+        // 0д) штрихкоды товаров из файла весов (2026-10-26) — заполняет Node
+        // (product-weights.js), общая для складов, как product_weights
+        await Exec("CREATE TABLE IF NOT EXISTS product_barcodes (barcode TEXT PRIMARY KEY, article TEXT NOT NULL)");
+
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))
             await Exec("ALTER TABLE wms_receiving ADD COLUMN IF NOT EXISTS sku_count NUMERIC NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS pieces NUMERIC NOT NULL DEFAULT 0");

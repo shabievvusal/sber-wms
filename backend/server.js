@@ -1317,7 +1317,7 @@ app.get('/api/vs/admin/product-weights/info', vsSessionRequired, vsAdminRequired
     if (!exists) return res.json({ exists: false, count: 0 });
     const stat = fs.statSync(EXCEL_PATH);
     const count = productWeights.getMap().size;
-    res.json({ exists: true, updatedAt: stat.mtime.toISOString(), sizeBytes: stat.size, count, wmsCount: productWeights.wmsWeightsCount() });
+    res.json({ exists: true, updatedAt: stat.mtime.toISOString(), sizeBytes: stat.size, count, wmsCount: productWeights.wmsWeightsCount(), barcodes: productWeights.getBarcodeMap().size });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

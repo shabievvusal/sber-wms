@@ -59,23 +59,36 @@ public class ZgzService
         var rows = await _db.WmsZgzMoves.AsNoTracking()
             .Where(m => m.CompletedAt >= fromUtc && m.CompletedAt <= toUtc)
             .ToListAsync();
-        var products = new Dictionary<string, object>();
+        var products = new Dictionary<string, (string Name, string Code, HashSet<string> Barcodes)>();
         var hus = new Dictionary<string, (string Source, string Target, string Executor, DateTime? At, Dictionary<string, decimal> Items)>();
         foreach (var r in rows)
         {
             var pid = r.ProductId != "" ? r.ProductId : (r.NomenclatureCode != "" ? r.NomenclatureCode : r.ProductName);
             if (!products.ContainsKey(pid))
-                products[pid] = new { name = r.ProductName, code = r.NomenclatureCode, barcodes = r.Barcodes == "" ? Array.Empty<string>() : r.Barcodes.Split('|') };
+                products[pid] = (r.ProductName, r.NomenclatureCode, new HashSet<string>(r.Barcodes == "" ? Array.Empty<string>() : r.Barcodes.Split('|')));
             if (!hus.TryGetValue(r.Hu, out var hu)) hus[r.Hu] = hu = (r.SourceCell, r.TargetCell, r.Executor, r.CompletedAt, new Dictionary<string, decimal>());
             // ЕО переводили несколько раз — место и исполнитель по последнему переводу
             if (r.CompletedAt > hu.At) hus[r.Hu] = hu = (hu.Source, r.TargetCell, r.Executor, r.CompletedAt, hu.Items);
             hu.Items[pid] = hu.Items.GetValueOrDefault(pid) + r.Quantity;
         }
+        // Штрихкоды из файла весов («ШК товара») — в WMS у товара бывают не все,
+        // и скан такого штрихкода не находился. Подмешиваем по артикулу.
+        var codes = products.Values.Select(p => p.Code).Where(c => c != "").Distinct().ToList();
+        if (codes.Count > 0)
+        {
+            var extra = await _db.Database
+                .SqlQuery<BarcodeRow>($"SELECT barcode AS \"Barcode\", article AS \"Article\" FROM product_barcodes WHERE article = ANY({codes})")
+                .ToListAsync();
+            var byArticle = extra.GroupBy(e => e.Article).ToDictionary(g => g.Key, g => g.Select(e => e.Barcode).ToList());
+            foreach (var p in products.Values)
+                if (byArticle.TryGetValue(p.Code, out var list)) p.Barcodes.UnionWith(list);
+        }
+
         var picks = await GetPicksAsync(hus.Keys.ToList(), fromUtc, toUtc);
         return new
         {
             rows = rows.Count,
-            products,
+            products = products.ToDictionary(kv => kv.Key, kv => (object)new { name = kv.Value.Name, code = kv.Value.Code, barcodes = kv.Value.Barcodes.ToArray() }),
             hus = hus.Select(kv => new
             {
                 hu = kv.Key,
@@ -91,6 +104,12 @@ public class ZgzService
                 }).ToList(),
             }).ToList(),
         };
+    }
+
+    private sealed class BarcodeRow
+    {
+        public string Barcode { get; set; } = "";
+        public string Article { get; set; } = "";
     }
 
     private sealed class PickInfo

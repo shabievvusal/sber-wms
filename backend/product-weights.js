@@ -17,6 +17,11 @@ const LEGACY_EXCEL_PATH = path.join(__dirname, 'data.xlsx');
 const WMS_WEIGHTS_PATH = path.join(DATA_DIR, 'product-weights-wms.json');
 
 let weightMap = null; // Map<article, grams>
+// Штрихкоды единицы товара из того же Excel (колонка «ШК товара»): у артикула
+// несколько строк — по строке на каждый его штрихкод. Штрихкоды упаковок
+// («ШК упаковки N») не берём: скан коробки засчитался бы как одна штука.
+// Нужны «Поиску потеряшек» — в WMS у товара бывают не все штрихкоды.
+let barcodeMap = null; // Map<barcode, article>
 
 // ─── Postgres-зеркало (Фаза 3) ───────────────────────────────────────────────
 // buildSummaryFromItems перенесён в backend-dotnet и читает веса из таблицы
@@ -54,6 +59,40 @@ async function initPg() {
       grams NUMERIC NOT NULL
     )
   `);
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS product_barcodes (
+      barcode TEXT PRIMARY KEY,
+      article TEXT NOT NULL
+    )
+  `);
+  // штрихкоды появились позже весов: при первом старте после обновления
+  // таблица пуста, а Excel уже загружен — заполняем, не дожидаясь новой загрузки
+  const { rows } = await pgPool.query('SELECT count(*)::int AS n FROM product_barcodes');
+  if (!rows[0].n && getBarcodeMap().size) await syncBarcodesToPg(getBarcodeMap());
+}
+
+async function syncBarcodesToPg(map) {
+  if (!pgPool) return;
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE product_barcodes');
+    const entries = [...map];
+    for (let i = 0; i < entries.length; i += 1000) {
+      const chunk = entries.slice(i, i + 1000);
+      await client.query(
+        'INSERT INTO product_barcodes (barcode, article) SELECT * FROM unnest($1::text[], $2::text[]) ON CONFLICT (barcode) DO NOTHING',
+        [chunk.map(e => e[0]), chunk.map(e => e[1])]
+      );
+    }
+    await client.query('COMMIT');
+    console.log(`[product-weights] product_barcodes: ${entries.length}`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[product-weights] Postgres barcodes sync failed:', err.message);
+  } finally {
+    client.release();
+  }
 }
 
 async function syncMapToPg(map) {
@@ -135,6 +174,7 @@ function loadWeightMap() {
   migrateLegacyExcel();
   if (!fs.existsSync(EXCEL_PATH)) {
     console.warn('[product-weights] product-weights.xlsx not found at', EXCEL_PATH);
+    barcodeMap = new Map();
     return withWmsWeights(new Map());
   }
   const xlsx = require('xlsx');
@@ -161,16 +201,25 @@ function loadWeightMap() {
   }
 
   const map = new Map();
+  const barcodeIdx = headers.findIndex(h => String(h || '').trim() === 'ШК товара');
+  barcodeMap = new Map();
   for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i];
     const art = String(r[artIdx] || '').trim();
     if (!art) continue;
-    if (map.has(art)) continue; // первое вхождение — единица товара
+    // в ячейке может быть несколько штрихкодов через запятую
+    if (barcodeIdx >= 0) {
+      for (const bc of String(r[barcodeIdx] ?? '').split(/[,;s]+/)) {
+        const code = bc.trim();
+        if (code && !barcodeMap.has(code)) barcodeMap.set(code, art);
+      }
+    }
+    if (map.has(art)) continue; // вес — из первой строки артикула (у остальных тот же)
     const grams = parseExcelWeight(r[weightIdx]);
     if (grams > 0) map.set(art, grams);
   }
 
-  console.log(`[product-weights] Loaded ${map.size} articles from product-weights.xlsx`);
+  console.log(`[product-weights] Loaded ${map.size} articles, ${barcodeMap.size} barcodes from product-weights.xlsx`);
   return withWmsWeights(map);
 }
 
@@ -211,6 +260,11 @@ function wmsWeightsCount() {
   return Object.keys(loadWmsWeights()).length;
 }
 
+function getBarcodeMap() {
+  if (!barcodeMap) getMap();
+  return barcodeMap || new Map();
+}
+
 function getMap() {
   if (!weightMap) weightMap = loadWeightMap();
   return weightMap;
@@ -225,8 +279,10 @@ function getWeightGrams(article) {
 /** Перезагрузить таблицу из файла (при замене Excel с ВГХ). */
 function reload() {
   weightMap = null;
+  barcodeMap = null;
   const map = getMap();
   syncMapToPg(map).catch(err => console.error('[product-weights] syncMapToPg:', err.message));
+  syncBarcodesToPg(getBarcodeMap()).catch(err => console.error('[product-weights] syncBarcodesToPg:', err.message));
   return map;
 }
 
@@ -242,4 +298,4 @@ function deleteExcel() {
   reload();
 }
 
-module.exports = { EXCEL_PATH, getWeightGrams, getMap, reload, saveExcelBuffer, deleteExcel, initPg, addWmsWeights, wmsWeightsCount };
+module.exports = { EXCEL_PATH, getWeightGrams, getMap, getBarcodeMap, reload, saveExcelBuffer, deleteExcel, initPg, addWmsWeights, wmsWeightsCount };
