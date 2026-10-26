@@ -131,6 +131,8 @@ public static class WarehouseSchema
         // 0д) штрихкоды товаров из файла весов (2026-10-26) — заполняет Node
         // (product-weights.js), общая для складов, как product_weights
         await Exec("CREATE TABLE IF NOT EXISTS product_barcodes (barcode TEXT PRIMARY KEY, article TEXT NOT NULL)");
+        // штук за один скан: 1 у штучного, вложенность у упаковки
+        await Exec("ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS qty NUMERIC NOT NULL DEFAULT 1");
 
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))

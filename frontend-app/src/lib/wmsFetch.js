@@ -813,7 +813,14 @@ export async function fetchWmsProductWeight(token, { code, productId }) {
   if (!id) return { productId: null, grams: 0 }
   const data = await samokatGet(token, `${STOCKS_OVERVIEW_URL}/${id}`, '')
   const product = data?.value?.product || {}
-  return { productId: id, grams: Number(product.measurements?.weight) || 0, name: product.name || '' }
+  return {
+    productId: id,
+    grams: Number(product.measurements?.weight) || 0,
+    name: product.name || '',
+    // штучные штрихкоды и упаковки (коробка: штрихкод + штук в ней) — для «Поиска потеряшек»
+    barcodes: product.barcodes || [],
+    packages: (data?.value?.packages || []).map(pk => ({ barcode: pk.barcode, qty: Number(pk.quantityInPackage) || 0 })).filter(pk => pk.barcode && pk.qty > 1),
+  }
 }
 
 // Дозапросить вес у WMS по списку [{ code, name, productId }] и сохранить
@@ -840,11 +847,16 @@ export async function fillWeightsFromWms(items, { onProgress, shouldStop } = {})
     }))
     for (const { it, res, err } of results) {
       checked++
-      if (res?.grams > 0) pending.push({ article: it.code, grams: res.grams, productId: res.productId, name: res.name || it.name })
-      else notFound.push({ ...it, reason: err ? err.message : res?.productId ? 'в WMS не указан вес' : 'товар не найден в WMS' })
+      const entry = res && { article: it.code, grams: res.grams, productId: res.productId, name: res.name || it.name, barcodes: res.barcodes, packages: res.packages }
+      if (res?.grams > 0) pending.push(entry)
+      else {
+        // веса нет, но штрихкоды/упаковки пригодятся поиску — сохраняем и их
+        if (res?.barcodes?.length || res?.packages?.length) pending.push(entry)
+        notFound.push({ ...it, reason: err ? err.message : res?.productId ? 'в WMS не указан вес' : 'товар не найден в WMS' })
+      }
     }
     if (pending.length >= SAVE_EVERY) await flush()
-    onProgress?.({ checked, total: items.length, found: saved + pending.length, notFound: notFound.length })
+    onProgress?.({ checked, total: items.length, found: checked - notFound.length, notFound: notFound.length })
   }
   await flush()
   return { checked, saved, notFound }

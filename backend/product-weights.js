@@ -17,11 +17,11 @@ const LEGACY_EXCEL_PATH = path.join(__dirname, 'data.xlsx');
 const WMS_WEIGHTS_PATH = path.join(DATA_DIR, 'product-weights-wms.json');
 
 let weightMap = null; // Map<article, grams>
-// Штрихкоды единицы товара из того же Excel (колонка «ШК товара»): у артикула
-// несколько строк — по строке на каждый его штрихкод. Штрихкоды упаковок
-// («ШК упаковки N») не берём: скан коробки засчитался бы как одна штука.
-// Нужны «Поиску потеряшек» — в WMS у товара бывают не все штрихкоды.
-let barcodeMap = null; // Map<barcode, article>
+// Штрихкоды товара из того же Excel: «ШК товара» (у артикула несколько
+// строк — по строке на каждый штрихкод) и «ШК упаковки N» со «Вложенностью
+// упаковки N» — скан коробки засчитывается как её содержимое. Нужны «Поиску
+// потеряшек» — в WMS у товара бывают не все штрихкоды.
+let barcodeMap = null; // Map<barcode, { article, qty }> — qty: 1 у штучного, вложенность у упаковки
 
 // ─── Postgres-зеркало (Фаза 3) ───────────────────────────────────────────────
 // buildSummaryFromItems перенесён в backend-dotnet и читает веса из таблицы
@@ -65,10 +65,17 @@ async function initPg() {
       article TEXT NOT NULL
     )
   `);
-  // штрихкоды появились позже весов: при первом старте после обновления
-  // таблица пуста, а Excel уже загружен — заполняем, не дожидаясь новой загрузки
-  const { rows } = await pgPool.query('SELECT count(*)::int AS n FROM product_barcodes');
-  if (!rows[0].n && getBarcodeMap().size) await syncBarcodesToPg(getBarcodeMap());
+  // qty — штук за один скан: 1 у штучного, вложенность у упаковки (2026-10-26)
+  const { rows: qtyCol } = await pgPool.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_name = 'product_barcodes' AND column_name = 'qty'");
+  if (!qtyCol.length) await pgPool.query('ALTER TABLE product_barcodes ADD COLUMN qty NUMERIC NOT NULL DEFAULT 1');
+  // штрихкоды появились позже весов (а упаковки — ещё позже): если таблица
+  // пуста или без упаковок, а Excel уже загружен — заполняем, не дожидаясь
+  // новой загрузки файла
+  const { rows } = await pgPool.query('SELECT count(*)::int AS n, count(*) FILTER (WHERE qty > 1)::int AS packs FROM product_barcodes');
+  const map = getBarcodeMap();
+  const mapPacks = [...map.values()].filter(v => v.qty > 1).length;
+  if (map.size && (!rows[0].n || (!qtyCol.length && mapPacks) || (mapPacks && !rows[0].packs))) await syncBarcodesToPg(map);
 }
 
 async function syncBarcodesToPg(map) {
@@ -81,8 +88,8 @@ async function syncBarcodesToPg(map) {
     for (let i = 0; i < entries.length; i += 1000) {
       const chunk = entries.slice(i, i + 1000);
       await client.query(
-        'INSERT INTO product_barcodes (barcode, article) SELECT * FROM unnest($1::text[], $2::text[]) ON CONFLICT (barcode) DO NOTHING',
-        [chunk.map(e => e[0]), chunk.map(e => e[1])]
+        'INSERT INTO product_barcodes (barcode, article, qty) SELECT * FROM unnest($1::text[], $2::text[], $3::numeric[]) ON CONFLICT (barcode) DO NOTHING',
+        [chunk.map(e => e[0]), chunk.map(e => e[1].article), chunk.map(e => e[1].qty)]
       );
     }
     await client.query('COMMIT');
@@ -201,17 +208,32 @@ function loadWeightMap() {
   }
 
   const map = new Map();
-  const barcodeIdx = headers.findIndex(h => String(h || '').trim() === 'ШК товара');
+  const col = name => headers.findIndex(h => String(h || '').trim() === name);
+  const barcodeIdx = col('ШК товара');
+  // упаковки 1..4: штрихкод и вложенность (сколько штук в упаковке)
+  const packCols = [1, 2, 3, 4]
+    .map(n => ({ bc: col(`ШК упаковки ${n}`), nest: col(`Вложенность упаковки ${n}`) }))
+    .filter(p => p.bc >= 0 && p.nest >= 0);
+  const splitCodes = v => String(v ?? '').split(/[,;\s]+/).map(c => c.trim()).filter(Boolean);
   barcodeMap = new Map();
   for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i];
     const art = String(r[artIdx] || '').trim();
     if (!art) continue;
-    // в ячейке может быть несколько штрихкодов через запятую
+    // в ячейке может быть несколько штрихкодов через запятую. Штучный
+    // штрихкод главнее упаковочного: у части товаров в «ШК упаковки» стоят
+    // их же штучные штрихкоды — иначе скан одной штуки шёл бы за коробку.
     if (barcodeIdx >= 0) {
-      for (const bc of String(r[barcodeIdx] ?? '').split(/[,;s]+/)) {
-        const code = bc.trim();
-        if (code && !barcodeMap.has(code)) barcodeMap.set(code, art);
+      for (const code of splitCodes(r[barcodeIdx])) {
+        const cur = barcodeMap.get(code);
+        if (!cur || cur.qty > 1) barcodeMap.set(code, { article: art, qty: 1 });
+      }
+    }
+    for (const p of packCols) {
+      const nest = Number(String(r[p.nest] ?? '').replace(',', '.')) || 0;
+      if (nest <= 1) continue;
+      for (const code of splitCodes(r[p.bc])) {
+        if (!barcodeMap.has(code)) barcodeMap.set(code, { article: art, qty: nest });
       }
     }
     if (map.has(art)) continue; // вес — из первой строки артикула (у остальных тот же)
@@ -226,33 +248,67 @@ function loadWeightMap() {
 // Дополнить карту из Excel весами из WMS — только отсутствующие артикулы.
 function withWmsWeights(map) {
   let added = 0;
-  for (const [article, rec] of Object.entries(loadWmsWeights())) {
+  const wms = loadWmsWeights();
+  for (const [article, rec] of Object.entries(wms)) {
     const grams = Number(rec && rec.grams) || 0;
     if (grams > 0 && !map.has(article)) { map.set(article, grams); added++; }
   }
   if (added) console.log(`[product-weights] +${added} articles from WMS (product-weights-wms.json)`);
+  mergeWmsBarcodes(wms);
   return map;
 }
 
-/** Сохранить веса из WMS: entries — [{ article, grams, productId, name }]. Возвращает число записанных. */
+// Штрихкоды из карточки товара WMS (сохранены при дозапросе веса): штучные —
+// 1 шт., упаковки — quantityInPackage. Штучный главнее упаковочного, как и
+// для Excel; уже известный штрихкод не перезаписываем.
+function mergeWmsBarcodes(wms) {
+  if (!barcodeMap) barcodeMap = new Map();
+  for (const [article, rec] of Object.entries(wms || {})) {
+    for (const code of (rec && rec.barcodes) || []) {
+      const cur = barcodeMap.get(code);
+      if (!cur || cur.qty > 1) barcodeMap.set(code, { article, qty: 1 });
+    }
+    for (const pk of (rec && rec.packages) || []) {
+      const qty = Number(pk && pk.qty) || 0;
+      if (pk && pk.barcode && qty > 1 && !barcodeMap.has(pk.barcode)) barcodeMap.set(pk.barcode, { article, qty });
+    }
+  }
+}
+
+/**
+ * Сохранить данные карточки товара из WMS: entries — [{ article, grams,
+ * productId, name, barcodes, packages: [{ barcode, qty }] }]. Запись — если
+ * есть вес или штрихкоды. Возвращает число записанных.
+ */
 function addWmsWeights(entries) {
   const wms = loadWmsWeights();
   const now = new Date().toISOString();
   const toPg = [];
   const excel = getMap();
   let saved = 0;
+  let barcodesChanged = false;
   for (const e of entries || []) {
     const article = String((e && e.article) || '').trim();
     const grams = Number(e && e.grams) || 0;
-    if (!article || grams <= 0) continue;
-    wms[article] = { grams, productId: e.productId || null, name: e.name || '', fetchedAt: now };
+    const barcodes = Array.isArray(e && e.barcodes) ? e.barcodes.map(String).filter(Boolean) : [];
+    const packages = Array.isArray(e && e.packages)
+      ? e.packages.map(pk => ({ barcode: String((pk && pk.barcode) || ''), qty: Number(pk && pk.qty) || 0 })).filter(pk => pk.barcode && pk.qty > 1)
+      : [];
+    if (!article || (grams <= 0 && !barcodes.length && !packages.length)) continue;
+    const prev = wms[article] || {};
+    wms[article] = { grams: grams > 0 ? grams : (prev.grams || 0), productId: e.productId || prev.productId || null, name: e.name || prev.name || '', barcodes, packages, fetchedAt: now };
     saved++;
+    if (barcodes.length || packages.length) barcodesChanged = true;
     // в справочник — только если веса нет (вес из Excel главнее)
-    if (!excel.has(article)) { excel.set(article, grams); toPg.push([article, grams]); }
+    if (grams > 0 && !excel.has(article)) { excel.set(article, grams); toPg.push([article, grams]); }
   }
   ensureExcelDir();
   fs.writeFileSync(WMS_WEIGHTS_PATH, JSON.stringify(wms), 'utf8');
   upsertPg(toPg).catch(err => console.error('[product-weights] upsertPg:', err.message));
+  if (barcodesChanged) {
+    mergeWmsBarcodes(wms);
+    syncBarcodesToPg(getBarcodeMap()).catch(err => console.error('[product-weights] syncBarcodesToPg:', err.message));
+  }
   return saved;
 }
 

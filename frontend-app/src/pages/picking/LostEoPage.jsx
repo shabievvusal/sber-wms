@@ -33,8 +33,13 @@ function buildIndex(data) {
   const byBarcode = new Map()
   for (const [pid, p] of Object.entries(data.products || {})) {
     for (const b of p.barcodes || []) {
-      if (!byBarcode.has(b)) byBarcode.set(b, { productIds: new Set(), name: p.name })
+      if (!byBarcode.has(b)) byBarcode.set(b, { productIds: new Set(), name: p.name, qty: 1 })
       byBarcode.get(b).productIds.add(pid)
+    }
+    // штрихкоды упаковок: один скан = вложенность (packs: { штрихкод: штук })
+    for (const [b, qty] of Object.entries(p.packs || {})) {
+      if (byBarcode.has(b)) continue
+      byBarcode.set(b, { productIds: new Set([pid]), name: p.name, qty: Number(qty) || 1 })
     }
   }
   for (const h of data.hus || []) {
@@ -135,7 +140,7 @@ export default function LostEoPage() {
     for (const s of scans) {
       const key = productKey(s.productIds)
       const cur = m.get(key) || { productIds: s.productIds, name: s.name, code: s.code, count: 0 }
-      cur.count += 1
+      cur.count += s.qty || 1
       m.set(key, cur)
     }
     return [...m.values()]
@@ -172,7 +177,8 @@ export default function LostEoPage() {
     }
     const found = resolveBarcode(index, raw)
     if (!found) { toast.error(`Штрихкод ${raw} не найден в переводах в ЗГЗ за выбранный период`); return }
-    setScans(prev => [...prev, { code: found.code, productIds: found.productIds, name: found.name }])
+    setScans(prev => [...prev, { code: found.code, productIds: found.productIds, name: found.name, qty: found.qty || 1 }])
+    if (found.qty > 1) toast.info(`Штрихкод упаковки — засчитано ${found.qty} шт.`)
   }
 
   const undo = () => { setScans(prev => prev.slice(0, -1)); inputRef.current?.focus() }
