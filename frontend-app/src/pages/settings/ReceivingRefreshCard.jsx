@@ -72,7 +72,7 @@ export function ReceivingRefreshCard() {
       {result && (
         <div className="mt-3 text-sm text-muted-foreground">
           Поставок за день: {result.fetched} · уже были в базе: {result.known} · запрошено у WMS: {result.requested} · сохранено: {result.saved}
-          {result.noAcceptor > 0 && ` · без приёмщика: ${result.noAcceptor}`}
+          {result.noAcceptor > 0 && ` · из них без приёмщика: ${result.noAcceptor} (в статистике — строка «—»)`}
         </div>
       )}
 

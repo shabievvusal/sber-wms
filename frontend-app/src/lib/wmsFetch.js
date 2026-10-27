@@ -22,7 +22,10 @@ const WMS_SHIFTS_URL = 'https://api.samokat.ru/wmsin-wwh/shifts'
 const PRODUCTS_SEARCH_URL = 'https://api.samokat.ru/wmsops-wwh/products/search'
 const STOCKS_OVERVIEW_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/overview'
 const TOPOLOGY_CELLS_FIND_URL = 'https://api.samokat.ru/wmsops-wwh/topology/v2/cells/find'
-const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage_dc' }
+// Тип поставки → сегмент адреса inbound/{slug}/tasks. «На хранение от РЦ» —
+// storage-dc через дефис (так ходит сам WMS); с storage_dc запросы приёмщика
+// и карточки таких поставок падали, и они выпадали из статистики приёмки.
+const INBOUND_TYPE_SLUG = { CROSSDOCK: 'crossdock', IMPORT: 'import', STORAGE: 'storage', STORAGE_DC: 'storage-dc' }
 
 const LS_ACCESS_KEY = 'wms_access_token'
 const LS_ACCESS_EXPIRY_KEY = 'wms_access_token_expiry'
@@ -673,7 +676,12 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
   const toEnrich = tasks.filter(t => !knownIds.has(t.id))
   onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done: 0 })
 
+  // Поставка без найденного приёмщика (WMS не вернул его или запрос упал)
+  // раньше выбрасывалась целиком — и итог по поставкам расходился с WMS.
+  // Теперь сохраняется без приёмщика (строка «—» в статистике); при
+  // следующем обновлении её приёмщик будет запрошен снова.
   const enriched = []
+  let noAcceptor = 0
   let done = 0
   const BATCH = 8
   for (let i = 0; i < toEnrich.length; i += BATCH) {
@@ -681,12 +689,16 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
       try {
         const res = await getInboundTaskResponsibleUsers(token, { taskType: task.type, id: task.id })
         const user = _pickInboundAcceptedUser(res?.value?.responsibleUsers ?? [])
-        return user ? { ...task, responsibleUser: user } : null
+        return user ? { ...task, responsibleUser: user } : { ...task, _noAcceptor: true }
       } catch {
-        return null
+        return { ...task, _noAcceptor: true }
       }
     }))
-    enriched.push(...rows.filter(Boolean))
+    for (const r of rows) {
+      if (r._noAcceptor) noAcceptor++
+      const { _noAcceptor, ...task } = r
+      enriched.push(task)
+    }
     done += rows.length
     onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done })
   }
@@ -702,7 +714,7 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
     known: knownIds.size,
     requested: toEnrich.length,
     saved: enriched.length,
-    noAcceptor: toEnrich.length - enriched.length,
+    noAcceptor,
     added: saveRes.added ?? 0,
     newEmployees: saveRes.newEmployees || [],
   }
@@ -1002,12 +1014,12 @@ export async function getReportMoveToPickingRest(token, { dateFrom, dateTo }) {
 }
 
 export async function getInboundTaskResponsibleUsers(token, { taskType, id }) {
-  const slug = INBOUND_TYPE_SLUG[taskType] || taskType.toLowerCase().replace('_', '-')
+  const slug = INBOUND_TYPE_SLUG[taskType] || taskType.toLowerCase().replace(/_/g, '-')
   return wmsGet(`https://api.samokat.ru/wmsin-wwh/inbound/${slug}/tasks/${id}/responsible-users`, token)
 }
 
 export async function getInboundTaskDetail(token, { taskType, id }) {
-  const slug = INBOUND_TYPE_SLUG[taskType] || taskType.toLowerCase().replace('_', '-')
+  const slug = INBOUND_TYPE_SLUG[taskType] || taskType.toLowerCase().replace(/_/g, '-')
   return wmsGet(`https://api.samokat.ru/wmsin-wwh/inbound/${slug}/tasks/${id}`, token)
 }
 
