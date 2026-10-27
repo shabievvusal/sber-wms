@@ -9,9 +9,10 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
-import { Download, GitCompareArrows, Upload, TrendingUp } from 'lucide-react'
+import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
 import { SUPPLY_GROUPS, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
+import { copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
 import { STATUS_LABELS as WMS_STATUS_LABELS } from '@/pages/supplies/constants'
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ']
@@ -32,6 +33,10 @@ const STATUS = {
   missing: { label: 'Нет в WMS', cls: 'bg-destructive/10 text-destructive' },
   extra: { label: 'Вне графика', cls: 'bg-muted text-foreground' },
 }
+// вертикальные разделители таблиц: G — между группами показателей, I — тонкая внутри группы
+const G = 'border-l-2! border-l-foreground/25!'
+const I = 'border-l border-l-line'
+
 const METRICS = [
   { key: 'count', label: 'Поставок' },
   { key: 'pieces', label: 'Штук' },
@@ -145,6 +150,10 @@ export default function SupplyPlanPage() {
   const upcoming = (dates?.dates || []).filter(d => d.date >= new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10)).slice(0, 8)
 
   const exportXlsx = () => exportSupplyPlanXlsx({ date, weekday: weekday(date), plan, planSum, recon, factSum, forecast })
+  // картинка итогов — переслать в мессенджер (supplyPlanImage.js)
+  const imageOpts = () => ({ date, weekday: weekday(date), planSum, factSum, forecast, statusCounts, statusLabels: Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) })
+  const savePng = () => downloadSupplyPlanPng(imageOpts()).catch(err => toast.error('Ошибка: ' + err.message))
+  const copyPng = () => copySupplyPlanPng(imageOpts()).then(() => toast.success('Картинка скопирована — вставьте в чат (Ctrl+V)')).catch(err => toast.error(err.message))
 
   const breakdownRows = []
   for (const g of SUPPLY_GROUPS) {
@@ -179,6 +188,8 @@ export default function SupplyPlanPage() {
           <Button variant="outline" disabled={checking || !plan?.length} onClick={handleCheck}>
             <GitCompareArrows className="size-4" /> {checking ? 'Сверка…' : recon ? 'Сверить заново' : 'Сверить с WMS'}
           </Button>
+          <Button variant="secondary" disabled={!plan?.length} onClick={savePng}><Image className="size-4" /> Картинка</Button>
+          <Button variant="secondary" disabled={!plan?.length} onClick={copyPng} title="Скопировать картинку итогов, чтобы вставить в чат"><Copy className="size-4" /> Копировать</Button>
           <Button variant="secondary" disabled={!plan?.length} onClick={exportXlsx}><Download className="size-4" /> Excel</Button>
         </div>
       </div>
@@ -208,14 +219,14 @@ export default function SupplyPlanPage() {
                   <TableRow>
                     <TableHead className="h-9 px-3 text-[11px]">Тип поставки / хранения</TableHead>
                     {METRICS.map(m => (
-                      <TableHead key={m.key} colSpan={factSum ? 3 : 1} className="h-9 border-l px-3 text-center text-[11px]">{m.label}</TableHead>
+                      <TableHead key={m.key} colSpan={factSum ? 3 : 1} className={cn('h-9 px-3 text-center text-[11px]', G)}>{m.label}</TableHead>
                     ))}
                   </TableRow>
                   {factSum && (
                     <TableRow>
                       <TableHead className="h-7 px-3" />
                       {METRICS.map(m => ['план', 'факт', '%'].map((h, i) => (
-                        <TableHead key={m.key + h} className={cn('h-7 px-2 text-right text-[10px] font-normal', i === 0 && 'border-l')}>{h}</TableHead>
+                        <TableHead key={m.key + h} className={cn('h-7 px-2 text-right text-[10px] font-normal', i === 0 ? G : I)}>{h}</TableHead>
                       )))}
                     </TableRow>
                   )}
@@ -226,10 +237,10 @@ export default function SupplyPlanPage() {
                       <TableCell className={cn('px-3 py-1.5 text-[13px]', !r.strong && 'pl-7 text-muted-foreground')}>{r.label}</TableCell>
                       {METRICS.map(m => (
                         factSum ? [
-                          <TableCell key={m.key + 'p'} className="tabular border-l px-2 py-1.5 text-right text-[13px]">{fmtNum(r.plan[m.key])}</TableCell>,
-                          <TableCell key={m.key + 'f'} className="tabular px-2 py-1.5 text-right text-[13px]">{fmtNum(r.fact[m.key])}</TableCell>,
-                          <TableCell key={m.key + '%'} className={cn('tabular px-2 py-1.5 text-right text-[12px]', pctCls(pct(r.fact[m.key], r.plan[m.key])))}>{fmtPct(pct(r.fact[m.key], r.plan[m.key]))}</TableCell>,
-                        ] : <TableCell key={m.key} className="tabular border-l px-3 py-1.5 text-right text-[13px]">{fmtNum(r.plan[m.key])}</TableCell>
+                          <TableCell key={m.key + 'p'} className={cn('tabular px-2 py-1.5 text-right text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>,
+                          <TableCell key={m.key + 'f'} className={cn('tabular px-2 py-1.5 text-right text-[13px]', I)}>{fmtNum(r.fact[m.key])}</TableCell>,
+                          <TableCell key={m.key + '%'} className={cn('tabular px-2 py-1.5 text-right text-[12px]', I, pctCls(pct(r.fact[m.key], r.plan[m.key])))}>{fmtPct(pct(r.fact[m.key], r.plan[m.key]))}</TableCell>,
+                        ] : <TableCell key={m.key} className={cn('tabular px-3 py-1.5 text-right text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -275,7 +286,7 @@ export default function SupplyPlanPage() {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-line bg-card shadow-card">
-            <Table>
+            <Table className="[&_td+td]:border-l [&_td+td]:border-l-line [&_th+th]:border-l [&_th+th]:border-l-line">
               <TableHeader>
                 <TableRow>
                   <SortableHead label="Поставщик" sortKey="supplier" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
@@ -286,7 +297,7 @@ export default function SupplyPlanPage() {
                   <SortableHead label="Штук" sortKey="pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                   <SortableHead label="Вес, кг" sortKey="weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                   {recon && <>
-                    <SortableHead label="Факт SKU" sortKey="fact.sku" sort={sort} onSort={handleSort} className="h-9 border-l px-3 text-right text-[11px]" />
+                    <SortableHead label="Факт SKU" sortKey="fact.sku" sort={sort} onSort={handleSort} className={cn('h-9 px-3 text-right text-[11px]', G)} />
                     <SortableHead label="Факт шт" sortKey="fact.pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                     <SortableHead label="Факт кг" sortKey="fact.weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                     <SortableHead label="Статус" sortKey="status" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
@@ -307,7 +318,7 @@ export default function SupplyPlanPage() {
                       <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.pieces)}</TableCell>
                       <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.weightKg)}</TableCell>
                       {recon && <>
-                        <TableCell className="tabular border-l px-3 py-1.5 text-right text-[13px]">{r.fact ? fmtNum(r.fact.sku) : '—'}</TableCell>
+                        <TableCell className={cn('tabular px-3 py-1.5 text-right text-[13px]', G)}>{r.fact ? fmtNum(r.fact.sku) : '—'}</TableCell>
                         <TableCell className={cn('tabular px-3 py-1.5 text-right text-[13px]', piecesDiff != null && Math.abs(piecesDiff) >= 0.05 && 'font-semibold text-warning')}>{r.fact ? fmtNum(r.fact.pieces) : '—'}</TableCell>
                         <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.fact ? fmtNum(r.fact.weightKg) : '—'}</TableCell>
                         <TableCell className="px-3 py-1.5"><span title={r.wmsStatus ? `Статус в WMS: ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : undefined} className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS[r.status].cls)}>{STATUS[r.status].label}{r.status === 'inProgress' && r.wmsStatus ? ` · ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : ''}</span></TableCell>
