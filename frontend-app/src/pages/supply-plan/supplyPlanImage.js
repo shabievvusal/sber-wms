@@ -147,7 +147,7 @@ function renderCanvas({ date, weekday, planSum, factSum, forecast, statusCounts,
     text(`Прогноз СЗ КДК: ~${num(forecast.value)}`, pad, y + 10, { size: 15, weight: 700, color: C.brand })
     ctx.font = `700 15px ${FONT}`
     const w = ctx.measureText(`Прогноз СЗ КДК: ~${num(forecast.value)}`).width
-    text(`  (${num(forecast.x)} ${forecast.metric.label}, ошибка ±${Math.round(forecast.err * 100)}%)`, pad + w, y + 10, { size: 13, color: C.muted })
+    text(`  (${num(forecast.x)} ${forecast.metric.label}, погрешность ±${Math.round(forecast.err * 100)}%)`, pad + w, y + 10, { size: 13, color: C.muted })
     y += 26
   }
   if (statusCounts) {

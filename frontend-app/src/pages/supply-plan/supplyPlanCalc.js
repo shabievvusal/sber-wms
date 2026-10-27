@@ -95,9 +95,9 @@ export function forecastKdk(history, date, plan) {
   const plans = new Map((history?.plans || []).map(p => [p.date, p]))
   const picks = new Map((history?.picks || []).map(p => [p.date, p.tasks]))
   const metrics = [
-    { key: 'sku', label: 'SKU кросс-дока' },
-    { key: 'pieces', label: 'штуки кросс-дока' },
-    { key: 'deliveries', label: 'поставки кросс-дока' },
+    { key: 'sku', label: 'SKU кросс-дока', per: 'на SKU' },
+    { key: 'pieces', label: 'штук кросс-дока', per: 'на штуку' },
+    { key: 'deliveries', label: 'поставок кросс-дока', per: 'на поставку' },
   ]
   let best = null
   for (const m of metrics) {
@@ -122,6 +122,9 @@ export function forecastKdk(history, date, plan) {
 }
 
 // План кросс-дока даты в форме истории (для прогноза).
+// коэффициент прогноза по-русски: «90,71»
+export const fmtK = k => k.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+
 export const kdkPlanOf = rows => {
   const kdk = rows.filter(r => groupOf(r.supplyType) === 'kdk')
   return { deliveries: kdk.length, sku: kdk.reduce((s, r) => s + r.sku, 0), pieces: kdk.reduce((s, r) => s + r.pieces, 0) }

@@ -10,13 +10,15 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
 import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
-import { SUPPLY_GROUPS, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
+import { SUPPLY_GROUPS, fmtK, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
 import { copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
 import { STATUS_LABELS as WMS_STATUS_LABELS } from '@/pages/supplies/constants'
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ']
 const weekday = d => WEEKDAYS[new Date(`${d}T00:00:00Z`).getUTCDay()]
+// «на среду, 28.10.2026» — винительный падеж
+const WEEKDAY_ACC = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу']
 const fmtDate = d => (d ? d.split('-').reverse().join('.') : '')
 const fmtNum = v => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU'))
 const fmtPct = p => (p == null ? '' : `${p > 0 ? '+' : ''}${(p * 100).toFixed(0)}%`)
@@ -253,10 +255,10 @@ export default function SupplyPlanPage() {
               {forecast?.ok ? (
                 <>
                   <div className="tabular mt-2 text-[32px] font-semibold leading-tight">~{fmtNum(forecast.value)}</div>
-                  <div className="text-sm text-muted-foreground">в смены {weekday(forecast.shiftDate)} {fmtDate(forecast.shiftDate)}</div>
+                  <div className="text-sm text-muted-foreground">на {WEEKDAY_ACC[new Date(`${forecast.shiftDate}T00:00:00Z`).getUTCDay()]}, {fmtDate(forecast.shiftDate)}</div>
                   <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div>{fmtNum(forecast.x)} {forecast.metric.label} × {forecast.k.toFixed(2)} СЗ</div>
-                    <div>по {forecast.days} дням истории · обычная ошибка ±{Math.round(forecast.err * 100)}%</div>
+                    <div>{fmtNum(forecast.x)} {forecast.metric.label} × {fmtK(forecast.k)} СЗ {forecast.metric.per}</div>
+                    <div>по {forecast.days} дням истории · типичная погрешность ±{Math.round(forecast.err * 100)}%</div>
                   </div>
                 </>
               ) : (

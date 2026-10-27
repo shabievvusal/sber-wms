@@ -3,7 +3,7 @@
 // тип хранения, список заказов с фактом и поставки вне графика.
 
 import { BORDER, DT, HEADER_FILL, KG, NUM, PCT, SUBHDR_FILL, addTable, excelDate, titleRows } from '@/pages/stats/receivingExport'
-import { SUPPLY_GROUPS, pct, storageKeys } from './supplyPlanCalc'
+import { SUPPLY_GROUPS, fmtK, pct, storageKeys } from './supplyPlanCalc'
 
 const STATUS_LABEL = { accepted: 'Принята', discrepancy: 'С расхождением', notVerified: 'Не проверена', inProgress: 'Не принята', cancelled: 'Отменена', missing: 'Нет в WMS', extra: 'Вне графика' }
 const METRICS = [['count', 'кол-во поставок', NUM], ['pieces', 'штуки', NUM], ['weightKg', 'вес, кг', KG], ['sku', 'SKU', NUM]]
@@ -72,7 +72,7 @@ export async function exportSupplyPlanXlsx({ date, weekday, plan, planSum, recon
     }
 
     if (forecast?.ok) {
-      const r = ws.addRow([`Прогноз СЗ КДК: ~${forecast.value} (${forecast.x} ${forecast.metric.label} × ${forecast.k.toFixed(2)}, по ${forecast.days} дням, ошибка ±${Math.round(forecast.err * 100)}%)`])
+      const r = ws.addRow([`Прогноз СЗ КДК: ~${forecast.value.toLocaleString("ru-RU")} (${forecast.x.toLocaleString("ru-RU")} ${forecast.metric.label} × ${fmtK(forecast.k)} СЗ ${forecast.metric.per}, по ${forecast.days} дням, погрешность ±${Math.round(forecast.err * 100)}%)`])
       r.getCell(1).font = { bold: true }
     }
     ws.getColumn(1).width = 22
