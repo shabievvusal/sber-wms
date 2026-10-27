@@ -34,7 +34,9 @@ export const storageKeys = byStorage => Object.keys(byStorage)
   .sort((a, b) => (STORAGE_ORDER.indexOf(a) + 1 || 99) - (STORAGE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ru'))
 
 // Сверка плана с заданиями WMS по номеру заказа.
-//  status: accepted | discrepancy | inProgress | missing; факт — только у принятых.
+//  status: accepted | discrepancy | notVerified (приёмка завершена, ждёт
+//  проверки) | cancelled | inProgress (ещё не приняли) | missing; факт — только
+//  у принятых (COMPLETED_*), как считает сам WMS.
 //  extra — принятые в смены даты задания, которых нет в графике.
 export function reconcile(planRows, tasks, date) {
   const byOrder = new Map()
@@ -52,7 +54,12 @@ export function reconcile(planRows, tasks, date) {
   const planOrders = new Set(planRows.map(r => r.orderNumber))
   const rows = planRows.map(r => {
     const t = byOrder.get(r.orderNumber)
-    const status = !t ? 'missing' : t.status === 'COMPLETED_AS_PLANNED' ? 'accepted' : t.status === 'COMPLETED_WITH_DISCREPANCY' ? 'discrepancy' : 'inProgress'
+    const status = !t ? 'missing'
+      : t.status === 'COMPLETED_AS_PLANNED' ? 'accepted'
+      : t.status === 'COMPLETED_WITH_DISCREPANCY' ? 'discrepancy'
+      : t.status === 'NOT_VERIFIED' ? 'notVerified'
+      : t.status === 'CANCELLED' ? 'cancelled'
+      : 'inProgress'
     return { ...r, task: t || null, status, wmsStatus: t?.status || null, fact: ACCEPTED.has(t?.status) ? factOf(t) : null, completedAt: t?.completedAt || null, gate: t?.gateInfo?.gateNumber || '' }
   })
   // вне графика: принятые с завершением в смены даты (09:00 даты → 09:00 следующей)

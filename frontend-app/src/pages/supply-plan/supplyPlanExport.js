@@ -5,7 +5,7 @@
 import { BORDER, DT, HEADER_FILL, KG, NUM, PCT, SUBHDR_FILL, addTable, excelDate, titleRows } from '@/pages/stats/receivingExport'
 import { SUPPLY_GROUPS, pct, storageKeys } from './supplyPlanCalc'
 
-const STATUS_LABEL = { accepted: 'Принята', discrepancy: 'С расхождением', inProgress: 'Не принята', missing: 'Нет в WMS', extra: 'Вне графика' }
+const STATUS_LABEL = { accepted: 'Принята', discrepancy: 'С расхождением', notVerified: 'Не проверена', inProgress: 'Не принята', cancelled: 'Отменена', missing: 'Нет в WMS', extra: 'Вне графика' }
 const METRICS = [['count', 'кол-во поставок', NUM], ['pieces', 'штуки', NUM], ['weightKg', 'вес, кг', KG], ['sku', 'SKU', NUM]]
 const ZERO = { count: 0, pieces: 0, weightKg: 0, sku: 0 }
 
@@ -104,7 +104,7 @@ export async function exportSupplyPlanXlsx({ date, weekday, plan, planSum, recon
         { header: 'Штук, %', key: 'diffPieces', numFmt: PCT, width: 9 },
         { header: 'Статус', key: 'status', width: 15 },
         { header: 'Ворота', key: 'gate', width: 8 },
-        { header: 'Принята', key: 'completedAt', numFmt: DT, width: 15 },
+        { header: 'Завершена в WMS', key: 'completedAt', numFmt: DT, width: 15 },
       ] : []),
     ]
     titleRows(ws, `График поставок — заказы ${dateLbl}`, hasFact ? 'план и факт по номеру заказа' : 'план', cols.length)

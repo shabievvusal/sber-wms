@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Download, GitCompareArrows, Upload, TrendingUp } from 'lucide-react'
 import { SUPPLY_GROUPS, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
+import { STATUS_LABELS as WMS_STATUS_LABELS } from '@/pages/supplies/constants'
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ']
 const weekday = d => WEEKDAYS[new Date(`${d}T00:00:00Z`).getUTCDay()]
@@ -25,7 +26,9 @@ const tomorrow = () => new Date(Date.now() + 3 * 3600000 + 86400000).toISOString
 const STATUS = {
   accepted: { label: 'Принята', cls: 'bg-success/12 text-success' },
   discrepancy: { label: 'С расхождением', cls: 'bg-warning/15 text-warning' },
+  notVerified: { label: 'Не проверена', cls: 'bg-info/12 text-info' },
   inProgress: { label: 'Не принята', cls: 'bg-info/12 text-info' },
+  cancelled: { label: 'Отменена', cls: 'bg-muted text-muted-foreground' },
   missing: { label: 'Нет в WMS', cls: 'bg-destructive/10 text-destructive' },
   extra: { label: 'Вне графика', cls: 'bg-muted text-foreground' },
 }
@@ -117,7 +120,7 @@ export default function SupplyPlanPage() {
 
   const statusCounts = useMemo(() => {
     if (!recon) return null
-    const c = { accepted: 0, discrepancy: 0, inProgress: 0, missing: 0, extra: recon.extra.length }
+    const c = { accepted: 0, discrepancy: 0, notVerified: 0, inProgress: 0, cancelled: 0, missing: 0, extra: recon.extra.length }
     for (const r of recon.rows) c[r.status]++
     return c
   }, [recon])
@@ -255,7 +258,7 @@ export default function SupplyPlanPage() {
 
           {statusCounts && (
             <div className="flex flex-wrap gap-2">
-              {[['all', 'Все', recon.rows.length + recon.extra.length], ...Object.entries(statusCounts).map(([k, v]) => [k, STATUS[k].label, v])].map(([k, label, v]) => (
+              {[['all', 'Все', recon.rows.length + recon.extra.length], ...Object.entries(statusCounts).filter(([k, v]) => v > 0 || ['accepted', 'inProgress', 'missing'].includes(k)).map(([k, v]) => [k, STATUS[k].label, v])].map(([k, label, v]) => (
                 <button key={k} type="button" onClick={() => setStatusFilter(k)}
                   className={cn('rounded-full border px-3 py-1 text-xs', statusFilter === k ? 'border-primary ring-2 ring-primary/30' : '', k !== 'all' && STATUS[k].cls)}>
                   {label}: <b>{v}</b>
@@ -287,7 +290,7 @@ export default function SupplyPlanPage() {
                     <SortableHead label="Факт шт" sortKey="fact.pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                     <SortableHead label="Факт кг" sortKey="fact.weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
                     <SortableHead label="Статус" sortKey="status" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
-                    <TableHead className="h-9 px-3 text-[11px]">Принята</TableHead>
+                    <TableHead className="h-9 px-3 text-[11px]" title="Время завершения задания в WMS — у «Не проверена»/«Отменена» оно тоже есть">Завершена в WMS</TableHead>
                   </>}
                 </TableRow>
               </TableHeader>
@@ -307,7 +310,7 @@ export default function SupplyPlanPage() {
                         <TableCell className="tabular border-l px-3 py-1.5 text-right text-[13px]">{r.fact ? fmtNum(r.fact.sku) : '—'}</TableCell>
                         <TableCell className={cn('tabular px-3 py-1.5 text-right text-[13px]', piecesDiff != null && Math.abs(piecesDiff) >= 0.05 && 'font-semibold text-warning')}>{r.fact ? fmtNum(r.fact.pieces) : '—'}</TableCell>
                         <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.fact ? fmtNum(r.fact.weightKg) : '—'}</TableCell>
-                        <TableCell className="px-3 py-1.5"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS[r.status].cls)}>{STATUS[r.status].label}</span></TableCell>
+                        <TableCell className="px-3 py-1.5"><span title={r.wmsStatus ? `Статус в WMS: ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : undefined} className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS[r.status].cls)}>{STATUS[r.status].label}{r.status === 'inProgress' && r.wmsStatus ? ` · ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : ''}</span></TableCell>
                         <TableCell className="px-3 py-1.5 text-[12px] text-muted-foreground">{fmtTime(r.completedAt)}</TableCell>
                       </>}
                     </TableRow>
@@ -317,7 +320,7 @@ export default function SupplyPlanPage() {
             </Table>
           </div>
           <p className="text-xs text-muted-foreground">
-            Сверка — по номеру заказа: задания WMS с плановым прибытием ±1 день и принятые в смены этой даты. «Вне графика» — принятые с 09:00 этого дня до 09:00 следующего, которых нет в графике. Факт SKU — число товаров в задании WMS. Жёлтым — штуки разошлись с планом на 5% и больше.
+            Сверка — по номеру заказа: задания WMS с плановым прибытием ±1 день и принятые в смены этой даты. «Вне графика» — принятые с 09:00 этого дня до 09:00 следующего, которых нет в графике. Факт — только у принятых (как в WMS); «Не проверена» — приёмка в WMS завершена, но поставка ещё ждёт проверки. Факт SKU — число товаров в задании WMS. Жёлтым — штуки разошлись с планом на 5% и больше.
           </p>
         </>
       )}
