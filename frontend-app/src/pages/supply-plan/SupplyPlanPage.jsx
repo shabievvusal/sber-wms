@@ -12,13 +12,16 @@ import { cn } from '@/lib/utils'
 import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
 import { SUPPLY_GROUPS, fmtK, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
-import { copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
+import { SUPPLY_IMAGES, copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { STATUS_LABELS as WMS_STATUS_LABELS } from '@/pages/supplies/constants'
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ']
 const weekday = d => WEEKDAYS[new Date(`${d}T00:00:00Z`).getUTCDay()]
 // «на среду, 28.10.2026» — винительный падеж
 const WEEKDAY_ACC = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу']
+// заголовки картинок — «Среда, 28.10.2026»
+const WEEKDAY_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
 const fmtDate = d => (d ? d.split('-').reverse().join('.') : '')
 const fmtNum = v => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU'))
 const fmtPct = p => (p == null ? '' : `${p > 0 ? '+' : ''}${(p * 100).toFixed(0)}%`)
@@ -153,9 +156,15 @@ export default function SupplyPlanPage() {
 
   const exportXlsx = () => exportSupplyPlanXlsx({ date, weekday: weekday(date), plan, planSum, recon, factSum, forecast })
   // картинка итогов — переслать в мессенджер (supplyPlanImage.js)
-  const imageOpts = () => ({ date, weekday: weekday(date), planSum, factSum, forecast, statusCounts, statusLabels: Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) })
-  const savePng = () => downloadSupplyPlanPng(imageOpts()).catch(err => toast.error('Ошибка: ' + err.message))
-  const copyPng = () => copySupplyPlanPng(imageOpts()).then(() => toast.success('Картинка скопирована — вставьте в чат (Ctrl+V)')).catch(err => toast.error(err.message))
+  // картинки для рассылки (supplyPlanImage.js): общие цифры и списки поставок по хранению / КДК
+  const imageOpts = () => ({
+    date, weekday: WEEKDAY_FULL[new Date(`${date}T00:00:00Z`).getUTCDay()], planSum, factSum, forecast, statusCounts,
+    statusLabels: Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])),
+    orders: (recon ? recon.rows : plan).map(r => ({ ...r, group: groupOf(r.supplyType) })),
+  })
+  const savePng = kind => downloadSupplyPlanPng(kind, imageOpts()).catch(err => toast.error('Ошибка: ' + err.message))
+  const copyPng = kind => copySupplyPlanPng(kind, imageOpts()).then(() => toast.success('Картинка скопирована — вставьте в чат (Ctrl+V)')).catch(err => toast.error(err.message))
+  const saveAllPng = async () => { for (const i of SUPPLY_IMAGES) await savePng(i.key) }
 
   const breakdownRows = []
   for (const g of SUPPLY_GROUPS) {
@@ -190,8 +199,21 @@ export default function SupplyPlanPage() {
           <Button variant="outline" disabled={checking || !plan?.length} onClick={handleCheck}>
             <GitCompareArrows className="size-4" /> {checking ? 'Сверка…' : recon ? 'Сверить заново' : 'Сверить с WMS'}
           </Button>
-          <Button variant="secondary" disabled={!plan?.length} onClick={savePng}><Image className="size-4" /> Картинка</Button>
-          <Button variant="secondary" disabled={!plan?.length} onClick={copyPng} title="Скопировать картинку итогов, чтобы вставить в чат"><Copy className="size-4" /> Копировать</Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="secondary" disabled={!plan?.length}><Image className="size-4" /> Картинки</Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-2">
+              {SUPPLY_IMAGES.map(i => (
+                <div key={i.key} className="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-muted">
+                  <span className="flex-1 text-sm">{i.label}</span>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => savePng(i.key)} title="Скачать PNG"><Download className="size-3.5" /></Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copyPng(i.key)} title="Скопировать — вставить в чат"><Copy className="size-3.5" /></Button>
+                </div>
+              ))}
+              <Button size="sm" className="mt-1 w-full" onClick={saveAllPng}><Download className="size-3.5" /> Скачать все три</Button>
+            </PopoverContent>
+          </Popover>
           <Button variant="secondary" disabled={!plan?.length} onClick={exportXlsx}><Download className="size-4" /> Excel</Button>
         </div>
       </div>

@@ -1,7 +1,8 @@
-// Картинка (PNG) итогов «Графика поставок» — чтобы переслать в мессенджер.
-// Рисуется на Canvas без сторонних библиотек: светлая тема, двойное
-// разрешение. Содержимое: дата, 4 итога (план; после сверки — факт и %),
-// таблица КДК/хранение × тип хранения, прогноз СЗ КДК, статусы сверки.
+// Картинки (PNG) «Графика поставок» для рассылки в мессенджер: общие цифры
+// (дата, 4 итога — план, после сверки факт и %, таблица КДК/хранение × тип
+// хранения, прогноз СЗ КДК, статусы сверки) и списки поставок по хранению и
+// по КДК. Рисуются на Canvas без сторонних библиотек: светлая тема, двойное
+// разрешение.
 
 import { SUPPLY_GROUPS, pct, storageKeys } from './supplyPlanCalc'
 
@@ -159,22 +160,147 @@ function renderCanvas({ date, weekday, planSum, factSum, forecast, statusCounts,
   return canvas
 }
 
+// ── Список поставок группы (хранение / КДК) ─────────────────────────────────
+// Как список заказов в рассылке делопроизводителей: поставщик, номер заказа,
+// тип хранения, SKU, штуки, вес; после сверки — факт и статус. Сортировка по
+// поставщику, внизу «Итого».
+function renderListCanvas({ date, weekday, group, orders, hasFact, statusLabels }) {
+  const rows = orders
+    .filter(r => r.group === group.key)
+    .sort((a, b) => (a.supplier || '').localeCompare(b.supplier || '', 'ru') || (a.orderNumber < b.orderNumber ? -1 : 1))
+  const pad = 32
+  const cols = [
+    { key: 'n', label: '№', w: 44, align: 'center' },
+    { key: 'supplier', label: 'Поставщик', w: 400, align: 'left' },
+    { key: 'orderNumber', label: 'Номер заказа', w: 170, align: 'left' },
+    { key: 'storageType', label: 'Тип хранения', w: 140, align: 'left' },
+    { key: 'sku', label: 'SKU', w: 80, align: 'center', num: true },
+    { key: 'pieces', label: 'Штук', w: 100, align: 'center', num: true },
+    { key: 'weightKg', label: 'Вес, кг', w: 100, align: 'center', num: true },
+    ...(hasFact ? [
+      { key: 'factPieces', label: 'Факт шт', w: 100, align: 'center', num: true, sep: true },
+      { key: 'factWeight', label: 'Факт кг', w: 100, align: 'center', num: true },
+      { key: 'status', label: 'Статус', w: 150, align: 'left' },
+    ] : []),
+  ]
+  const tableW = cols.reduce((s, c) => s + c.w, 0)
+  const width = tableW + pad * 2
+  const rowH = 30
+  const headH = 36
+  const height = pad + 64 + headH + (rows.length + 1) * rowH + 40 + pad
+
+  const scale = 2
+  const canvas = document.createElement('canvas')
+  canvas.width = width * scale
+  canvas.height = height * scale
+  const ctx = canvas.getContext('2d')
+  ctx.scale(scale, scale)
+  ctx.fillStyle = C.bg
+  ctx.fillRect(0, 0, width, height)
+  ctx.textBaseline = 'middle'
+  const text = (s, x, y, { size = 13, weight = 400, color = C.ink, align = 'left', maxW } = {}) => {
+    ctx.font = `${weight} ${size}px ${FONT}`
+    ctx.fillStyle = color
+    ctx.textAlign = align
+    let str = String(s ?? '')
+    if (maxW && ctx.measureText(str).width > maxW) {
+      while (str.length > 1 && ctx.measureText(str + '…').width > maxW) str = str.slice(0, -1)
+      str += '…'
+    }
+    ctx.fillText(str, x, y)
+  }
+  const cellX = (c, x) => (c.align === 'center' ? x + c.w / 2 : x + 10)
+
+  let y = pad
+  text(`${group.label} — ${weekday}, ${date.split('-').reverse().join('.')}`, pad, y + 16, { size: 22, weight: 700 })
+  text(`Поставок: ${rows.length}${hasFact ? ' · план и факт (сверка с WMS)' : ' · план'}`, pad, y + 44, { size: 14, color: C.muted })
+  y += 64
+
+  // шапка
+  ctx.fillStyle = C.head
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(pad, y, tableW, headH, [10, 10, 0, 0]) : ctx.rect(pad, y, tableW, headH); ctx.fill()
+  let x = pad
+  for (const c of cols) { text(c.label, cellX(c, x), y + headH / 2, { size: 12, weight: 600, color: '#fff', align: c.align }); x += c.w }
+  const top = y
+  y += headH
+
+  const totals = { sku: 0, pieces: 0, weightKg: 0, factPieces: 0, factWeight: 0 }
+  rows.forEach((r, i) => {
+    if (i % 2) { ctx.fillStyle = '#F8FAFC'; ctx.fillRect(pad, y, tableW, rowH) }
+    const v = {
+      n: i + 1, supplier: r.supplier, orderNumber: r.orderNumber, storageType: r.storageType,
+      sku: num(r.sku), pieces: num(r.pieces), weightKg: num(r.weightKg),
+      factPieces: r.fact ? num(r.fact.pieces) : '—', factWeight: r.fact ? num(r.fact.weightKg) : '—',
+      status: r.status ? statusLabels[r.status] : '',
+    }
+    totals.sku += r.sku; totals.pieces += r.pieces; totals.weightKg += r.weightKg
+    if (r.fact) { totals.factPieces += r.fact.pieces; totals.factWeight += r.fact.weightKg }
+    x = pad
+    for (const c of cols) {
+      const statusColor = c.key === 'status' ? ({ accepted: C.green, discrepancy: '#B45309', missing: C.red }[r.status] || C.muted) : C.ink
+      text(v[c.key], cellX(c, x), y + rowH / 2, { size: 13, color: c.key === 'n' ? C.muted : statusColor, align: c.align, maxW: c.w - 16 })
+      x += c.w
+    }
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(pad, y + rowH); ctx.lineTo(pad + tableW, y + rowH); ctx.stroke()
+    y += rowH
+  })
+
+  // итого
+  ctx.fillStyle = '#E0E7FF'
+  ctx.fillRect(pad, y, tableW, rowH)
+  x = pad
+  for (const c of cols) {
+    const val = c.key === 'supplier' ? 'Итого' : c.num ? num(totals[c.key]) : ''
+    text(val, cellX(c, x), y + rowH / 2, { size: 13, weight: 700, align: c.align })
+    x += c.w
+  }
+  y += rowH
+
+  // разделители колонок, чтобы не сливались; перед фактом — заметнее
+  x = pad
+  for (const c of cols.slice(0, -1)) {
+    x += c.w
+    const next = cols[cols.indexOf(c) + 1]
+    ctx.strokeStyle = next.sep ? '#94A3B8' : C.line
+    ctx.lineWidth = next.sep ? 1.5 : 1
+    ctx.beginPath(); ctx.moveTo(x, top + headH); ctx.lineTo(x, y); ctx.stroke()
+  }
+
+  text(`Сформировано ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`, pad, y + 24, { size: 11, color: C.muted })
+  return canvas
+}
+
+// Картинки рассылки: summary — общие цифры, storage/kdk — списки поставок.
+export const SUPPLY_IMAGES = [
+  { key: 'summary', label: 'Общие цифры', file: 'итоги' },
+  { key: 'storage', label: 'Поставки по хранению', file: 'хранение' },
+  { key: 'kdk', label: 'Поставки по КДК', file: 'кдк' },
+]
+
+function renderImage(kind, opts) {
+  if (kind === 'summary') return renderCanvas(opts)
+  const group = SUPPLY_GROUPS.find(g => g.key === kind)
+  return renderListCanvas({ ...opts, group, hasFact: !!opts.factSum })
+}
+
 const toBlob = canvas => new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
 
-export async function downloadSupplyPlanPng(opts) {
-  const blob = await toBlob(renderCanvas(opts))
+export async function downloadSupplyPlanPng(kind, opts) {
+  const blob = await toBlob(renderImage(kind, opts))
+  const meta = SUPPLY_IMAGES.find(i => i.key === kind)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `график_поставок_${opts.date}${opts.factSum ? '_факт' : ''}.png`
+  a.download = `график_поставок_${opts.date}_${meta.file}${opts.factSum ? '_факт' : ''}.png`
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 // В буфер обмена — вставить сразу в чат (Ctrl+V). Нужен https и поддержка
 // ClipboardItem в браузере; иначе — ошибка, и остаётся скачать файл.
-export async function copySupplyPlanPng(opts) {
+export async function copySupplyPlanPng(kind, opts) {
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('Браузер не умеет копировать картинки — скачайте файл')
-  const blob = await toBlob(renderCanvas(opts))
+  const blob = await toBlob(renderImage(kind, opts))
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
 }
