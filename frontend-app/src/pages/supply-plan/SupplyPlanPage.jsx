@@ -226,7 +226,7 @@ export default function SupplyPlanPage() {
                     <TableRow>
                       <TableHead className="h-7 px-3" />
                       {METRICS.map(m => ['план', 'факт', '%'].map((h, i) => (
-                        <TableHead key={m.key + h} className={cn('h-7 px-2 text-right text-[10px] font-normal', i === 0 ? G : I)}>{h}</TableHead>
+                        <TableHead key={m.key + h} className={cn('h-7 px-2 text-center text-[10px] font-normal', i === 0 ? G : I)}>{h}</TableHead>
                       )))}
                     </TableRow>
                   )}
@@ -237,10 +237,10 @@ export default function SupplyPlanPage() {
                       <TableCell className={cn('px-3 py-1.5 text-[13px]', !r.strong && 'pl-7 text-muted-foreground')}>{r.label}</TableCell>
                       {METRICS.map(m => (
                         factSum ? [
-                          <TableCell key={m.key + 'p'} className={cn('tabular px-2 py-1.5 text-right text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>,
-                          <TableCell key={m.key + 'f'} className={cn('tabular px-2 py-1.5 text-right text-[13px]', I)}>{fmtNum(r.fact[m.key])}</TableCell>,
-                          <TableCell key={m.key + '%'} className={cn('tabular px-2 py-1.5 text-right text-[12px]', I, pctCls(pct(r.fact[m.key], r.plan[m.key])))}>{fmtPct(pct(r.fact[m.key], r.plan[m.key]))}</TableCell>,
-                        ] : <TableCell key={m.key} className={cn('tabular px-3 py-1.5 text-right text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>
+                          <TableCell key={m.key + 'p'} className={cn('tabular px-2 py-1.5 text-center text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>,
+                          <TableCell key={m.key + 'f'} className={cn('tabular px-2 py-1.5 text-center text-[13px]', I)}>{fmtNum(r.fact[m.key])}</TableCell>,
+                          <TableCell key={m.key + '%'} className={cn('tabular px-2 py-1.5 text-center text-[12px]', I, pctCls(pct(r.fact[m.key], r.plan[m.key])))}>{fmtPct(pct(r.fact[m.key], r.plan[m.key]))}</TableCell>,
+                        ] : <TableCell key={m.key} className={cn('tabular px-3 py-1.5 text-center text-[13px]', G)}>{fmtNum(r.plan[m.key])}</TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -293,13 +293,13 @@ export default function SupplyPlanPage() {
                   <SortableHead label="Номер заказа" sortKey="orderNumber" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
                   <SortableHead label="Поставка" sortKey="supplyType" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
                   <SortableHead label="Хранение" sortKey="storageType" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
-                  <SortableHead label="SKU" sortKey="sku" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
-                  <SortableHead label="Штук" sortKey="pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
-                  <SortableHead label="Вес, кг" sortKey="weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
+                  <SortableHead label="SKU" sortKey="sku" sort={sort} onSort={handleSort} className="h-9 px-3 text-center text-[11px]" />
+                  <SortableHead label="Штук" sortKey="pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-center text-[11px]" />
+                  <SortableHead label="Вес, кг" sortKey="weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-center text-[11px]" />
                   {recon && <>
-                    <SortableHead label="Факт SKU" sortKey="fact.sku" sort={sort} onSort={handleSort} className={cn('h-9 px-3 text-right text-[11px]', G)} />
-                    <SortableHead label="Факт шт" sortKey="fact.pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
-                    <SortableHead label="Факт кг" sortKey="fact.weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-right text-[11px]" />
+                    <SortableHead label="Факт SKU" sortKey="fact.sku" sort={sort} onSort={handleSort} className={cn('h-9 px-3 text-center text-[11px]', G)} />
+                    <SortableHead label="Факт шт" sortKey="fact.pieces" sort={sort} onSort={handleSort} className="h-9 px-3 text-center text-[11px]" />
+                    <SortableHead label="Факт кг" sortKey="fact.weightKg" sort={sort} onSort={handleSort} className="h-9 px-3 text-center text-[11px]" />
                     <SortableHead label="Статус" sortKey="status" sort={sort} onSort={handleSort} className="h-9 px-3 text-[11px]" />
                     <TableHead className="h-9 px-3 text-[11px]" title="Время завершения задания в WMS — у «Не проверена»/«Отменена» оно тоже есть">Завершена в WMS</TableHead>
                   </>}
@@ -314,13 +314,13 @@ export default function SupplyPlanPage() {
                       <TableCell className="px-3 py-1.5 font-mono text-xs">{r.orderNumber}</TableCell>
                       <TableCell className="px-3 py-1.5 text-[13px]">{r.status === 'extra' ? (r.supplyType === 'CROSSDOCK' ? 'Кросс-докинг' : 'Хранение') : r.supplyType}</TableCell>
                       <TableCell className="px-3 py-1.5 text-[13px]">{r.status === 'extra' ? '' : r.storageType}</TableCell>
-                      <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.sku)}</TableCell>
-                      <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.pieces)}</TableCell>
-                      <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.weightKg)}</TableCell>
+                      <TableCell className="tabular px-3 py-1.5 text-center text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.sku)}</TableCell>
+                      <TableCell className="tabular px-3 py-1.5 text-center text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.pieces)}</TableCell>
+                      <TableCell className="tabular px-3 py-1.5 text-center text-[13px]">{r.status === 'extra' ? '' : fmtNum(r.weightKg)}</TableCell>
                       {recon && <>
-                        <TableCell className={cn('tabular px-3 py-1.5 text-right text-[13px]', G)}>{r.fact ? fmtNum(r.fact.sku) : '—'}</TableCell>
-                        <TableCell className={cn('tabular px-3 py-1.5 text-right text-[13px]', piecesDiff != null && Math.abs(piecesDiff) >= 0.05 && 'font-semibold text-warning')}>{r.fact ? fmtNum(r.fact.pieces) : '—'}</TableCell>
-                        <TableCell className="tabular px-3 py-1.5 text-right text-[13px]">{r.fact ? fmtNum(r.fact.weightKg) : '—'}</TableCell>
+                        <TableCell className={cn('tabular px-3 py-1.5 text-center text-[13px]', G)}>{r.fact ? fmtNum(r.fact.sku) : '—'}</TableCell>
+                        <TableCell className={cn('tabular px-3 py-1.5 text-center text-[13px]', piecesDiff != null && Math.abs(piecesDiff) >= 0.05 && 'font-semibold text-warning')}>{r.fact ? fmtNum(r.fact.pieces) : '—'}</TableCell>
+                        <TableCell className="tabular px-3 py-1.5 text-center text-[13px]">{r.fact ? fmtNum(r.fact.weightKg) : '—'}</TableCell>
                         <TableCell className="px-3 py-1.5"><span title={r.wmsStatus ? `Статус в WMS: ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : undefined} className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS[r.status].cls)}>{STATUS[r.status].label}{r.status === 'inProgress' && r.wmsStatus ? ` · ${WMS_STATUS_LABELS[r.wmsStatus] || r.wmsStatus}` : ''}</span></TableCell>
                         <TableCell className="px-3 py-1.5 text-[12px] text-muted-foreground">{fmtTime(r.completedAt)}</TableCell>
                       </>}

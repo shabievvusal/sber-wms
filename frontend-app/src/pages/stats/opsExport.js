@@ -109,6 +109,7 @@ function kpiSheet(wb, title, sub, kpi) {
     r.getCell(1).border = BORDER
     r.getCell(2).border = BORDER
     r.getCell(2).numFmt = fmt
+    r.getCell(2).alignment = { horizontal: 'center' }
     r.getCell(2).font = { bold: true }
   }
   ws.getColumn(1).width = 40

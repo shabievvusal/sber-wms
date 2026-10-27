@@ -266,7 +266,7 @@ export default function KdkLayoutPage() {
                     <SortableHead label="Компания" sortKey="company" sort={sort} onSort={toggleSort} />
                     <SortableHead label="Исполнитель" sortKey="executor" sort={sort} onSort={toggleSort} />
                     <TableHead>Задача / ЕО</TableHead>
-                    <SortableHead label="Остаток" sortKey="pieces" sort={sort} onSort={toggleSort} className="text-right" />
+                    <SortableHead label="Остаток" sortKey="pieces" sort={sort} onSort={toggleSort} className="text-center" />
                     <SortableHead label="Последнее действие" sortKey="lastActionAt" sort={sort} onSort={toggleSort} />
                     <TableHead>Простой</TableHead>
                   </TableRow>
@@ -278,7 +278,7 @@ export default function KdkLayoutPage() {
                       <TableCell>{row.company}</TableCell>
                       <TableCell title={row.executor}>{shortFio(row.executor)}</TableCell>
                       <TableCell>{row.task || '—'}</TableCell>
-                      <TableCell className="text-right">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
+                      <TableCell className="text-center">{row.pieces == null ? '—' : fmtNum(row.pieces)}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning' : ''}>{formatTime(row.lastActionAt)}</span> : '—'}</TableCell>
                       <TableCell>{row.lastActionAt ? <span className={row.idle ? 'font-semibold text-warning' : ''}>{fmtAgo(row.lastActionAt)}</span> : '—'}</TableCell>
                     </TableRow>

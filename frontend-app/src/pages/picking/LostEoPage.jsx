@@ -328,10 +328,10 @@ export default function LostEoPage() {
                         <tr className="text-left text-xs text-muted-foreground">
                           <th className="py-1 pr-3 font-normal">Товар</th>
                           <th className="py-1 pr-3 font-normal">Штрихкод</th>
-                          <th className="py-1 pr-3 text-right font-normal">В ЕО</th>
+                          <th className="py-1 pr-3 text-center font-normal">В ЕО</th>
                           <th className="py-1 pr-3 font-normal">Кто комплектовал</th>
                           <th className="py-1 pr-3 font-normal">Дата комплектации</th>
-                          <th className="py-1 text-right font-normal">Отсканировано</th>
+                          <th className="py-1 text-center font-normal">Отсканировано</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -341,10 +341,10 @@ export default function LostEoPage() {
                             <tr key={it.productId} className={cn('border-t', sc > 0 && 'bg-success/5')}>
                               <td className="py-1 pr-3">{it.name || it.code}</td>
                               <td className="py-1 pr-3 font-mono text-xs text-muted-foreground">{it.barcodes[0] || '—'}</td>
-                              <td className="py-1 pr-3 text-right tabular-nums">{it.qty}</td>
+                              <td className="py-1 pr-3 text-center tabular-nums">{it.qty}</td>
                               <td className="py-1 pr-3">{it.pickedBy || '—'}</td>
                               <td className="py-1 pr-3 whitespace-nowrap">{it.pickedAt ? fmtDt(it.pickedAt) : '—'}</td>
-                              <td className="py-1 text-right tabular-nums">
+                              <td className="py-1 text-center tabular-nums">
                                 {sc > 0 ? <span className="inline-flex items-center gap-1 font-semibold text-success"><Check className="size-3.5" />{sc}</span> : '—'}
                               </td>
                             </tr>

@@ -242,8 +242,8 @@ export default function EoSearchPage() {
                     <TableHead>Поставка</TableHead>
                     <TableHead>ЕО</TableHead>
                     <TableHead>Статус ЕО</TableHead>
-                    <TableHead className="text-right">Принято</TableHead>
-                    <TableHead className="text-right">Остаток</TableHead>
+                    <TableHead className="text-center">Принято</TableHead>
+                    <TableHead className="text-center">Остаток</TableHead>
                     <TableHead>Комплектует</TableHead>
                     <TableHead>Последний пик</TableHead>
                     <TableHead>Принял</TableHead>
@@ -267,8 +267,8 @@ export default function EoSearchPage() {
                         </button>
                       </TableCell>
                       <TableCell>{row.status}</TableCell>
-                      <TableCell className="text-right">{row.receivedQty || '—'}</TableCell>
-                      <TableCell className="text-right">{row.remaining ?? '—'}</TableCell>
+                      <TableCell className="text-center">{row.receivedQty || '—'}</TableCell>
+                      <TableCell className="text-center">{row.remaining ?? '—'}</TableCell>
                       <TableCell>{userName(row.picker)}</TableCell>
                       <TableCell>{fmtTime(row.lastPickAt)}</TableCell>
                       <TableCell>{userName(row.acceptedUser)}</TableCell>

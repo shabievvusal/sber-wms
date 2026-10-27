@@ -36,7 +36,7 @@ export async function exportSupplyPlanXlsx({ date, weekday, plan, planSum, recon
     const vr = ws.addRow(vals)
     vr.eachCell({ includeEmpty: true }, (c, i) => {
       c.border = BORDER
-      if (i > 2) c.numFmt = (i - 3) % 3 === 2 ? PCT : (METRICS[Math.floor((i - 3) / 3)]?.[2] || NUM)
+      if (i > 2) { c.numFmt = (i - 3) % 3 === 2 ? PCT : (METRICS[Math.floor((i - 3) / 3)]?.[2] || NUM); c.alignment = { horizontal: 'center' } }
     })
     ws.addRow([])
 
@@ -62,6 +62,7 @@ export async function exportSupplyPlanXlsx({ date, weekday, plan, planSum, recon
           if (i > 1) {
             const mi = hasFact ? Math.floor((i - 2) / 3) : i - 2
             c.numFmt = hasFact && (i - 2) % 3 === 2 ? PCT : METRICS[mi][2]
+            c.alignment = { horizontal: 'center' }
           }
         })
       }

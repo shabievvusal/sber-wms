@@ -234,9 +234,9 @@ export default function PieceSelectionPage() {
                     </TableHead>
                     <TableHead>Статус</TableHead>
                     <SortableHead label="ЦФЗ" sortKey="name" sort={sort} onSort={toggleSort} />
-                    <SortableHead label="Ячеек" sortKey="cells" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Вес" sortKey="weight" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Объем" sortKey="volume" sort={sort} onSort={toggleSort} className="text-right" />
+                    <SortableHead label="Ячеек" sortKey="cells" sort={sort} onSort={toggleSort} className="text-center" />
+                    <SortableHead label="Вес" sortKey="weight" sort={sort} onSort={toggleSort} className="text-center" />
+                    <SortableHead label="Объем" sortKey="volume" sort={sort} onSort={toggleSort} className="text-center" />
                     <TableHead>ШК ЕО</TableHead>
                     <TableHead>Зона</TableHead>
                     <TableHead>Температура</TableHead>
@@ -250,9 +250,9 @@ export default function PieceSelectionPage() {
                       <TableCell><Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} aria-label="Отметить для печати" /></TableCell>
                       <TableCell><Badge variant={statusBadgeVariant(row.status)}>{STATUS_LABELS[row.status] || row.status || '—'}</Badge></TableCell>
                       <TableCell>{row.shipTo?.name || '—'}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.sourceCellsCount)}</TableCell>
-                      <TableCell className="text-right">{fmtKg(row.weightInGrams)}</TableCell>
-                      <TableCell className="text-right">{fmtLiters(row.volumeInMilliliters)}</TableCell>
+                      <TableCell className="text-center">{fmtNum(row.sourceCellsCount)}</TableCell>
+                      <TableCell className="text-center">{fmtKg(row.weightInGrams)}</TableCell>
+                      <TableCell className="text-center">{fmtLiters(row.volumeInMilliliters)}</TableCell>
                       <TableCell>{row.targetHandlingUnitBarcode || '—'}</TableCell>
                       <TableCell>{row.sourceZone?.name || '—'}</TableCell>
                       <TableCell>{(row.shipmentTemperatureModes || []).map(t => TEMP_LABELS[t] || t).join(', ') || '—'}</TableCell>

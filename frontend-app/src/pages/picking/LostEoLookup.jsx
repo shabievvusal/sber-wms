@@ -188,14 +188,14 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columns.map(c => <SortableHead key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={handleSort} className={thCls} />)}
+                  {columns.map(c => <SortableHead key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={handleSort} className={`${thCls}${c.text || c.date ? "" : " text-center"}`} />)}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sorted.map((r, i) => (
                   <TableRow key={`${r.hu}-${r.name || ''}-${i}`}>
                     {columns.map(c => (
-                      <TableCell key={c.key} className={`${tdCls} ${c.text || c.date ? '' : 'text-right tabular-nums'} ${c.key === 'hu' || c.key === 'barcode' ? 'font-mono text-xs' : ''}`}>
+                      <TableCell key={c.key} className={`${tdCls} ${c.text || c.date ? '' : 'text-center tabular-nums'} ${c.key === 'hu' || c.key === 'barcode' ? 'font-mono text-xs' : ''}`}>
                         {c.date ? fmtDt(r[c.key]) : (r[c.key] || (c.text ? '—' : r[c.key]))}
                       </TableCell>
                     ))}

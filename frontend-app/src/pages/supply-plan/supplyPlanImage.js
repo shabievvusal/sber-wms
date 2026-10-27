@@ -101,7 +101,7 @@ function renderCanvas({ date, weekday, planSum, factSum, forecast, statusCounts,
     const gx = x0 + labelW + i * cellW * (hasFact ? 3 : 1)
     const gw = cellW * (hasFact ? 3 : 1)
     text(label, gx + gw / 2, y + (hasFact ? 18 : headH / 2), { size: 13, weight: 600, color: '#fff', align: 'center' })
-    if (hasFact) ['план', 'факт', '%'].forEach((h, j) => text(h, gx + cellW * j + cellW - 10, y + 41, { size: 11, color: '#CBD5E1', align: 'right' }))
+    if (hasFact) ['план', 'факт', '%'].forEach((h, j) => text(h, gx + cellW * j + cellW / 2, y + 41, { size: 11, color: '#CBD5E1', align: 'center' }))
   })
   y += headH
 
@@ -117,11 +117,11 @@ function renderCanvas({ date, weekday, planSum, factSum, forecast, statusCounts,
       const w = r.strong ? 700 : 400
       if (hasFact) {
         const p = pct(r.fact[k], r.plan[k])
-        text(num(r.plan[k]), gx + cellW - 10, y + rowH / 2, { size: 14, weight: w, align: 'right' })
-        text(num(r.fact[k]), gx + cellW * 2 - 10, y + rowH / 2, { size: 14, weight: w, align: 'right' })
-        text(fmtPct(p), gx + cellW * 3 - 10, y + rowH / 2, { size: 13, weight: 600, color: pctColor(p), align: 'right' })
+        text(num(r.plan[k]), gx + cellW / 2, y + rowH / 2, { size: 14, weight: w, align: 'center' })
+        text(num(r.fact[k]), gx + cellW * 1.5, y + rowH / 2, { size: 14, weight: w, align: 'center' })
+        text(fmtPct(p), gx + cellW * 2.5, y + rowH / 2, { size: 13, weight: 600, color: pctColor(p), align: 'center' })
       } else {
-        text(num(r.plan[k]), gx + cellW - 14, y + rowH / 2, { size: 14, weight: w, align: 'right' })
+        text(num(r.plan[k]), gx + cellW / 2, y + rowH / 2, { size: 14, weight: w, align: 'center' })
       }
     })
     y += rowH

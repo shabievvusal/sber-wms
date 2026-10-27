@@ -10,7 +10,7 @@ import { confirmDialog } from '@/components/ui/confirm'
 
 const th = 'h-8 px-2 text-[11px] whitespace-nowrap'
 const td = 'px-2 py-1.5 text-[13px] whitespace-nowrap'
-const num = `${td} text-right tabular-nums`
+const num = `${td} text-center tabular-nums`
 
 // readOnly — учётки из статистики без человека в акте (MotivationPage):
 // записи в смене нет, меню по клику на имя предлагает внести в акт (onAdd).
@@ -73,13 +73,13 @@ export function ShiftTable({ company, rows, accountIndex, onChanged, readOnly = 
                 <TableHead className={th}>Учётка</TableHead>
                 <TableHead className={th}>Получена</TableHead>
               </>}
-              <TableHead className={`${th} text-right`}>СЗ ХР</TableHead>
-              <TableHead className={`${th} text-right`}>СЗ КДК</TableHead>
-              <TableHead className={`${th} text-right`}>Вес ХР, кг</TableHead>
-              <TableHead className={`${th} text-right`}>Вес КДК, кг</TableHead>
-              <TableHead className={`${th} text-right`} title="Доля нормы по СЗ / по весу. Засчитывается меньшая.">СЗ / вес</TableHead>
-              <TableHead className={`${th} text-right`}>Итог</TableHead>
-              <TableHead className={`${th} text-right`}>Часы</TableHead>
+              <TableHead className={`${th} text-center`}>СЗ ХР</TableHead>
+              <TableHead className={`${th} text-center`}>СЗ КДК</TableHead>
+              <TableHead className={`${th} text-center`}>Вес ХР, кг</TableHead>
+              <TableHead className={`${th} text-center`}>Вес КДК, кг</TableHead>
+              <TableHead className={`${th} text-center`} title="Доля нормы по СЗ / по весу. Засчитывается меньшая.">СЗ / вес</TableHead>
+              <TableHead className={`${th} text-center`}>Итог</TableHead>
+              <TableHead className={`${th} text-center`}>Часы</TableHead>
               <TableHead className={th}>Статус</TableHead>
             </TableRow>
           </TableHeader>

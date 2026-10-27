@@ -130,7 +130,7 @@ export function ZonesSettingsCard() {
                     <td className="px-1 py-1.5"><EditableCell value={z.label} placeholder={key} onCommit={v => handleSave(key, { label: v.trim() || key })} /></td>
                     <td className="px-3 py-1.5"><ColorSwatch value={z.light} onChange={c => handleSave(key, { light: c, text: pickTextColor(c) })} /></td>
                     <td className="px-3 py-1.5"><ZoneTag zone={z} /></td>
-                    <td className="py-1.5 pr-2 text-right">
+                    <td className="py-1.5 pr-2 text-center">
                       <IconAction icon={Trash2} title="Убрать своё оформление" tone="danger" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => handleDelete(key)} />
                     </td>
                   </tr>

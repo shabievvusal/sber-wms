@@ -20,7 +20,7 @@ function EmployeeRow({ r, onClick }) {
           <span className="text-success">{lastTaskStr} назад</span>
           {r.isActive && taskStr && <span className="ml-1 text-muted-foreground">(задача {taskStr})</span>}
         </TableCell>
-        <TableCell className="text-right">{szVal}</TableCell>
+        <TableCell className="text-center">{szVal}</TableCell>
       </TableRow>
     )
   }
@@ -32,7 +32,7 @@ function EmployeeRow({ r, onClick }) {
       <TableCell><TaskTypeBadge type={r.taskType} /></TableCell>
       <TableCell><span className="inline-flex items-center gap-1.5"><span className="size-2 shrink-0 rounded-full bg-destructive" /> не в работе</span></TableCell>
       <TableCell className="text-xs text-muted-foreground">{sinceStr}</TableCell>
-      <TableCell className="text-right">{szVal}</TableCell>
+      <TableCell className="text-center">{szVal}</TableCell>
     </TableRow>
   )
 }
@@ -79,7 +79,7 @@ function EmpTable({ rows, onRowClick, emptyText }) {
               <TableHead>Тип задачи</TableHead>
               <TableHead>Статус</TableHead>
               <TableHead>В задаче / Простой</TableHead>
-              <TableHead className="text-right">СЗ</TableHead>
+              <TableHead className="text-center">СЗ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

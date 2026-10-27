@@ -273,7 +273,7 @@ const RouteRow = memo(function RouteRow({ route: r, selected, expanded, confirmi
         <TableCell className="text-muted-foreground truncate" title={r.receiving?.by || ''}>{r.receiving?.by || '—'}</TableCell>
         <TableCell className="text-muted-foreground">{fmtDateTime(r.receivedAt)}</TableCell>
         <TableCell className={GROUP_START}><DiffBadge diff={metricDiff(r, metric)} /></TableCell>
-        <TableCell className={cn(PIN.actions, 'text-right')} onClick={e => e.stopPropagation()}>
+        <TableCell className={cn(PIN.actions, 'text-center')} onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1.5">
             {r.shipment && !r.shipment.confirmed && (
               <Button size="sm" variant="outline" disabled={confirming[r.routeId + 'ship']} onClick={() => onConfirm(r.routeId, 'ship')}>
@@ -776,7 +776,7 @@ function ShipmentsPageModern() {
                         <TableHead className="truncate">Кто принял</TableHead>
                         <SortableHead label="Дата прин." sortKey="receivedAt" sort={sort} onSort={toggleSort} />
                         <SortableHead label="Разница" sortKey="diff" sort={sort} onSort={toggleSort} className={GROUP_START} />
-                        <TableHead className={cn(PIN_HEAD.actions, 'text-right')}>Действия</TableHead>
+                        <TableHead className={cn(PIN_HEAD.actions, 'text-center')}>Действия</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

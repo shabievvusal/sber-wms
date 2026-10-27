@@ -150,7 +150,7 @@ export function TsdManualEmployeesCard() {
                 <tr key={row.id} className={trCls}>
                   <td className="px-1 py-1.5"><EditableCell value={row.fio} placeholder="ФИО" className="font-medium" onCommit={v => handleCommit(row, 'fio', v)} /></td>
                   <td className="px-1 py-1.5"><EditableCell value={row.company || ''} placeholder="без компании" onCommit={v => handleCommit(row, 'company', v)} /></td>
-                  <td className="py-1.5 pr-2 text-right">
+                  <td className="py-1.5 pr-2 text-center">
                     <IconAction icon={Trash2} title="Удалить" tone="danger" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => handleDelete(row)} />
                   </td>
                 </tr>

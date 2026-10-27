@@ -330,10 +330,10 @@ export default function StockConsolidationPage() {
                 <TableHead>Адрес МХ</TableHead>
                 <TableHead>Ряд</TableHead>
                 <TableHead>Ярус</TableHead>
-                <TableHead className="text-right">Позиций</TableHead>
-                <TableHead className="text-right">Кол-во, шт</TableHead>
-                <TableHead className="text-right">Вес, кг</TableHead>
-                <TableHead className="text-right">Объём, л</TableHead>
+                <TableHead className="text-center">Позиций</TableHead>
+                <TableHead className="text-center">Кол-во, шт</TableHead>
+                <TableHead className="text-center">Вес, кг</TableHead>
+                <TableHead className="text-center">Объём, л</TableHead>
                 <TableHead>Куда перенести</TableHead>
               </TableRow>
             </TableHeader>
@@ -348,10 +348,10 @@ export default function StockConsolidationPage() {
                       <TableCell className="font-medium">{cell.address}</TableCell>
                       <TableCell>{cell.row || '—'}</TableCell>
                       <TableCell>{cell.tier || '—'}</TableCell>
-                      <TableCell className="text-right">{cell.itemsCount}</TableCell>
-                      <TableCell className="text-right">{fmt(cell.totalQtySku)}</TableCell>
-                      <TableCell className="text-right">{fmt(cell.totalWeightKg)}</TableCell>
-                      <TableCell className="text-right">{fmt(cell.totalVolumeL)}</TableCell>
+                      <TableCell className="text-center">{cell.itemsCount}</TableCell>
+                      <TableCell className="text-center">{fmt(cell.totalQtySku)}</TableCell>
+                      <TableCell className="text-center">{fmt(cell.totalWeightKg)}</TableCell>
+                      <TableCell className="text-center">{fmt(cell.totalVolumeL)}</TableCell>
                       <TableCell className="whitespace-normal">
                         {t?.address ? (
                           <div className="flex items-center gap-1.5">
@@ -385,18 +385,18 @@ export default function StockConsolidationPage() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Товар</TableHead>
-                                <TableHead className="text-right">Кол-во, шт</TableHead>
-                                <TableHead className="text-right">Вес, кг</TableHead>
-                                <TableHead className="text-right">Объём, л</TableHead>
+                                <TableHead className="text-center">Кол-во, шт</TableHead>
+                                <TableHead className="text-center">Вес, кг</TableHead>
+                                <TableHead className="text-center">Объём, л</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {cell.items.map((item, i) => (
                                 <TableRow key={i}>
                                   <TableCell className="whitespace-normal">{item.product}</TableCell>
-                                  <TableCell className="text-right">{fmt(item.qtySku)}</TableCell>
-                                  <TableCell className="text-right">{fmt(item.weightKg)}</TableCell>
-                                  <TableCell className="text-right">{fmt(item.volumeL)}</TableCell>
+                                  <TableCell className="text-center">{fmt(item.qtySku)}</TableCell>
+                                  <TableCell className="text-center">{fmt(item.weightKg)}</TableCell>
+                                  <TableCell className="text-center">{fmt(item.volumeL)}</TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>

@@ -302,7 +302,7 @@ export default function PickingGapsPage() {
                   <TableRow>
                     <TableHead className="w-10" />
                     <TableHead>Товар</TableHead>
-                    <TableHead className="text-right">Заказов</TableHead>
+                    <TableHead className="text-center">Заказов</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -312,7 +312,7 @@ export default function PickingGapsPage() {
                         <Checkbox checked={selectedProducts.has(row.name)} onCheckedChange={() => toggleProduct(row.name)} />
                       </TableCell>
                       <TableCell className="whitespace-normal">{row.name}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.count)}</TableCell>
+                      <TableCell className="text-center">{fmtNum(row.count)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -338,7 +338,7 @@ export default function PickingGapsPage() {
                     <TableHead className="w-10" />
                     <TableHead>ФИО</TableHead>
                     <TableHead>Компания</TableHead>
-                    <TableHead className="text-right">Случаев</TableHead>
+                    <TableHead className="text-center">Случаев</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -351,7 +351,7 @@ export default function PickingGapsPage() {
                           <TableCell>{isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</TableCell>
                           <TableCell className="font-medium">{emp.name}</TableCell>
                           <TableCell>{emp.company}</TableCell>
-                          <TableCell className="text-right">{emp.cases.length}</TableCell>
+                          <TableCell className="text-center">{emp.cases.length}</TableCell>
                         </TableRow>
                         {isOpen && (
                           <TableRow>

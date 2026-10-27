@@ -269,9 +269,9 @@ export default function KdkPlacementPage() {
                     <SortableHead label="Ворота" sortKey="gate" sort={sort} onSort={toggleSort} />
                     <TableHead>ЕО</TableHead>
                     <SortableHead label="Товар" sortKey="product" sort={sort} onSort={toggleSort} />
-                    <SortableHead label="Штук" sortKey="planned" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Вес" sortKey="grams" sort={sort} onSort={toggleSort} className="text-right" />
-                    <SortableHead label="Степов" sortKey="steps" sort={sort} onSort={toggleSort} className="text-right" />
+                    <SortableHead label="Штук" sortKey="planned" sort={sort} onSort={toggleSort} className="text-center" />
+                    <SortableHead label="Вес" sortKey="grams" sort={sort} onSort={toggleSort} className="text-center" />
+                    <SortableHead label="Степов" sortKey="steps" sort={sort} onSort={toggleSort} className="text-center" />
                     <TableHead>Поставщик</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -281,9 +281,9 @@ export default function KdkPlacementPage() {
                       <TableCell>{row.gateName}</TableCell>
                       <TableCell className="font-mono text-xs">{row.barcode}</TableCell>
                       <TableCell className="max-w-[320px] truncate" title={row.names.join(', ')}>{productLabel(row.names)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.planned)}</TableCell>
-                      <TableCell className="text-right">{fmtKg(row.grams)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(row.steps)}</TableCell>
+                      <TableCell className="text-center">{fmtNum(row.planned)}</TableCell>
+                      <TableCell className="text-center">{fmtKg(row.grams)}</TableCell>
+                      <TableCell className="text-center">{fmtNum(row.steps)}</TableCell>
                       <TableCell>{row.supplier || '—'}</TableCell>
                     </TableRow>
                   ))}

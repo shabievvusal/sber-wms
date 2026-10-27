@@ -312,9 +312,9 @@ function ProductsCard({ products, totals, productSearch, setProductSearch, onOpe
               <TableHead>Товар</TableHead>
               <TableHead>Артикул</TableHead>
               <TableHead>Штрихкод</TableHead>
-              <TableHead className="text-right">План</TableHead>
-              <TableHead className="text-right">Факт</TableHead>
-              <TableHead className="text-right">ЕО</TableHead>
+              <TableHead className="text-center">План</TableHead>
+              <TableHead className="text-center">Факт</TableHead>
+              <TableHead className="text-center">ЕО</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -328,9 +328,9 @@ function ProductsCard({ products, totals, productSearch, setProductSearch, onOpe
                   </TableCell>
                   <TableCell className="font-mono text-xs">{p.nomenclatureCode}</TableCell>
                   <TableCell className="font-mono text-xs">{p.productBarcode}</TableCell>
-                  <TableCell className="text-right">{fmtNum(p.plannedQuantity)}</TableCell>
-                  <TableCell className={`text-right ${diff < 0 ? 'text-destructive' : diff > 0 ? 'text-success' : ''}`}>{fmtNum(p.actualQuantity)}</TableCell>
-                  <TableCell className="text-right">{fmtNum(p.handlingUnitQuantity)}</TableCell>
+                  <TableCell className="text-center">{fmtNum(p.plannedQuantity)}</TableCell>
+                  <TableCell className={`text-center ${diff < 0 ? 'text-destructive' : diff > 0 ? 'text-success' : ''}`}>{fmtNum(p.actualQuantity)}</TableCell>
+                  <TableCell className="text-center">{fmtNum(p.handlingUnitQuantity)}</TableCell>
                 </TableRow>
               )
             })}
@@ -342,9 +342,9 @@ function ProductsCard({ products, totals, productSearch, setProductSearch, onOpe
             <tfoot>
               <TableRow className="bg-muted/30 font-medium hover:bg-muted/30">
                 <TableCell colSpan={3}>Итого</TableCell>
-                <TableCell className="text-right">{fmtNum(totals.planned)}</TableCell>
-                <TableCell className="text-right">{fmtNum(totals.actual)}</TableCell>
-                <TableCell className="text-right">{fmtNum(totals.units)}</TableCell>
+                <TableCell className="text-center">{fmtNum(totals.planned)}</TableCell>
+                <TableCell className="text-center">{fmtNum(totals.actual)}</TableCell>
+                <TableCell className="text-center">{fmtNum(totals.units)}</TableCell>
               </TableRow>
             </tfoot>
           )}

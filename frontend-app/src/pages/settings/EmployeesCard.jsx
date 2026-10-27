@@ -136,7 +136,7 @@ const DesktopRow = memo(function DesktopRow({ row, state, onChange, onDelete, ch
       <td className="px-2 py-1.5">
         <AccountBadge check={check} busy={checkBusy} onRecheck={() => onRecheck(row._id)} />
       </td>
-      <td className="py-1.5 pr-3 pl-1 text-right">
+      <td className="py-1.5 pr-3 pl-1 text-center">
         <button
           type="button"
           onClick={() => onDelete(row._id)}

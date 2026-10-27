@@ -83,13 +83,14 @@ export function addTable(ws, columns, data, { total = null, freezeCols = 0 } = {
     row.eachCell({ includeEmpty: true }, (cell, i) => {
       cell.border = BORDER
       const fmt = columns[i - 1]?.numFmt
-      if (fmt) cell.numFmt = fmt
+      // числа — по центру колонки, под заголовком
+      if (fmt) { cell.numFmt = fmt; cell.alignment = { horizontal: 'center' } }
     })
   }
   if (total) {
     const row = ws.addRow(columns.map(c => total[c.key] ?? null))
     row.eachCell({ includeEmpty: true }, (cell, i) => {
-      cell.style = { font: { bold: true }, fill: TOTAL_FILL, border: BORDER, numFmt: columns[i - 1]?.numFmt }
+      cell.style = { font: { bold: true }, fill: TOTAL_FILL, border: BORDER, numFmt: columns[i - 1]?.numFmt, alignment: columns[i - 1]?.numFmt ? { horizontal: 'center' } : undefined }
     })
   }
   columns.forEach((c, i) => { ws.getColumn(i + 1).width = c.width ?? 12 })
@@ -146,6 +147,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
       r.getCell(1).border = BORDER
       r.getCell(2).border = BORDER
       r.getCell(2).numFmt = fmt
+      r.getCell(2).alignment = { horizontal: 'center' }
       r.getCell(2).font = { bold: true }
     }
     ws.addRow([])
@@ -159,7 +161,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
       for (const g of groups.sort((a, b) => b.deliveries - a.deliveries)) {
         const r = ws.addRow([labelFn(g.key), g.deliveries, share(g.deliveries, totals.deliveries), g.eo, g.pieces, kg(g.grams), g.discrepancy])
         r.eachCell({ includeEmpty: true }, c => { c.border = BORDER })
-        ;[NUM, PCT, NUM, NUM, KG, NUM].forEach((f, i) => { r.getCell(i + 2).numFmt = f })
+        ;[NUM, PCT, NUM, NUM, KG, NUM].forEach((f, i) => { r.getCell(i + 2).numFmt = f; r.getCell(i + 2).alignment = { horizontal: 'center' } })
       }
       ws.addRow([])
     }

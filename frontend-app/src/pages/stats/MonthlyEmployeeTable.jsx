@@ -268,10 +268,10 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
                   <SortableHead label="Дата" sortKey="date" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={thCls} />
                   <SortableHead label="Компания" sortKey="company" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={thCls} />
                   <SortableHead label="ФИО" sortKey="name" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={thCls} />
-                  <SortableHead label={totalLabel} sortKey="total" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-right`} />
-                  <SortableHead label="В работе" sortKey="worked" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-right`} />
-                  <SortableHead label={rateHourLabel} sortKey="szPerHour" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-right`} />
-                  <SortableHead label={rateMinLabel} sortKey="szPerMin" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-right`} />
+                  <SortableHead label={totalLabel} sortKey="total" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-center`} />
+                  <SortableHead label="В работе" sortKey="worked" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-center`} />
+                  <SortableHead label={rateHourLabel} sortKey="szPerHour" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-center`} />
+                  <SortableHead label={rateMinLabel} sortKey="szPerMin" sort={{ key: sortCol, dir: sortDir }} onSort={toggleSort} className={`${thCls} text-center`} />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -280,10 +280,10 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
                     <TableCell className={tdCls}>{fmtDate(r.date)}</TableCell>
                     <TableCell className={`${tdCls} text-muted-foreground`}>{r.company}</TableCell>
                     <TableCell className={`${tdCls} font-medium`}>{r.name}</TableCell>
-                    <TableCell className={`${tdCls} text-right`}>{r.total}</TableCell>
-                    <TableCell className={`${tdCls} text-right`}>{fmtWorked(r.workedMinutes)}</TableCell>
-                    <TableCell className={`${tdCls} text-right`}>{r.szPerHour ?? '—'}</TableCell>
-                    <TableCell className={`${tdCls} text-right`}>{r.szPerMin ?? '—'}</TableCell>
+                    <TableCell className={`${tdCls} text-center`}>{r.total}</TableCell>
+                    <TableCell className={`${tdCls} text-center`}>{fmtWorked(r.workedMinutes)}</TableCell>
+                    <TableCell className={`${tdCls} text-center`}>{r.szPerHour ?? '—'}</TableCell>
+                    <TableCell className={`${tdCls} text-center`}>{r.szPerMin ?? '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

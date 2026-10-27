@@ -215,14 +215,14 @@ export function OpsPeriodStats({ operation, exportRef }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {columns[view].map(c => <SortableHead key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={handleSort} className={thCls} />)}
+                  {columns[view].map(c => <SortableHead key={c.key} label={c.label} sortKey={c.key} sort={sort} onSort={handleSort} className={`${thCls}${c.text || c.date ? "" : " text-center"}`} />)}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sorted.map((r, i) => (
                   <TableRow key={r.date || r.cell || r.name || r.company || i}>
                     {columns[view].map(c => (
-                      <TableCell key={c.key} className={`${tdCls} ${c.text ? '' : 'text-right tabular-nums'} ${c.key === 'name' || c.key === 'date' || c.key === 'cell' ? 'font-medium' : ''}`}>
+                      <TableCell key={c.key} className={`${tdCls} ${c.text ? '' : 'text-center tabular-nums'} ${c.key === 'name' || c.key === 'date' || c.key === 'cell' ? 'font-medium' : ''}`}>
                         {c.fmt ? c.fmt(r[c.key]) : (r[c.key] ?? '—')}
                       </TableCell>
                     ))}
