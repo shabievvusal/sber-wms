@@ -720,6 +720,32 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
   }
 }
 
+// ─── Факт по графику поставок ───────────────────────────────────────────────
+// Задания приёмки вокруг даты графика: плановое прибытие ±1 день и
+// завершённые в смены этой даты (до 12:00 следующего дня). Объединение по id;
+// сверка с графиком — по номеру заказа (orderNumber).
+export async function fetchInboundAroundDate(token, date) {
+  const day = d => new Date(`${d}T00:00:00+03:00`)
+  const shift = (d, days) => new Date(day(d).getTime() + days * 86400000)
+  const queries = [
+    { dateFrom: shift(date, -1).toISOString(), dateTo: new Date(shift(date, 2).getTime() - 1).toISOString() },
+    { completedDateFrom: day(date).toISOString(), completedDateTo: new Date(shift(date, 1).getTime() + 12 * 3600000).toISOString() },
+  ]
+  const byId = new Map()
+  for (const q of queries) {
+    let page = 1
+    for (;;) {
+      const res = await getInboundTasks(getStoredToken() || token, { ...q, pageNumber: page, pageSize: 100 })
+      const items = res?.value?.items || []
+      for (const it of items) byId.set(it.id, it)
+      const total = res?.value?.total ?? items.length
+      if (page * 100 >= total || !items.length) break
+      page++
+    }
+  }
+  return [...byId.values()]
+}
+
 // ─── Переводы ЕО в ЗГЗ (поиск потерянных ЕО) ───────────────────────────────
 // stocks/changes, MOVE_TO_READY_ORDERS_ZONE: строка — товар в ЕО (ЕО одна и
 // та же у источника и назначения), источник — ячейка КДК, назначение — ЗГЗ.

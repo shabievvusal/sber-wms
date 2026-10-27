@@ -3,7 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import {
-  BarChart2, Monitor, ScanBarcode, ScanSearch, Package,
+  BarChart2, Monitor, ScanBarcode, ScanSearch, Package, CalendarClock,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
   ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
 } from 'lucide-react'
@@ -48,6 +48,7 @@ export const NAV_ITEMS = [
   },
   { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },
   { key: 'supplies', Icon: PackageSearch, label: 'Поставки', page: 'supplies', module: 'supplies' },
+  { key: 'supply-plan', Icon: CalendarClock, label: 'График поставок', page: 'supply-plan', module: 'supplies' },
   { key: 'reports', Icon: ClipboardList, label: 'Отчёты', page: 'reports', module: 'reports' },
   { key: 'stock-consolidation', Icon: Combine, label: 'Объединение остатков', page: 'stock-consolidation', module: 'stock_consolidation' },
   { key: 'violations', Icon: AlertTriangle, label: 'Нарушения', page: 'violations', module: 'violations' },

@@ -23,6 +23,7 @@ const emplPg = process.env.USE_PG === 'true' ? require('./empl-pg') : null;
 const tsdPg = process.env.USE_PG === 'true' ? require('./tsd-pg') : null;
 const motivationPg = process.env.USE_PG === 'true' ? require('./motivation-pg') : null;
 const wmsOpsPg = process.env.USE_PG === 'true' ? require('./wms-ops-pg') : null;
+const supplyPlansPg = process.env.USE_PG === 'true' ? require('./supply-plans-pg') : null;
 const s3Storage = require('./s3');
 const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
@@ -1352,6 +1353,54 @@ app.delete('/api/vs/admin/product-weights', vsSessionRequired, vsAdminRequired, 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── График поставок (supply-plans-pg.js) ────────────────────────────────────
+// Excel из корп. почты или накопительный отчёт делопроизводителей — разбор
+// в отдельном потоке (supply-plans-worker.js), строки заменяют свои даты.
+function parseSupplyPlansInWorker(buffer) {
+  const { Worker } = require('worker_threads');
+  return new Promise((resolve, reject) => {
+    const w = new Worker(path.join(__dirname, 'supply-plans-worker.js'), { workerData: buffer });
+    w.once('message', m => (m.error ? reject(new Error(m.error)) : resolve(m.rows)));
+    w.once('error', reject);
+  });
+}
+
+// накопительный отчёт за полтора года весит ~25 МБ — общего лимита 20 МБ мало
+const uploadSupplyPlans = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
+
+app.post('/api/supply-plans/upload', vsSessionRequired, uploadSupplyPlans.single('file'), async (req, res) => {
+  try {
+    if (!supplyPlansPg) return res.status(501).json({ error: 'Нужен Postgres (USE_PG=true)' });
+    if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
+    const rows = await parseSupplyPlansInWorker(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ error: 'В файле не найден график: нужны колонки «Дата» и «Номер заказа»' });
+    res.json({ ok: true, ...(await supplyPlansPg.saveRows(rows)) });
+  } catch (err) {
+    console.error('POST /api/supply-plans/upload', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/supply-plans/dates', vsSessionRequired, async (req, res) => {
+  try { res.json(await supplyPlansPg.listDates()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/supply-plans/kdk-history', vsSessionRequired, async (req, res) => {
+  try {
+    const days = Math.min(400, Math.max(14, parseInt(req.query.days, 10) || 120));
+    res.json(await supplyPlansPg.kdkHistory(days));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/supply-plans', vsSessionRequired, async (req, res) => {
+  try {
+    const date = String(req.query.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Нужна дата YYYY-MM-DD' });
+    res.json({ date, rows: await supplyPlansPg.getDay(date) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/empl', async (req, res) => {
@@ -4344,6 +4393,7 @@ async function startServer() {
     await wmsOpsPg.init();
     await vsAuth.init();
     await productWeights.initPg();
+    await supplyPlansPg.init();
     console.log('[pg] PostgreSQL готов');
   }
   app.listen(PORT, '0.0.0.0', () => {

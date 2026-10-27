@@ -1,0 +1,121 @@
+// Расчёты «Графика поставок»: итоги плана, сверка с WMS по номеру заказа,
+// прогноз СЗ КДК по истории. Без React — проверяется отдельно.
+
+export const SUPPLY_GROUPS = [
+  { key: 'kdk', label: 'КДК (кросс-докинг)', match: t => /кросс/i.test(t) },
+  { key: 'storage', label: 'Хранение', match: t => /хранен/i.test(t) },
+]
+export const STORAGE_ORDER = ['Сухой', 'Средний холод', 'Низкий холод']
+
+const ACCEPTED = new Set(['COMPLETED_AS_PLANNED', 'COMPLETED_WITH_DISCREPANCY'])
+
+export const groupOf = supplyType => SUPPLY_GROUPS.find(g => g.match(supplyType || ''))?.key || 'other'
+
+const emptyTotals = () => ({ count: 0, pieces: 0, weightKg: 0, sku: 0 })
+const add = (t, r) => { t.count += 1; t.pieces += r.pieces; t.weightKg += r.weightKg; t.sku += r.sku }
+
+// Итоги: всего, по группе (КДК/хранение) и группа × тип хранения.
+export function summarize(rows) {
+  const total = emptyTotals()
+  const groups = {}
+  for (const r of rows) {
+    add(total, r)
+    const g = groupOf(r.supplyType)
+    groups[g] = groups[g] || { totals: emptyTotals(), byStorage: {} }
+    add(groups[g].totals, r)
+    const st = r.storageType || '—'
+    groups[g].byStorage[st] = groups[g].byStorage[st] || emptyTotals()
+    add(groups[g].byStorage[st], r)
+  }
+  return { total, groups }
+}
+
+export const storageKeys = byStorage => Object.keys(byStorage)
+  .sort((a, b) => (STORAGE_ORDER.indexOf(a) + 1 || 99) - (STORAGE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b, 'ru'))
+
+// Сверка плана с заданиями WMS по номеру заказа.
+//  status: accepted | discrepancy | inProgress | missing; факт — только у принятых.
+//  extra — принятые в смены даты задания, которых нет в графике.
+export function reconcile(planRows, tasks, date) {
+  const byOrder = new Map()
+  for (const t of tasks) {
+    if (!t.orderNumber) continue
+    const cur = byOrder.get(t.orderNumber)
+    // одним заказом бывает несколько заданий — предпочитаем принятое
+    if (!cur || (!ACCEPTED.has(cur.status) && ACCEPTED.has(t.status))) byOrder.set(t.orderNumber, t)
+  }
+  const factOf = t => ({
+    pieces: Number(t.actualQuantities?.pieceProducts) || 0,
+    weightKg: (Number(t.actualTotalWeight) || 0) / 1000,
+    sku: Number(t.productsQuantity) || 0,
+  })
+  const planOrders = new Set(planRows.map(r => r.orderNumber))
+  const rows = planRows.map(r => {
+    const t = byOrder.get(r.orderNumber)
+    const status = !t ? 'missing' : t.status === 'COMPLETED_AS_PLANNED' ? 'accepted' : t.status === 'COMPLETED_WITH_DISCREPANCY' ? 'discrepancy' : 'inProgress'
+    return { ...r, task: t || null, status, wmsStatus: t?.status || null, fact: ACCEPTED.has(t?.status) ? factOf(t) : null, completedAt: t?.completedAt || null, gate: t?.gateInfo?.gateNumber || '' }
+  })
+  // вне графика: принятые с завершением в смены даты (09:00 даты → 09:00 следующей)
+  const from = new Date(`${date}T09:00:00+03:00`).getTime()
+  const to = from + 24 * 3600000
+  const extra = tasks
+    .filter(t => ACCEPTED.has(t.status) && t.completedAt && !planOrders.has(t.orderNumber))
+    .filter(t => { const c = new Date(t.completedAt).getTime(); return c >= from && c < to })
+    .map(t => ({ orderNumber: t.orderNumber || '—', supplier: t.supplier?.name || '', supplyType: t.type, storageType: t.temperatureMode, task: t, status: 'extra', fact: factOf(t), completedAt: t.completedAt, gate: t.gateInfo?.gateNumber || '' }))
+  return { rows, extra }
+}
+
+// Итоги факта (принятые из графика + вне графика) в разрезе КДК/хранение.
+export function summarizeFact(rows, extra) {
+  const accepted = rows.filter(r => r.fact)
+  const map = r => ({ ...r, pieces: r.fact.pieces, weightKg: r.fact.weightKg, sku: r.fact.sku })
+  // у заданий вне графика тип поставки в кодах WMS: CROSSDOCK → кросс-докинг
+  const extraRows = extra.map(e => ({ ...map(e), supplyType: e.supplyType === 'CROSSDOCK' ? 'Кросс-докинг' : 'Хранение', storageType: { ORDINARY: 'Сухой', MEDIUM_COLD: 'Средний холод', LOW_COLD: 'Низкий холод' }[e.storageType] || e.storageType }))
+  return summarize([...accepted.map(map), ...extraRows])
+}
+
+export const pct = (fact, plan) => (plan ? (fact - plan) / plan : null)
+
+// ── Прогноз СЗ КДК ──────────────────────────────────────────────────────────
+// История: план кросс-дока по дням × фактические СЗ КДК по дате смены.
+// Перебираем показатель (SKU / штуки / поставки) и сдвиг (СЗ в тот же день
+// или на следующий) — берём пару с наименьшей ошибкой на последних днях.
+// Прогноз = медиана «СЗ на единицу показателя» × план выбранной даты.
+const median = a => { const s = [...a].sort((x, y) => x - y); const n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null }
+const nextDay = (d, k) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10) }
+
+export function forecastKdk(history, date, plan) {
+  const plans = new Map((history?.plans || []).map(p => [p.date, p]))
+  const picks = new Map((history?.picks || []).map(p => [p.date, p.tasks]))
+  const metrics = [
+    { key: 'sku', label: 'SKU кросс-дока' },
+    { key: 'pieces', label: 'штуки кросс-дока' },
+    { key: 'deliveries', label: 'поставки кросс-дока' },
+  ]
+  let best = null
+  for (const m of metrics) {
+    for (const lag of [0, 1]) {
+      const pairs = []
+      for (const [d, p] of plans) {
+        if (d >= date) continue
+        const tasks = picks.get(nextDay(d, lag))
+        if (tasks > 0 && p[m.key] > 0) pairs.push({ d, x: p[m.key], y: tasks })
+      }
+      pairs.sort((a, b) => (a.d < b.d ? 1 : -1))
+      const recent = pairs.slice(0, 28)
+      if (recent.length < 7) continue
+      const k = median(recent.map(p => p.y / p.x))
+      const err = median(recent.map(p => Math.abs(k * p.x - p.y) / p.y))
+      if (!best || err < best.err) best = { metric: m, lag, k, err, days: recent.length }
+    }
+  }
+  if (!best) return { ok: false, days: Math.min(plans.size, picks.size) }
+  const x = plan[best.metric.key]
+  return { ok: true, value: Math.round(best.k * x), ...best, x, shiftDate: nextDay(date, best.lag) }
+}
+
+// План кросс-дока даты в форме истории (для прогноза).
+export const kdkPlanOf = rows => {
+  const kdk = rows.filter(r => groupOf(r.supplyType) === 'kdk')
+  return { deliveries: kdk.length, sku: kdk.reduce((s, r) => s + r.sku, 0), pieces: kdk.reduce((s, r) => s + r.pieces, 0) }
+}
