@@ -419,6 +419,14 @@ export async function getSupplyPlan(date) {
 export async function getKdkHistory(days = 120) {
   return req(`/api/supply-plans/kdk-history?days=${days}`)
 }
+// сверка дня с WMS (заказы графика + вне графика) — заменяет прежнюю за дату
+export async function saveSupplyFacts(date, rows) {
+  return req('/api/supply-plans/facts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, rows }) })
+}
+// план + сохранённый факт + итоги накопительного отчёта за период
+export async function getSupplyRange(from, to) {
+  return req(`/api/supply-plans/range?from=${from}&to=${to}`)
+}
 
 export async function deleteProductWeightsExcel() {
   return req('/api/vs/admin/product-weights', { method: 'DELETE' })
@@ -575,6 +583,16 @@ export async function getZgzCount(dateFrom, dateTo) {
   if (dateTo) params.set('dateTo', dateTo)
   return req(`/api/zgz/count?${params}`)
 }
+// журнал найденных ЕО («Нашли» на карточке ЕО)
+export async function addZgzFound(row) {
+  return req('/api/zgz/found', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) })
+}
+export async function getZgzFound(from, to) {
+  return req(`/api/zgz/found?${new URLSearchParams({ from, to })}`)
+}
+export async function deleteZgzFound(id) {
+  return req('/api/zgz/found/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+}
 export async function deleteZgz(dateFrom, dateTo) {
   return req('/api/zgz/delete', {
     method: 'POST',
@@ -589,6 +607,19 @@ export async function getOpReport(op, dateFrom, dateTo, shift) {
   const params = new URLSearchParams({ dateFrom, dateTo })
   if (shift) params.set('shift', shift)
   return req(`/api/stats/report/${op}?${params}`)
+}
+
+// Расстановка товара: строки штучного отбора по ячейке × товару за период
+export async function getSlotting(dateFrom, dateTo) {
+  return req(`/api/stats/slotting?${new URLSearchParams({ dateFrom, dateTo })}`)
+}
+
+// Выработка «сотрудник × смена» (units, qty, grams, hours) — итоги смены и нормы.
+// op: receiving | placement | movedown | refill | kdk | piece; shift пустой — обе смены.
+export async function getWorkload(op, dateFrom, dateTo, shift) {
+  const params = new URLSearchParams({ op, dateFrom, dateTo })
+  if (shift) params.set('shift', shift)
+  return req(`/api/stats/workload?${params}`)
 }
 
 // Приёмка построчно за период (вкладка «За период»); shift пустой — обе смены.

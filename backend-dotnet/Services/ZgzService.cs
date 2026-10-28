@@ -179,6 +179,45 @@ public class ZgzService
         return q;
     }
 
+    // ── Журнал найденных ЕО ─────────────────────────────────────────────────
+    public async Task<long> AddFoundAsync(ZgzFoundRequest r, string foundBy)
+    {
+        var p = new object[]
+        {
+            new NpgsqlParameter("wh", _db.WarehouseId),
+            new NpgsqlParameter("hu", r.Hu!.Trim()),
+            new NpgsqlParameter("by", foundBy),
+            new NpgsqlParameter("fc", (r.FoundCell ?? "").Trim()),
+            new NpgsqlParameter("sc", r.SourceCell ?? ""),
+            new NpgsqlParameter("tc", r.TargetCell ?? ""),
+            new NpgsqlParameter("st", r.Store ?? ""),
+            new NpgsqlParameter("ma", NpgsqlDbType.TimestampTz) { Value = r.MovedAt is { } m ? DateTime.SpecifyKind(m, DateTimeKind.Utc) : DBNull.Value },
+            new NpgsqlParameter("mv", r.Mover ?? ""),
+            new NpgsqlParameter("pk", r.Pickers ?? ""),
+            new NpgsqlParameter("it", r.Items ?? 0),
+            new NpgsqlParameter("nt", (r.Note ?? "").Trim()),
+        };
+        var ids = await _db.Database.SqlQueryRaw<long>(@"
+            INSERT INTO zgz_found (warehouse_id, hu, found_by, found_cell, source_cell, target_cell, store, moved_at, mover, pickers, items, note)
+            VALUES (@wh, @hu, @by, @fc, @sc, @tc, @st, @ma, @mv, @pk, @it, @nt) RETURNING id AS ""Value""", p).ToListAsync();
+        return ids[0];
+    }
+
+    // за даты находки (МСК), включительно
+    public Task<List<ZgzFoundRow>> ListFoundAsync(DateOnly from, DateOnly to) =>
+        _db.Database.SqlQueryRaw<ZgzFoundRow>(@"
+            SELECT id AS ""Id"", hu AS ""Hu"", found_at AS ""FoundAt"", found_by AS ""FoundBy"", found_cell AS ""FoundCell"",
+                   source_cell AS ""SourceCell"", target_cell AS ""TargetCell"", store AS ""Store"", moved_at AS ""MovedAt"",
+                   mover AS ""Mover"", pickers AS ""Pickers"", items AS ""Items"", note AS ""Note""
+              FROM zgz_found
+             WHERE warehouse_id = @wh AND (found_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN @f AND @t
+             ORDER BY found_at DESC",
+            new NpgsqlParameter("wh", _db.WarehouseId), new NpgsqlParameter("f", from), new NpgsqlParameter("t", to)).ToListAsync();
+
+    public Task<int> DeleteFoundAsync(long id) =>
+        _db.Database.ExecuteSqlRawAsync("DELETE FROM zgz_found WHERE warehouse_id = @wh AND id = @id",
+            new NpgsqlParameter("wh", _db.WarehouseId), new NpgsqlParameter("id", id));
+
     public Task<int> CountAsync(string? dateFrom, string? dateTo) => InRange(dateFrom, dateTo).CountAsync();
     public Task<int> DeleteAsync(string? dateFrom, string? dateTo) => InRange(dateFrom, dateTo).ExecuteDeleteAsync();
 }

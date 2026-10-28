@@ -45,6 +45,44 @@ public class ZgzRow
     public DateTime? CompletedAt { get; set; }
 }
 
+// Журнал найденных ЕО (zgz_found): POST /api/zgz/found и выдача списка.
+public class ZgzFoundRequest
+{
+    public string? Hu { get; set; }
+    public string? FoundCell { get; set; }
+    public string? SourceCell { get; set; }
+    public string? TargetCell { get; set; }
+    public string? Store { get; set; }
+    public DateTime? MovedAt { get; set; }
+    public string? Mover { get; set; }
+    // отборщики через «, »
+    public string? Pickers { get; set; }
+    public int? Items { get; set; }
+    public string? Note { get; set; }
+}
+
+public class ZgzFoundRow
+{
+    public long Id { get; set; }
+    public string Hu { get; set; } = "";
+    public DateTime FoundAt { get; set; }
+    public string FoundBy { get; set; } = "";
+    public string FoundCell { get; set; } = "";
+    public string SourceCell { get; set; } = "";
+    public string TargetCell { get; set; } = "";
+    public string Store { get; set; } = "";
+    public DateTime? MovedAt { get; set; }
+    public string Mover { get; set; } = "";
+    public string Pickers { get; set; } = "";
+    public int Items { get; set; }
+    public string Note { get; set; } = "";
+}
+
+public class ZgzFoundDeleteRequest
+{
+    public long Id { get; set; }
+}
+
 public class ZgzDeleteRequest
 {
     // пусто — удалить всё (по складу)

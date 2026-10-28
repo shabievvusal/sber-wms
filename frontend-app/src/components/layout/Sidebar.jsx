@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, ScanSearch, Package, CalendarClock,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle,
+  ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle, Gauge, MoveDiagonal,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -31,6 +31,7 @@ const spring = { type: 'spring', stiffness: 500, damping: 40 }
 // (Layout.jsx's NAV_ITEMS + hasModuleAccess, App.jsx's ModuleRoute).
 export const NAV_ITEMS = [
   { key: 'stats', Icon: BarChart2, label: 'Статистика', page: 'stats', module: 'stats' },
+  { key: 'shift-summary', Icon: Gauge, label: 'Итоги смены', page: 'shift-summary', module: 'stats' },
   { key: 'monitor', Icon: Monitor, label: 'Мониторинг', page: 'monitor', module: 'monitor' },
   { key: 'motivation', Icon: Award, label: 'Мотивация', page: 'motivation', module: 'motivation' },
   { key: 'tsd', Icon: ScanBarcode, label: 'Выдача ТСД', page: 'tsd', module: 'tsd' },
@@ -44,6 +45,7 @@ export const NAV_ITEMS = [
       { key: 'picking-eo', Icon: ScanBarcode, label: 'Поиск ЕО', page: 'picking-eo', module: 'picking' },
       { key: 'picking-lost-eo', Icon: ScanSearch, label: 'Поиск потеряшек', page: 'picking-lost-eo', module: 'picking' },
       { key: 'picking-gaps', Icon: AlertTriangle, label: 'Пропуски в отборе', page: 'picking-gaps', module: 'picking' },
+      { key: 'picking-slotting', Icon: MoveDiagonal, label: 'Расстановка товара', page: 'picking-slotting', module: 'picking' },
     ],
   },
   { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },

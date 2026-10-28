@@ -9,8 +9,9 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
-import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
-import { SUPPLY_GROUPS, fmtK, forecastKdk, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact } from './supplyPlanCalc'
+import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp, Users } from 'lucide-react'
+import { SUPPLY_GROUPS, fmtK, forecastKdk, forecastReceivers, fromFactRows, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact, toFactRows } from './supplyPlanCalc'
+import SupplyPeriodPanel from './SupplyPeriodPanel'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
 import { SUPPLY_IMAGES, copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -66,6 +67,27 @@ function Kpi({ label, plan, fact }) {
 // накопительного отчёта), разбивка КДК/хранение × тип хранения, сверка с
 // WMS по номеру заказа, прогноз СЗ КДК по истории и выгрузка в Excel.
 export default function SupplyPlanPage() {
+  const [tab, setTab] = useState('day')
+  return (
+    <div className="mx-auto w-full space-y-4 p-6">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">График поставок</h1>
+          <p className="text-sm text-muted-foreground">План приёмки из графика поставок, сверка с WMS по номеру заказа, прогноз СЗ КДК, накопительный отчёт и рейтинг поставщиков</p>
+        </div>
+        <div className="ml-auto flex rounded-full border border-line bg-card p-0.5">
+          {[['day', 'День'], ['period', 'Период']].map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setTab(k)}
+              className={cn('rounded-full px-4 py-1.5 text-sm', tab === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {tab === 'day' ? <SupplyDay /> : <SupplyPeriodPanel />}
+    </div>
+  )
+}
+
+function SupplyDay() {
   const [date, setDate] = useState(tomorrow())
   const [dates, setDates] = useState(null)
   const [plan, setPlan] = useState(null)
@@ -74,6 +96,7 @@ export default function SupplyPlanPage() {
   const [checking, setChecking] = useState(false)
   const [recon, setRecon] = useState(null) // { rows, extra, at }
   const [history, setHistory] = useState(null)
+  const [recvHistory, setRecvHistory] = useState(null) // { plans, work } — для прогноза приёмщиков
   const [groupFilter, setGroupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
@@ -84,11 +107,28 @@ export default function SupplyPlanPage() {
   useEffect(() => {
     loadDates()
     api.getKdkHistory(180).then(setHistory).catch(() => {})
+    // 75 дней истории: план по дням + сколько приёмщиков работало
+    const today = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10)
+    const from = new Date(Date.parse(`${today}T00:00:00Z`) - 75 * 86400000).toISOString().slice(0, 10)
+    Promise.all([api.getSupplyRange(from, today), api.getWorkload('receiving', from, today)])
+      .then(([range, work]) => setRecvHistory({ plans: range.plans, work: work.rows || [] }))
+      .catch(() => setRecvHistory({ plans: [], work: [] }))
   }, [])
   useEffect(() => {
     setRecon(null)
     setLoading(true)
-    api.getSupplyPlan(date).then(r => setPlan(r.rows || [])).catch(err => { setPlan([]); toast.error(err.message) }).finally(() => setLoading(false))
+    let alive = true
+    Promise.all([api.getSupplyPlan(date), api.getSupplyRange(date, date).catch(() => null)])
+      .then(([r, range]) => {
+        if (!alive) return
+        const rows = r.rows || []
+        setPlan(rows)
+        // день уже сверяли — показываем сохранённую сверку без запроса в WMS
+        setRecon(fromFactRows(rows, range?.facts))
+      })
+      .catch(err => { if (alive) { setPlan([]); toast.error(err.message) } })
+      .finally(() => alive && setLoading(false))
+    return () => { alive = false }
   }, [date])
 
   const handleUpload = async e => {
@@ -98,7 +138,7 @@ export default function SupplyPlanPage() {
     setUploading(true)
     try {
       const res = await api.uploadSupplyPlans(file)
-      toast.success(`График загружен: ${res.dates} дн. (${fmtDate(res.from)} — ${fmtDate(res.to)}), заказов ${res.rows.toLocaleString('ru-RU')}`)
+      toast.success(`График загружен: ${res.dates} дн. (${fmtDate(res.from)} — ${fmtDate(res.to)}), заказов ${res.rows.toLocaleString('ru-RU')}${res.dayFacts ? `, итогов факта из «статистики»: ${res.dayFacts}` : ''}`)
       await loadDates()
       const r = await api.getSupplyPlan(date)
       setPlan(r.rows || [])
@@ -116,7 +156,10 @@ export default function SupplyPlanPage() {
     setChecking(true)
     try {
       const tasks = await fetchInboundAroundDate(token, date)
-      setRecon({ ...reconcile(plan, tasks, date), at: new Date() })
+      const res = reconcile(plan, tasks, date)
+      setRecon({ ...res, at: new Date() })
+      // сохраняем — для накопительного отчёта и рейтинга поставщиков
+      api.saveSupplyFacts(date, toFactRows(res)).catch(err => toast.error('Сверка не сохранилась: ' + err.message))
     } catch (err) {
       toast.error('Не удалось сверить с WMS: ' + err.message)
     } finally {
@@ -127,6 +170,7 @@ export default function SupplyPlanPage() {
   const planSum = useMemo(() => summarize(plan || []), [plan])
   const factSum = useMemo(() => (recon ? summarizeFact(recon.rows, recon.extra) : null), [recon])
   const forecast = useMemo(() => (plan?.length ? forecastKdk(history, date, kdkPlanOf(plan)) : null), [history, date, plan])
+  const recvForecast = useMemo(() => (plan?.length && recvHistory ? forecastReceivers(recvHistory.plans, recvHistory.work, date, planSum.total) : null), [recvHistory, date, plan, planSum])
 
   const statusCounts = useMemo(() => {
     if (!recon) return null
@@ -177,11 +221,7 @@ export default function SupplyPlanPage() {
   }
 
   return (
-    <div className="mx-auto w-full space-y-4 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">График поставок</h1>
-        <p className="text-sm text-muted-foreground">План приёмки на день из графика поставок, сверка с WMS по номеру заказа и прогноз СЗ КДК</p>
-      </div>
+    <div className="space-y-4">
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card p-3 shadow-card">
         <DatePicker className="h-9 w-44" value={date} onChange={e => setDate(e.target.value)} />
@@ -220,7 +260,7 @@ export default function SupplyPlanPage() {
       {dates && (
         <div className="-mt-2 text-xs text-muted-foreground">
           {dates.totalDays ? `В базе графиков: ${dates.totalDays} дн. с ${fmtDate(String(dates.firstDate).slice(0, 10))}` : 'Графиков пока нет — загрузите файл из почты (можно и накопительный отчёт целиком)'}
-          {recon && ` · сверено с WMS в ${recon.at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`}
+          {recon?.at && ` · сверено с WMS ${recon.saved ? recon.at.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'в ' + recon.at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`}
         </div>
       )}
 
@@ -272,6 +312,7 @@ export default function SupplyPlanPage() {
               </Table>
             </div>
 
+            <div className="flex flex-col gap-4">
             <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
               <div className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="size-4 text-primary" /> Прогноз СЗ КДК</div>
               {forecast?.ok ? (
@@ -288,6 +329,26 @@ export default function SupplyPlanPage() {
                   Мало истории: нужны дни, где есть и график, и загруженная комплектация КДК (сейчас {forecast?.days ?? 0}). Загрузите накопительный отчёт и обновите статистику комплектации за прошлые дни.
                 </div>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
+              <div className="flex items-center gap-2 text-sm font-semibold"><Users className="size-4 text-primary" /> Приёмщики на {WEEKDAY_ACC[new Date(`${date}T00:00:00Z`).getUTCDay()]}</div>
+              {!recvHistory ? <div className="mt-2 text-sm text-muted-foreground">Загрузка истории…</div> : recvForecast?.ok ? (
+                <>
+                  <div className="tabular mt-2 text-[32px] font-semibold leading-tight">~{recvForecast.value} чел.</div>
+                  <div className="text-sm text-muted-foreground">день ~{recvForecast.day} · ночь ~{recvForecast.night}</div>
+                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    <div>{fmtNum(recvForecast.x)} {recvForecast.metric.unit} плана, один приёмщик ≈ {fmtNum(recvForecast.perPerson)} {recvForecast.metric.unit}</div>
+                    {recvForecast.perHour != null && <div>выработка ≈ {fmtNum(recvForecast.perHour)} шт в час на человека</div>}
+                    <div>по {recvForecast.days} дням истории · типичная погрешность ±{Math.round(recvForecast.err * 100)}%</div>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Мало истории: нужны дни, где есть и график, и статистика приёмки (сейчас {recvForecast?.days ?? 0}, нужно от 7). Обновите статистику приёмки за прошлые дни.
+                </div>
+              )}
+            </div>
             </div>
           </div>
 

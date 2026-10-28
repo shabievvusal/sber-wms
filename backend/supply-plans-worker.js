@@ -5,7 +5,7 @@ const { parentPort, workerData } = require('worker_threads');
 const { parseWorkbook } = require('./supply-plans-pg');
 
 try {
-  parentPort.postMessage({ rows: parseWorkbook(Buffer.from(workerData)) });
+  parentPort.postMessage(parseWorkbook(Buffer.from(workerData)));
 } catch (err) {
   parentPort.postMessage({ error: err.message });
 }

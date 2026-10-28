@@ -274,6 +274,49 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
+        // Выработка «сотрудник × смена» по операции (StatsService.Workload.cs) —
+        // итог смены и сравнение с нормой. op: receiving, placement, movedown, refill, kdk, piece.
+        app.MapGet("/api/stats/workload", async (string? op, string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
+        {
+            try
+            {
+                if (op == null || !StatsService.WorkloadOps.Contains(op)) return Results.Json(new { error = "Неизвестная операция" }, statusCode: 400);
+                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
+                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
+                var dates = StatsService.GetDateRangeList(from, to);
+                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
+                if (dates.Count > 92) return Results.Json(new { error = "Период не больше 92 дней" }, statusCode: 400);
+                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
+                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
+                if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
+                {
+                    if (normalizedShift != null && normalizedShift != session.ShiftType)
+                        return Results.Json(new { error = "Доступ только к своей смене" }, statusCode: 403);
+                    normalizedShift = session.ShiftType;
+                }
+                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
+                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
+                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
+                var idMap = await svc.GetIdMapAsync();
+                var rows = await svc.GetWorkloadAsync(op, from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
+                return Results.Json(new { op, dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // Расстановка товара по оборачиваемости: строки отбора по ячейке × товару.
+        app.MapGet("/api/stats/slotting", async (string? dateFrom, string? dateTo, StatsService svc) =>
+        {
+            try
+            {
+                if (!DateOnly.TryParse(dateFrom, out var f) || !DateOnly.TryParse(dateTo, out var t) || t < f)
+                    return Results.Json(new { error = "Нужны dateFrom и dateTo (YYYY-MM-DD)" }, statusCode: 400);
+                if (t.DayNumber - f.DayNumber > 92) return Results.Json(new { error = "Период не больше 92 дней" }, statusCode: 400);
+                return Results.Json(new { rows = await svc.GetSlottingAsync(f, t) });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
         // Поставки построчно за период (вкладка «За период» приёмки и её Excel).
         // shift пустой — обе смены каждой даты (09:00 → 09:00 следующего дня).
         app.MapGet("/api/stats/receiving/period-rows", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>

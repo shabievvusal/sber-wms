@@ -129,3 +129,162 @@ export const kdkPlanOf = rows => {
   const kdk = rows.filter(r => groupOf(r.supplyType) === 'kdk')
   return { deliveries: kdk.length, sku: kdk.reduce((s, r) => s + r.sku, 0), pieces: kdk.reduce((s, r) => s + r.pieces, 0) }
 }
+
+// ── Хранение сверки и период ────────────────────────────────────────────────
+// Сверка дня сохраняется на сервере (supply_plan_facts): строки графика со
+// статусом и фактом + «вне графика» (extra). Из сохранённого строится
+// накопительный отчёт и рейтинг поставщиков за период без повторных запросов в WMS.
+const FACT_STATUSES = new Set(['accepted', 'discrepancy'])
+
+export function toFactRows(recon) {
+  const one = (r, extra) => ({
+    orderNumber: r.orderNumber, extra, supplier: r.supplier || '', supplyType: r.supplyType || '', storageType: extra ? r.storageType || '' : '',
+    status: r.status, wmsStatus: r.wmsStatus || r.task?.status || '',
+    factSku: r.fact?.sku ?? null, factPieces: r.fact?.pieces ?? null, factWeightKg: r.fact?.weightKg ?? null,
+    completedAt: r.completedAt || null, gate: r.gate || '',
+  })
+  return [...recon.rows.map(r => one(r, false)), ...recon.extra.map(r => one(r, true))]
+}
+
+const factOfSaved = f => (f.factPieces != null || f.factSku != null ? { sku: f.factSku || 0, pieces: f.factPieces || 0, weightKg: f.factWeightKg || 0 } : null)
+
+// Восстановить сверку дня из сохранённого факта (null — день не сверяли).
+export function fromFactRows(planRows, facts) {
+  if (!facts?.length) return null
+  const byOrder = new Map(facts.filter(f => !f.extra).map(f => [f.orderNumber, f]))
+  const rows = planRows.map(r => {
+    const f = byOrder.get(r.orderNumber)
+    if (!f) return { ...r, status: 'missing', wmsStatus: null, fact: null, completedAt: null, gate: '' }
+    return { ...r, status: f.status || 'missing', wmsStatus: f.wmsStatus || null, fact: FACT_STATUSES.has(f.status) ? factOfSaved(f) : null, completedAt: f.completedAt, gate: f.gate }
+  })
+  const extra = facts.filter(f => f.extra).map(f => ({
+    orderNumber: f.orderNumber, supplier: f.supplier, supplyType: f.supplyType, storageType: f.storageType,
+    status: 'extra', wmsStatus: f.wmsStatus, fact: factOfSaved(f) || { sku: 0, pieces: 0, weightKg: 0 }, completedAt: f.completedAt, gate: f.gate,
+  }))
+  const at = facts.reduce((m, f) => (f.checkedAt && f.checkedAt > m ? f.checkedAt : m), '')
+  return { rows, extra, at: at ? new Date(at) : null, saved: true }
+}
+
+const byDate = list => {
+  const m = new Map()
+  for (const x of list || []) { if (!m.has(x.date)) m.set(x.date, []); m.get(x.date).push(x) }
+  return m
+}
+
+// Итоги по дням периода — лист «статистика» накопительного отчёта.
+// Факт: из сохранённой сверки (принятые + вне графика), иначе — из истории
+// накопительного отчёта (supply_day_facts), иначе пусто.
+export function dayStats({ plans, facts, dayFacts }, from, to) {
+  const planBy = byDate(plans), factBy = byDate(facts)
+  const histBy = new Map((dayFacts || []).map(d => [d.date, d]))
+  const out = []
+  for (let d = from; d <= to; d = nextDay(d, 1)) {
+    const p = planBy.get(d) || [], f = factBy.get(d)
+    const plan = { count: p.length, pieces: 0, weightKg: 0, sku: 0 }
+    for (const r of p) { plan.pieces += r.pieces; plan.weightKg += r.weightKg; plan.sku += r.sku }
+    let fact = null, source = null
+    if (f?.length) {
+      fact = { count: 0, pieces: 0, weightKg: 0, sku: 0 }
+      for (const x of f) {
+        if (!(x.extra || FACT_STATUSES.has(x.status))) continue
+        fact.count++; fact.pieces += x.factPieces || 0; fact.weightKg += x.factWeightKg || 0; fact.sku += x.factSku || 0
+      }
+      source = 'wms'
+    } else if (histBy.has(d)) {
+      const h = histBy.get(d)
+      fact = { count: h.count || 0, pieces: h.pieces || 0, weightKg: h.weightKg || 0, sku: h.sku || 0 }
+      source = 'report'
+    }
+    if (!p.length && !fact) continue
+    out.push({ date: d, plan, fact, source })
+  }
+  return out
+}
+
+// Рейтинг поставщиков за период по сохранённым сверкам: только дни, где
+// сверка была. Недовоз — сколько штук из плана принятых заказов не довезли.
+export function supplierRating({ plans, facts }) {
+  const checked = new Set((facts || []).map(f => f.date))
+  const factKey = new Map((facts || []).filter(f => !f.extra).map(f => [`${f.date}|${f.orderNumber}`, f]))
+  const by = new Map()
+  const get = name => {
+    const k = (name || '—').trim() || '—'
+    if (!by.has(k)) by.set(k, { supplier: k, planned: 0, accepted: 0, discrepancy: 0, waiting: 0, notArrived: 0, cancelled: 0, extra: 0, planPieces: 0, factPieces: 0, extraPieces: 0, days: new Set() })
+    return by.get(k)
+  }
+  for (const p of plans || []) {
+    if (!checked.has(p.date)) continue
+    const s = get(p.supplier)
+    const f = factKey.get(`${p.date}|${p.orderNumber}`)
+    const st = f?.status || 'missing'
+    s.planned++
+    s.days.add(p.date)
+    if (st === 'accepted') s.accepted++
+    else if (st === 'discrepancy') s.discrepancy++
+    else if (st === 'cancelled') s.cancelled++
+    else if (st === 'missing') s.notArrived++
+    else s.waiting++ // inProgress / notVerified — приехала, но ещё не принята
+    if (FACT_STATUSES.has(st)) { s.planPieces += p.pieces; s.factPieces += f.factPieces || 0 }
+  }
+  for (const f of facts || []) {
+    if (!f.extra) continue
+    const s = get(f.supplier)
+    s.extra++
+    s.extraPieces += f.factPieces || 0
+  }
+  return [...by.values()].map(s => {
+    const shortfall = s.planPieces ? Math.max(0, s.planPieces - s.factPieces) / s.planPieces : null
+    const notArrivedPct = s.planned ? s.notArrived / s.planned : null
+    const discrepancyPct = s.planned ? s.discrepancy / s.planned : null
+    return { ...s, days: s.days.size, shortfall, notArrivedPct, discrepancyPct }
+  })
+}
+
+// ── Прогноз приёмщиков ──────────────────────────────────────────────────────
+// История: план дня (штуки / вес / поставки) × сколько приёмщиков реально
+// работало в смены этой даты (/api/stats/workload?op=receiving; приёмщик —
+// от 2 отработанных часов, чтобы разовые закрытия не раздували число).
+// Как и для СЗ КДК: перебираем показатель, берём с наименьшей ошибкой.
+export function forecastReceivers(planRows, workRows, date, plan) {
+  const plans = new Map()
+  for (const r of planRows || []) {
+    const p = plans.get(r.date) || { pieces: 0, weightKg: 0, count: 0 }
+    p.pieces += r.pieces; p.weightKg += r.weightKg; p.count++
+    plans.set(r.date, p)
+  }
+  const people = new Map() // date → { all:Set, day:Set, night:Set, hours, pieces }
+  for (const w of workRows || []) {
+    if (w.hours < 2) continue
+    const d = people.get(w.shiftDate) || { all: new Set(), day: new Set(), night: new Set(), hours: 0, pieces: 0 }
+    const id = w.executorId || w.name
+    d.all.add(id); d[w.shift]?.add(id); d.hours += w.hours; d.pieces += Number(w.qty) || 0
+    people.set(w.shiftDate, d)
+  }
+  const metrics = [
+    { key: 'pieces', label: 'штук', unit: 'штук' },
+    { key: 'weightKg', label: 'кг', unit: 'кг' },
+    { key: 'count', label: 'поставок', unit: 'поставок' },
+  ]
+  let best = null
+  for (const m of metrics) {
+    const pairs = []
+    for (const [d, p] of plans) {
+      const w = people.get(d)
+      if (d >= date || !w?.all.size || !(p[m.key] > 0)) continue
+      pairs.push({ d, x: p[m.key], y: w.all.size, w })
+    }
+    pairs.sort((a, b) => (a.d < b.d ? 1 : -1))
+    const recent = pairs.slice(0, 28)
+    if (recent.length < 7) continue
+    const k = median(recent.map(p => p.y / p.x))
+    const err = median(recent.map(p => Math.abs(k * p.x - p.y) / p.y))
+    if (!best || err < best.err) best = { metric: m, k, err, days: recent.length, recent }
+  }
+  if (!best) return { ok: false, days: [...plans.keys()].filter(d => people.has(d)).length }
+  const x = plan[best.metric.key]
+  const value = Math.max(1, Math.round(best.k * x))
+  const dayShare = median(best.recent.map(p => p.w.day.size / ((p.w.day.size + p.w.night.size) || 1)))
+  const perHour = median(best.recent.filter(p => p.w.hours).map(p => p.w.pieces / p.w.hours))
+  const day = Math.round(value * dayShare)
+  return { ok: true, value, day, night: Math.max(0, value - day), x, perPerson: 1 / best.k, perHour, ...best }
+}

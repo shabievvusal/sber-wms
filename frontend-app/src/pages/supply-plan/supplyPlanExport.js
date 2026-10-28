@@ -20,7 +20,7 @@ export async function exportSupplyPlanXlsx({ date, weekday, plan, planSum, recon
   // 1. Итоги
   {
     const ws = wb.addWorksheet('Итоги')
-    titleRows(ws, `График поставок — ${weekday} ${dateLbl}`, hasFact ? `план и факт приёмки (сверка с WMS ${recon.at.toLocaleString('ru-RU')})` : 'план приёмки', 14)
+    titleRows(ws, `График поставок — ${weekday} ${dateLbl}`, hasFact ? `план и факт приёмки (сверка с WMS ${recon.at?.toLocaleString("ru-RU") || ""})` : 'план приёмки', 14)
 
     // строка дня, как в накопительной «статистике»
     const head = ['ДН', 'Дата']

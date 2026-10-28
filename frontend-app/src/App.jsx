@@ -26,7 +26,9 @@ import KdkLayoutPage from '@/pages/picking/KdkLayoutPage'
 import KdkPlacementPage from '@/pages/picking/KdkPlacementPage'
 import EoSearchPage from '@/pages/picking/EoSearchPage'
 import LostEoPage from '@/pages/picking/LostEoPage'
+import SlottingPage from '@/pages/picking/SlottingPage'
 import SupplyPlanPage from '@/pages/supply-plan/SupplyPlanPage'
+import ShiftSummaryPage from '@/pages/shift-summary/ShiftSummaryPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
 import MotivationPage from '@/pages/motivation/MotivationPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
@@ -57,10 +59,12 @@ const PAGES = {
   'picking-eo': EoSearchPage,
   'picking-lost-eo': LostEoPage,
   'picking-gaps': PickingGapsPage,
+  'picking-slotting': SlottingPage,
   motivation: MotivationPage,
   violations: ViolationsPage,
   'consolidation-form': ConsolidationFormPage,
   stats: StatsPage,
+  'shift-summary': ShiftSummaryPage,
   // без модуля — доступна всем вошедшим (ссылка внизу бокового меню)
   extension: ExtensionPage,
 }

@@ -144,6 +144,14 @@
 	handle /api/stats/report/* {
 		reverse_proxy dotnet:5080
 	}
+	# выработка сотрудник × смена — «Итоги смены» и нормы (2026-10-29)
+	handle /api/stats/workload {
+		reverse_proxy dotnet:5080
+	}
+	# расстановка товара по оборачиваемости (2026-10-29)
+	handle /api/stats/slotting {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/stats/receiving/period-rows {
 		reverse_proxy dotnet:5080
 	}

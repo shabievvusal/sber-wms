@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { DateTimeRangePicker } from '@/components/ui/date-picker'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
-import { Check, CloudDownload, RotateCcw, ScanBarcode, Search, Undo2, X } from 'lucide-react'
+import { Check, CloudDownload, MapPinCheck, RotateCcw, ScanBarcode, Search, Undo2, X } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { LostEoJournal } from './LostEoJournal'
 import { fmtTime } from './format'
 import { LostEoLookup } from './LostEoLookup'
 
@@ -16,6 +18,7 @@ const MODES = [
   { key: 'match', label: 'Подбор ЕО' },
   { key: 'product', label: 'По товару' },
   { key: 'cell', label: 'По ячейке' },
+  { key: 'journal', label: 'Журнал найденных' },
 ]
 
 // "YYYY-MM-DDTHH:mm" по Москве
@@ -230,7 +233,7 @@ export default function LostEoPage() {
 
       {busy && !index && <Spinner label="Загрузка переводов в ЗГЗ…" />}
 
-      {index && (
+      {(index || mode === 'journal') && (
         <div className="flex w-fit gap-1 rounded-md border bg-muted/30 p-0.5">
           {MODES.map(m => (
             <Button key={m.key} size="sm" className="h-8 px-4" variant={mode === m.key ? 'default' : 'ghost'} onClick={() => setMode(m.key)}>{m.label}</Button>
@@ -238,7 +241,9 @@ export default function LostEoPage() {
         </div>
       )}
 
-      {index && mode !== 'match' && (
+      {mode === 'journal' && <LostEoJournal />}
+
+      {index && (mode === 'product' || mode === 'cell') && (
         <LostEoLookup
           key={mode}
           mode={mode}
@@ -318,7 +323,8 @@ export default function LostEoPage() {
                         <div className="text-lg font-semibold">{cellStores.get(hu.sourceCell)}</div>
                       </div>
                     )}
-                    <div className="text-sm text-muted-foreground">
+                    <FoundButton hu={hu} store={cellStores.get(hu.sourceCell) || ''} onSaved={() => { setScans([]); inputRef.current?.focus() }} />
+                    <div className="basis-full text-sm text-muted-foreground">
                       скомплектовал {hu.pickedBy || '—'}{hu.pickedAt ? ` · ${fmtTime(hu.pickedAt)}` : ''} · перевёл {hu.executor || '—'} · {fmtTime(hu.completedAt)} · товаров в ЕО: {hu.total}
                     </div>
                   </div>
@@ -360,5 +366,47 @@ export default function LostEoPage() {
         </>
       )}
     </div>
+  )
+}
+
+// «Нашли»: запись в журнал найденных ЕО — где нашли (ячейка/место) и
+// снимок того, где ЕО числилась и кто с ней работал (LostEoJournal).
+function FoundButton({ hu, store, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [cell, setCell] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const save = async e => {
+    e.preventDefault()
+    if (!cell.trim()) { toast.error('Укажите, где нашли ЕО'); return }
+    setSaving(true)
+    try {
+      await api.addZgzFound({
+        hu: hu.hu, foundCell: cell.trim(), note: note.trim(), sourceCell: hu.sourceCell || '', targetCell: hu.targetCell || '', store,
+        movedAt: hu.completedAt || null, mover: hu.executor || '', pickers: hu.pickedBy || '', items: Math.round(hu.total) || 0,
+      })
+      toast.success(`ЕО ${hu.hu} записана в журнал найденных`)
+      setOpen(false); setCell(''); setNote('')
+      onSaved?.()
+    } catch (err) {
+      toast.error('Не удалось записать: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button className="ml-auto self-center" variant="default"><MapPinCheck className="size-4" /> Нашли</Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-3">
+        <form onSubmit={save} className="space-y-2">
+          <div className="text-sm font-semibold">ЕО {hu.hu} нашли</div>
+          <Input autoFocus value={cell} onChange={e => setCell(e.target.value)} placeholder="Где нашли: ячейка или место" />
+          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Примечание (необязательно)" />
+          <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Запись…' : 'Записать в журнал'}</Button>
+        </form>
+      </PopoverContent>
+    </Popover>
   )
 }

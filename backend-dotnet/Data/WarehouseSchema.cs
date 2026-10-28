@@ -116,6 +116,28 @@ public static class WarehouseSchema
             )");
         await Exec("CREATE INDEX IF NOT EXISTS wms_zgz_moves_completed_idx ON wms_zgz_moves (warehouse_id, completed_at)");
 
+        // 0д) журнал найденных ЕО — «Поиск потеряшек» → «Нашли» (2026-10-29):
+        // где ЕО числилась (ячейка КДК, ЦФЗ, ячейка ЗГЗ), где нашли, кто отбирал
+        // и кто переводил — сводка «у кого ЕО теряются чаще».
+        await Exec($@"
+            CREATE TABLE IF NOT EXISTS zgz_found (
+              id BIGSERIAL PRIMARY KEY,
+              warehouse_id TEXT NOT NULL DEFAULT '{def}',
+              hu TEXT NOT NULL,
+              found_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              found_by TEXT NOT NULL DEFAULT '',
+              found_cell TEXT NOT NULL DEFAULT '',
+              source_cell TEXT NOT NULL DEFAULT '',
+              target_cell TEXT NOT NULL DEFAULT '',
+              store TEXT NOT NULL DEFAULT '',
+              moved_at TIMESTAMPTZ,
+              mover TEXT NOT NULL DEFAULT '',
+              pickers TEXT NOT NULL DEFAULT '',
+              items INT NOT NULL DEFAULT 0,
+              note TEXT NOT NULL DEFAULT ''
+            )");
+        await Exec("CREATE INDEX IF NOT EXISTS zgz_found_at_idx ON zgz_found (warehouse_id, found_at)");
+
         // 0г) ЦФЗ по ячейкам КДК (2026-10-25) — справочник из WMS topology
         await Exec($@"
             CREATE TABLE IF NOT EXISTS cell_stores (

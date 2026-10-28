@@ -33,6 +33,37 @@ public static class ZgzEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
+        // Журнал найденных ЕО: «Нашли» на карточке ЕО в поиске потеряшек.
+        app.MapPost("/api/zgz/found", async (ZgzFoundRequest body, HttpContext ctx, ZgzService svc, SessionService sessions) =>
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(body.Hu)) return Results.Json(new { error = "Нужен номер ЕО" }, statusCode: 400);
+                var session = (VsSession)ctx.Items["vsSession"]!;
+                var user = await sessions.FindUserByLoginAsync(session.Login);
+                var id = await svc.AddFoundAsync(body, user?.Name ?? session.Login ?? "");
+                return Results.Json(new { ok = true, id });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        app.MapGet("/api/zgz/found", async (string? from, string? to, ZgzService svc) =>
+        {
+            try
+            {
+                if (!DateOnly.TryParse(from, out var f) || !DateOnly.TryParse(to, out var t))
+                    return Results.Json(new { error = "Нужны from и to (YYYY-MM-DD)" }, statusCode: 400);
+                return Results.Json(await svc.ListFoundAsync(f, t));
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        app.MapPost("/api/zgz/found/delete", async (ZgzFoundDeleteRequest body, ZgzService svc) =>
+        {
+            try { return Results.Json(new { ok = true, deleted = await svc.DeleteFoundAsync(body.Id) }); }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
         app.MapGet("/api/zgz/info", async (ZgzService svc) =>
         {
             try { return Results.Json(await svc.InfoAsync()); }

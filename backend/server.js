@@ -1362,7 +1362,7 @@ function parseSupplyPlansInWorker(buffer) {
   const { Worker } = require('worker_threads');
   return new Promise((resolve, reject) => {
     const w = new Worker(path.join(__dirname, 'supply-plans-worker.js'), { workerData: buffer });
-    w.once('message', m => (m.error ? reject(new Error(m.error)) : resolve(m.rows)));
+    w.once('message', m => (m.error ? reject(new Error(m.error)) : resolve(m)));
     w.once('error', reject);
   });
 }
@@ -1374,13 +1374,39 @@ app.post('/api/supply-plans/upload', vsSessionRequired, uploadSupplyPlans.single
   try {
     if (!supplyPlansPg) return res.status(501).json({ error: 'Нужен Postgres (USE_PG=true)' });
     if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
-    const rows = await parseSupplyPlansInWorker(req.file.buffer);
+    const { rows, dayFacts } = await parseSupplyPlansInWorker(req.file.buffer);
     if (!rows.length) return res.status(400).json({ error: 'В файле не найден график: нужны колонки «Дата» и «Номер заказа»' });
-    res.json({ ok: true, ...(await supplyPlansPg.saveRows(rows)) });
+    const saved = await supplyPlansPg.saveRows(rows);
+    // накопительный отчёт: лист «статистика» — итоги факта по дням (история)
+    const dayFactsSaved = await supplyPlansPg.saveDayFacts(dayFacts);
+    res.json({ ok: true, ...saved, dayFacts: dayFactsSaved });
   } catch (err) {
     console.error('POST /api/supply-plans/upload', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// результат сверки с WMS за дату (по заказам + вне графика) — заменяет прежний
+app.post('/api/supply-plans/facts', vsSessionRequired, async (req, res) => {
+  try {
+    const date = String(req.body?.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Нужна дата YYYY-MM-DD' });
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    res.json({ ok: true, saved: await supplyPlansPg.saveFacts(date, rows) });
+  } catch (err) {
+    console.error('POST /api/supply-plans/facts', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// план + факт за период — накопительный отчёт и рейтинг поставщиков
+app.get('/api/supply-plans/range', vsSessionRequired, async (req, res) => {
+  try {
+    const from = String(req.query.from || ''), to = String(req.query.to || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return res.status(400).json({ error: 'Нужны from и to (YYYY-MM-DD)' });
+    if ((new Date(to) - new Date(from)) / 86400000 > 400) return res.status(400).json({ error: 'Период не больше 400 дней' });
+    res.json(await supplyPlansPg.getRange(from, to));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/supply-plans/dates', vsSessionRequired, async (req, res) => {
