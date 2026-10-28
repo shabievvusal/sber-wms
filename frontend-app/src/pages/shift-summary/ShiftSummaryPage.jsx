@@ -3,14 +3,15 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DatePicker, DateRangePicker } from '@/components/ui/date-picker'
+import { DateRangePicker, DateTimeRangePicker } from '@/components/ui/date-picker'
+import { CompanyFilter } from '@/pages/stats/CompanyFilter'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
 import { Copy, Download, FileSpreadsheet, Image } from 'lucide-react'
 import { NUM, DEC1, PCT, addTable, titleRows } from '@/pages/stats/receivingExport'
-import { METRICS, OPS, compareToNorm, opMeta, shiftSummary } from './workloadCalc'
+import { METRICS, OPS, compareToNorm, mainLabelOf, mainOf, opMeta, shiftSummary } from './workloadCalc'
 import { copyShiftPng, downloadShiftPng } from './shiftImage'
 
 const WEEKDAY_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
@@ -22,14 +23,6 @@ const fmtPct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 const fmtTrend = v => (v == null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`)
 const mskNow = () => new Date(Date.now() + 3 * 3600_000)
 const shiftDay = (d, k) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10) }
-
-// последняя закончившаяся смена: днём — прошлая ночь, вечером — сегодняшний день
-function lastShift() {
-  const n = mskNow(), h = n.getUTCHours(), today = n.toISOString().slice(0, 10)
-  if (h >= 21) return { date: today, shift: 'day' }
-  if (h >= 9) return { date: shiftDay(today, -1), shift: 'night' }
-  return { date: shiftDay(today, -1), shift: 'day' }
-}
 
 async function saveWb(wb, fileName) {
   const buf = await wb.xlsx.writeBuffer()
@@ -71,65 +64,99 @@ export default function ShiftSummaryPage() {
 }
 
 // ── Итог смены ──────────────────────────────────────────────────────────────
+// "YYYY-MM-DDTHH:mm" по Москве ↔ ISO
+const toIso = local => new Date(`${local}:00+03:00`).toISOString()
+const fmtLocal = local => `${fmtD(local.slice(0, 10))} ${local.slice(11, 16)}`
+
+// последняя закончившаяся смена: днём — прошлая ночь, вечером — сегодняшний день
+function lastShiftRange() {
+  const n = mskNow(), h = n.getUTCHours(), today = n.toISOString().slice(0, 10)
+  if (h >= 21) return { from: `${today}T09:00`, to: `${today}T21:00` }
+  const y = shiftDay(today, -1)
+  if (h >= 9) return { from: `${y}T21:00`, to: `${today}T09:00` }
+  return { from: `${y}T09:00`, to: `${y}T21:00` }
+}
+
+// заголовок картинки: ровно смена — «Итоги дневной смены · Среда, 28.10.2026», иначе интервал
+function rangeTitle({ from, to }) {
+  const d = from.slice(0, 10), wd = WEEKDAY_FULL[new Date(`${d}T00:00:00Z`).getUTCDay()]
+  if (from.slice(11) === '09:00' && to === `${d}T21:00`) return { title: `Итоги дневной смены · ${wd}, ${fmtD(d)}`, sub: 'с 09:00 до 21:00', file: `итог_день_${d}` }
+  if (from.slice(11) === '21:00' && to === `${shiftDay(d, 1)}T09:00`) return { title: `Итоги ночной смены · ${wd}, ${fmtD(d)}`, sub: `с 21:00 ${fmtD(d)} до 09:00 ${fmtD(shiftDay(d, 1))}`, file: `итог_ночь_${d}` }
+  return { title: `Итоги за ${fmtLocal(from)} — ${fmtLocal(to)}`, sub: 'по времени завершения операций (МСК)', file: `итог_${from.replace(/[T:]/g, '-')}_${to.replace(/[T:]/g, '-')}` }
+}
+
 function ShiftTab() {
-  const init = lastShift()
-  const [date, setDate] = useState(init.date)
-  const [shift, setShift] = useState(init.shift)
+  const [range, setRange] = useState(lastShiftRange)
   const [data, setData] = useState(null) // { [op]: rows }
   const [loading, setLoading] = useState(false)
+  const [company, setCompany] = useState('__all__')
 
   useEffect(() => {
+    if (!range.from || !range.to) return
     let alive = true
     setLoading(true)
-    Promise.all(OPS.map(o => api.getWorkload(o.key, date, date, shift).then(r => [o.key, r.rows || []]).catch(() => [o.key, null])))
+    const from = toIso(range.from), to = toIso(range.to)
+    Promise.all(OPS.map(o => api.getWorkloadInterval(o.key, from, to).then(r => [o.key, r.rows || []]).catch(() => [o.key, null])))
       .then(list => { if (alive) setData(Object.fromEntries(list)) })
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
-  }, [date, shift])
+  }, [range.from, range.to])
 
-  const blocks = useMemo(() => (data ? OPS.filter(o => data[o.key]?.length).map(o => ({ ...o, summary: shiftSummary(data[o.key], 5), full: shiftSummary(data[o.key], 10) })) : []), [data])
+  const companies = useMemo(() => {
+    const set = new Set()
+    for (const rows of Object.values(data || {})) for (const r of rows || []) if (r.company && r.company !== '—') set.add(r.company)
+    return [...set].sort((a, b) => a.localeCompare(b, 'ru'))
+  }, [data])
+  const byCompany = r => company === '__all__' || (company === '__none__' ? !r.company || r.company === '—' : r.company === company)
+
+  const blocks = useMemo(() => (data ? OPS.map(o => {
+    const rows = (data[o.key] || []).filter(byCompany)
+    if (!rows.length) return null
+    const main = mainOf(o)
+    const mainLabel = mainLabelOf(o)
+    return { ...o, mainLabel, mainShort: o.main ? mainLabel : o.unitShort, summary: shiftSummary(rows, 5, main), full: shiftSummary(rows, 10, main) }
+  }).filter(Boolean) : []), [data, company]) // eslint-disable-line react-hooks/exhaustive-deps
   const failed = data ? OPS.filter(o => data[o.key] == null).map(o => o.label) : []
-  const weekday = WEEKDAY_FULL[new Date(`${date}T00:00:00Z`).getUTCDay()]
-  const imageOpts = () => ({
-    title: `Итоги ${SHIFT_GEN[shift]} смены · ${weekday}, ${fmtD(date)}`,
-    subtitle: shift === 'day' ? 'с 09:00 до 21:00' : `с 21:00 ${fmtD(date)} до 09:00 ${fmtD(shiftDay(date, 1))}`,
-    blocks,
-  })
-  const fileBase = `итог_${shift === 'day' ? 'день' : 'ночь'}_${date}`
+  const head = range.from && range.to ? rangeTitle(range) : null
+  const companyLabel = company === '__all__' ? '' : company === '__none__' ? 'не в списке компаний' : company
+  const imageOpts = () => ({ title: head.title, subtitle: [head.sub, companyLabel].filter(Boolean).join(' · '), blocks })
+  const fileBase = head ? head.file + (companyLabel ? `_${companyLabel.replace(/\s+/g, '_')}` : '') : 'итог'
 
   const exportXlsx = async () => {
     const ExcelJS = (await import('exceljs')).default
     const wb = new ExcelJS.Workbook()
     wb.creator = 'ВС'
-    const sub = `${SHIFT_GEN[shift]} смена, ${weekday.toLowerCase()} ${fmtD(date)}`
+    const sub = [head.title, companyLabel].filter(Boolean).join(' · ')
     {
       const ws = wb.addWorksheet('Итог')
       const cols = [
         { header: 'Операция', key: 'label', width: 20 },
-        { header: 'Операций', key: 'units', numFmt: NUM, width: 12 },
-        { header: 'Единица', key: 'unit', width: 11 },
+        { header: 'Главный показатель', key: 'mainLabel', width: 13 },
+        { header: 'Значение', key: 'main', numFmt: NUM, width: 12 },
+        { header: 'Операций', key: 'units', numFmt: NUM, width: 11 },
         { header: 'Штук', key: 'qty', numFmt: NUM, width: 12 },
         { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 12 },
         { header: 'Сотрудников', key: 'people', numFmt: NUM, width: 12 },
-        { header: 'Чел·часов', key: 'hours', numFmt: NUM, width: 11 },
         { header: 'В час на чел.', key: 'perHour', numFmt: DEC1, width: 12 },
       ]
       titleRows(ws, 'Итог смены', sub, cols.length)
-      addTable(ws, cols, blocks.map(b => ({ label: b.label, unit: b.unit, ...b.summary })))
+      addTable(ws, cols, blocks.map(b => ({ label: b.label, mainLabel: b.mainLabel, ...b.summary })))
     }
     for (const b of blocks) {
       const ws = wb.addWorksheet(b.label)
+      const isRecv = b.key === 'receiving'
       const cols = [
         { header: 'Сотрудник', key: 'name', width: 34 },
         { header: 'Компания', key: 'company', width: 18 },
+        ...(isRecv ? [{ header: 'SKU', key: 'sku', numFmt: NUM, width: 10 }] : []),
         { header: b.unit[0].toUpperCase() + b.unit.slice(1), key: 'units', numFmt: NUM, width: 11 },
         { header: 'Штук', key: 'qty', numFmt: NUM, width: 11 },
         { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 11 },
-        { header: 'Часов', key: 'hours', numFmt: NUM, width: 9 },
-        { header: 'В час', key: 'perHour', numFmt: DEC1, width: 9 },
+        { header: `${b.mainLabel} в час`, key: 'perHour', numFmt: DEC1, width: 11 },
       ]
-      titleRows(ws, `${b.label} — ${sub}`, 'часы — в которые были завершённые операции', cols.length)
-      addTable(ws, cols, b.summary.all.map(p => ({ ...p, kg: p.grams / 1000, perHour: p.hours ? p.units / p.hours : null })), { freezeCols: 1, total: { name: 'Итого', units: b.summary.units, qty: b.summary.qty, kg: b.summary.kg, hours: b.summary.hours, perHour: b.summary.perHour } })
+      titleRows(ws, `${b.label} — ${sub}`, '«в час» — на отработанный час (часы, в которые были завершённые операции)', cols.length)
+      const main = mainOf(b)
+      addTable(ws, cols, b.summary.all.map(p => ({ ...p, kg: p.grams / 1000, perHour: p.hours ? p[main] / p.hours : null })), { freezeCols: 1, total: { name: 'Итого', sku: b.summary.sku, units: b.summary.units, qty: b.summary.qty, kg: b.summary.kg, perHour: b.summary.perHour } })
     }
     await saveWb(wb, `${fileBase}.xlsx`)
   }
@@ -137,20 +164,19 @@ function ShiftTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card p-3 shadow-card">
-        <DatePicker className="h-9 w-44" value={date} onChange={e => setDate(e.target.value)} />
-        <Segmented value={shift} onChange={setShift} options={[['day', 'Дневная'], ['night', 'Ночная']]} />
-        <span className="text-sm text-muted-foreground">{shift === 'day' ? '09:00–21:00' : '21:00–09:00'}</span>
+        <DateTimeRangePicker className="h-9 w-80" from={range.from} to={range.to} onChange={r => r.from && r.to && setRange(r)} placeholder="Период" />
         <div className="ml-auto flex gap-2">
           <Button variant="secondary" disabled={!blocks.length} onClick={() => downloadShiftPng(imageOpts(), `${fileBase}.png`).catch(err => toast.error(err.message))}><Image className="size-4" /> PNG</Button>
           <Button variant="outline" disabled={!blocks.length} onClick={() => copyShiftPng(imageOpts()).then(() => toast.success('Картинка скопирована — вставьте в чат (Ctrl+V)')).catch(err => toast.error(err.message))}><Copy className="size-4" /> Копировать</Button>
           <Button variant="secondary" disabled={!blocks.length} onClick={() => exportXlsx().catch(err => toast.error(err.message))}><Download className="size-4" /> Excel</Button>
         </div>
       </div>
+      {companies.length > 0 && <CompanyFilter companies={companies} value={company} onChange={setCompany} />}
 
       {loading && <Spinner label="Загрузка смены…" />}
       {!loading && failed.length > 0 && <div className="text-xs text-destructive">Не загрузилось: {failed.join(', ')}</div>}
       {!loading && data && !blocks.length && (
-        <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">За эту смену данных нет — обновите статистику смены</div>
+        <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">За этот период данных нет{companyLabel ? ` по «${companyLabel}»` : ''} — обновите статистику смены</div>
       )}
       {!loading && blocks.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
@@ -158,10 +184,10 @@ function ShiftTab() {
             <div key={b.key} className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
               <div className="flex items-center justify-between bg-muted/40 px-4 py-2.5">
                 <span className="font-semibold">{b.label}</span>
-                <span className="text-sm text-muted-foreground">{b.summary.people} чел. · {fmtNum(b.summary.hours)} чел·ч</span>
+                <span className="text-sm text-muted-foreground">{b.summary.people} чел.</span>
               </div>
               <div className="grid grid-cols-4 border-b border-line py-3">
-                {[[b.unit, fmtNum(b.summary.units)], ['штук', fmtNum(b.summary.qty)], ['кг', fmtNum(b.summary.kg)], [`${b.unitShort} в час на чел.`, fmtDec(b.summary.perHour)]].map(([l, v]) => (
+                {[[b.mainLabel, fmtNum(b.summary.main)], ['штук', fmtNum(b.summary.qty)], ['кг', fmtNum(b.summary.kg)], [`${b.mainShort} в час на чел.`, fmtDec(b.summary.perHour)]].map(([l, v]) => (
                   <div key={l} className="text-center">
                     <div className="tabular text-xl font-semibold">{v}</div>
                     <div className="text-[11px] text-muted-foreground">{l}</div>
@@ -172,9 +198,9 @@ function ShiftTab() {
                 <thead>
                   <tr className="text-xs text-muted-foreground">
                     <th className="px-4 py-1.5 text-left font-normal">Сотрудник</th>
-                    <th className="w-20 py-1.5 text-center font-normal">{b.unitShort}</th>
+                    <th className="w-20 py-1.5 text-center font-normal">{b.mainShort}</th>
+                    {b.key === 'receiving' && <th className="w-20 py-1.5 text-center font-normal">поставок</th>}
                     <th className="w-20 py-1.5 text-center font-normal">шт</th>
-                    <th className="w-16 py-1.5 text-center font-normal">часов</th>
                     <th className="w-20 py-1.5 text-center font-normal">в час</th>
                   </tr>
                 </thead>
@@ -182,9 +208,9 @@ function ShiftTab() {
                   {b.full.top.map((p, i) => (
                     <tr key={p.key} className="border-t border-line">
                       <td className="px-4 py-1.5"><span className="mr-1.5 text-muted-foreground">{i + 1}.</span>{p.name || '—'}</td>
-                      <td className="py-1.5 text-center font-semibold tabular-nums">{fmtNum(p.units)}</td>
+                      <td className="py-1.5 text-center font-semibold tabular-nums">{fmtNum(p.main)}</td>
+                      {b.key === 'receiving' && <td className="py-1.5 text-center tabular-nums">{fmtNum(p.units)}</td>}
                       <td className="py-1.5 text-center tabular-nums">{fmtNum(p.qty)}</td>
-                      <td className="py-1.5 text-center tabular-nums">{p.hours}</td>
                       <td className="py-1.5 text-center tabular-nums text-muted-foreground">{fmtDec(p.perHour)}</td>
                     </tr>
                   ))}
@@ -204,7 +230,6 @@ const NORM_COLS = [
   { key: 'name', label: 'Сотрудник', text: true },
   { key: 'company', label: 'Компания', text: true },
   { key: 'shifts', label: 'Смен' },
-  { key: 'hours', label: 'Часов' },
   { key: 'value', label: 'Всего' },
   { key: 'perShift', label: 'За смену' },
   { key: 'rate', label: 'В час' },
@@ -265,7 +290,6 @@ function NormTab() {
       { header: 'Сотрудник', key: 'name', width: 34 },
       { header: 'Компания', key: 'company', width: 18 },
       { header: 'Смен', key: 'shifts', numFmt: NUM, width: 8 },
-      { header: 'Часов', key: 'hours', numFmt: NUM, width: 8 },
       { header: `Всего, ${mLabel}`, key: 'value', numFmt: NUM, width: 12 },
       { header: `За смену, ${mLabel}`, key: 'perShift', numFmt: DEC1, width: 12 },
       { header: `В час, ${mLabel}`, key: 'rate', numFmt: DEC1, width: 11 },
@@ -284,7 +308,7 @@ function NormTab() {
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card p-3 shadow-card">
         <DateRangePicker className="h-9 w-60" from={range.from} to={range.to} onChange={({ from, to }) => setRange({ from, to })} />
         <Segmented value={shift} onChange={setShift} options={[['', 'Обе смены'], ['day', 'День'], ['night', 'Ночь']]} />
-        <Segmented value={metric} onChange={setMetric} options={Object.keys(METRICS).map(k => [k, METRICS[k].label(op)])} />
+        <Segmented value={metric} onChange={setMetric} options={Object.keys(METRICS).filter(k => !METRICS[k].only || METRICS[k].only.includes(op)).map(k => [k, METRICS[k].label(op)])} />
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground" title="Сотрудники с меньшим числом часов не входят в расчёт нормы">
           в норме от <Input className="h-8 w-16 text-center" type="number" min={0} value={minHours} onChange={e => setMinHours(e.target.value)} /> ч
         </label>
@@ -318,7 +342,6 @@ function NormTab() {
                     <TableCell className="px-3 py-1.5 text-[13px]">{p.name}{!p.enough && <span className="ml-1.5 text-[11px]">· мало данных</span>}</TableCell>
                     <TableCell className="px-3 py-1.5 text-[13px]">{p.company}</TableCell>
                     <TableCell className="px-3 py-1.5 text-center text-[13px] tabular-nums">{p.shifts}</TableCell>
-                    <TableCell className="px-3 py-1.5 text-center text-[13px] tabular-nums">{p.hours}</TableCell>
                     <TableCell className="px-3 py-1.5 text-center text-[13px] tabular-nums">{fmtNum(p.value)}</TableCell>
                     <TableCell className="px-3 py-1.5 text-center text-[13px] tabular-nums">{fmtDec(p.perShift)}</TableCell>
                     <TableCell className="px-3 py-1.5 text-center text-[13px] font-semibold tabular-nums">{fmtDec(p.rate)}</TableCell>

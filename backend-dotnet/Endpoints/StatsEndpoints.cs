@@ -276,14 +276,27 @@ public static class StatsEndpoints
 
         // Выработка «сотрудник × смена» по операции (StatsService.Workload.cs) —
         // итог смены и сравнение с нормой. op: receiving, placement, movedown, refill, kdk, piece.
-        app.MapGet("/api/stats/workload", async (string? op, string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
+        // from/to (ISO) вместо дат — точный интервал времени; даты смен берутся из него.
+        app.MapGet("/api/stats/workload", async (string? op, string? dateFrom, string? dateTo, string? shift, string? from, string? to, StatsService svc, SessionService sessions, HttpContext ctx) =>
         {
             try
             {
                 if (op == null || !StatsService.WorkloadOps.Contains(op)) return Results.Json(new { error = "Неизвестная операция" }, statusCode: 400);
-                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                var dates = StatsService.GetDateRangeList(from, to);
+                DateTime? fromUtc = null, toUtc = null;
+                if (!string.IsNullOrEmpty(from) || !string.IsNullOrEmpty(to))
+                {
+                    if (!DateTimeOffset.TryParse(from, out var fo) || !DateTimeOffset.TryParse(to, out var too) || too <= fo)
+                        return Results.Json(new { error = "Неверный интервал from/to" }, statusCode: 400);
+                    fromUtc = fo.UtcDateTime; toUtc = too.UtcDateTime;
+                    // дата смены: до 09:00 МСК — ещё ночь предыдущей даты
+                    static string ShiftDate(DateTime utc) => DateOnly.FromDateTime(utc.AddHours(3 - 9)).ToString("yyyy-MM-dd");
+                    dateFrom = ShiftDate(fromUtc.Value);
+                    dateTo = ShiftDate(toUtc.Value.AddTicks(-1));
+                    shift = null;
+                }
+                var from_ = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
+                var to_ = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
+                var dates = StatsService.GetDateRangeList(from_, to_);
                 if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
                 if (dates.Count > 92) return Results.Json(new { error = "Период не больше 92 дней" }, statusCode: 400);
                 var normalizedShift = shift == "day" || shift == "night" ? shift : null;
@@ -298,8 +311,8 @@ public static class StatsEndpoints
                 var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
                 var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
                 var idMap = await svc.GetIdMapAsync();
-                var rows = await svc.GetWorkloadAsync(op, from, to, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
-                return Results.Json(new { op, dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
+                var rows = await svc.GetWorkloadAsync(op, from_, to_, normalizedShift, filterExecutorNorm, filterCompanies, idMap, fromUtc, toUtc);
+                return Results.Json(new { op, dateFrom = from_, dateTo = to_, shift = (object?)normalizedShift, rows });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();

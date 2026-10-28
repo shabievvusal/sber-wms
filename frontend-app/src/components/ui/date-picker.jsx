@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { CalendarIcon, ChevronLeft, ChevronRight, Clock, Moon, Sun, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -119,6 +119,41 @@ function DateRangePicker({ from, to, onChange, placeholder = 'Выберите �
   )
 }
 
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'))
+const nextDayISO = iso => { const d = parseISO(iso); if (!d) return ''; d.setDate(d.getDate() + 1); return toISO(d) }
+
+/**
+ * Время «ЧЧ:ММ» — кнопка с часами, в попапе сетка часов и минут (шаг 5 мин)
+ * вместо нативного <input type="time">, который в каждом браузере выглядит по-своему.
+ */
+function TimeSelect({ value, onChange, label }) {
+  const [open, setOpen] = React.useState(false)
+  const [h, m] = (value || '00:00').split(':')
+  const chip = active => cn('h-7 rounded-md text-xs tabular-nums transition-colors', active ? 'bg-primary font-semibold text-primary-foreground' : 'hover:bg-muted')
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="flex h-9 items-center gap-2 rounded-lg border border-input bg-card px-3 text-sm hover:bg-muted">
+          <Clock className="size-3.5 opacity-60" />
+          <span className="text-muted-foreground">{label}</span>
+          <span className="font-semibold tabular-nums">{value || '—'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start">
+        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Часы</div>
+        <div className="grid grid-cols-8 gap-1">
+          {HOURS.map(x => <button key={x} type="button" className={chip(x === h)} onClick={() => onChange(`${x}:${m}`)}>{x}</button>)}
+        </div>
+        <div className="mb-1 mt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Минуты</div>
+        <div className="grid grid-cols-6 gap-1">
+          {MINUTES.map(x => <button key={x} type="button" className={chip(x === m)} onClick={() => { onChange(`${h}:${x}`); setOpen(false) }}>{x}</button>)}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 /**
  * Период с датой и временем — тот же компактный триггер, что у
  * DateRangePicker, но в попапе ещё время начала и конца. from/to — строки
@@ -157,7 +192,13 @@ function DateTimeRangePicker({ from, to, onChange, placeholder = 'Выберит
     onChange?.({ from: `${draft.from}T${draft.fromTime}`, to: `${toDay}T${draft.toTime}` })
     setOpen(false)
   }
-  const timeCls = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums'
+  // быстрый выбор смены: день — 09:00–21:00 той же даты, ночь — 21:00 → 09:00 следующей
+  const preset = kind => setDraft(d => {
+    const day = d.from || toISO(new Date())
+    return kind === 'day'
+      ? { from: day, to: day, fromTime: '09:00', toTime: '21:00' }
+      : { from: day, to: nextDayISO(day), fromTime: '21:00', toTime: '09:00' }
+  })
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -190,15 +231,13 @@ function DateTimeRangePicker({ from, to, onChange, placeholder = 'Выберит
           defaultMonth={range.from}
           onSelect={r => setDraft(d => ({ ...d, from: toISO(r?.from), to: toISO(r?.to) }))}
         />
-        <div className="flex flex-wrap items-center gap-3 border-t px-3 pt-3 text-sm">
-          <label className="flex items-center gap-2">
-            <span className="text-muted-foreground">Начало</span>
-            <input type="time" className={timeCls} value={draft.fromTime} onChange={e => setDraft(d => ({ ...d, fromTime: e.target.value }))} />
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-muted-foreground">Конец</span>
-            <input type="time" className={timeCls} value={draft.toTime} onChange={e => setDraft(d => ({ ...d, toTime: e.target.value }))} />
-          </label>
+        <div className="flex flex-wrap items-center gap-2 border-t px-3 pt-3 text-sm">
+          <TimeSelect label="с" value={draft.fromTime} onChange={v => setDraft(d => ({ ...d, fromTime: v }))} />
+          <TimeSelect label="по" value={draft.toTime} onChange={v => setDraft(d => ({ ...d, toTime: v }))} />
+          <div className="ml-auto flex gap-1">
+            <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => preset('day')}><Sun className="size-3.5" /> Дневная смена</Button>
+            <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => preset('night')}><Moon className="size-3.5" /> Ночная смена</Button>
+          </div>
         </div>
         <div className="flex items-center justify-between gap-2 p-3">
           <Button type="button" variant="ghost" size="sm" onClick={() => { onChange?.({ from: '', to: '' }); setOpen(false) }}>

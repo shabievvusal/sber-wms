@@ -622,6 +622,11 @@ export async function getWorkload(op, dateFrom, dateTo, shift) {
   return req(`/api/stats/workload?${params}`)
 }
 
+// то же за точный интервал времени (ISO) — итог смены за произвольный период
+export async function getWorkloadInterval(op, from, to) {
+  return req(`/api/stats/workload?${new URLSearchParams({ op, from, to })}`)
+}
+
 // Приёмка построчно за период (вкладка «За период»); shift пустой — обе смены.
 export async function getReceivingPeriodRows(dateFrom, dateTo, shift) {
   const params = new URLSearchParams({ dateFrom, dateTo })

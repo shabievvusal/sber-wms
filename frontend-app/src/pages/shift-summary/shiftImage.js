@@ -10,7 +10,7 @@ const FONT = '"Segoe UI", Roboto, Arial, sans-serif'
 const num = v => Math.round(v || 0).toLocaleString('ru-RU')
 const dec = v => (v == null ? '—' : v.toLocaleString('ru-RU', { maximumFractionDigits: 1 }))
 
-// blocks: [{ label, unit, summary }] — summary из shiftSummary()
+// blocks: [{ label, mainLabel, mainShort, summary }] — summary из shiftSummary()
 function render({ title, subtitle, blocks }) {
   const pad = 32, gap = 16, cols = 2
   const cardW = 470
@@ -59,7 +59,7 @@ function render({ title, subtitle, blocks }) {
     y += 52
 
     // четыре итога — по центру своих колонок
-    const kpi = [[b.unit, num(s.units)], ['штук', num(s.qty)], ['кг', num(s.kg)], [`${b.unitShort} в час на чел.`, dec(s.perHour)]]
+    const kpi = [[b.mainLabel, num(s.main)], ["штук", num(s.qty)], ["кг", num(s.kg)], [`${b.mainShort} в час на чел.`, dec(s.perHour)]]
     const kw = (cardW - 16) / kpi.length
     kpi.forEach(([label, v], j) => {
       const cx = x + 8 + kw * j + kw / 2
@@ -71,7 +71,7 @@ function render({ title, subtitle, blocks }) {
     // топ сотрудников
     const cUnits = x + cardW - 190, cQty = x + cardW - 115, cRate = x + cardW - 44
     text('Лучшие', x + 16, y + 12, { size: 12, weight: 600, color: C.muted })
-    text(b.unitShort, cUnits, y + 12, { size: 11, color: C.muted, align: 'center' })
+    text(b.mainShort, cUnits, y + 12, { size: 11, color: C.muted, align: 'center' })
     text('шт', cQty, y + 12, { size: 11, color: C.muted, align: 'center' })
     text('в час', cRate, y + 12, { size: 11, color: C.muted, align: 'center' })
     y += 30
@@ -80,7 +80,7 @@ function render({ title, subtitle, blocks }) {
       ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(x + 12, y - 2); ctx.lineTo(x + cardW - 12, y - 2); ctx.stroke()
       text(`${j + 1}. ${shortFio(p.name)}`, x + 16, y + 12, { size: 14, weight: j === 0 ? 700 : 400, maxW: cUnits - x - 50 })
-      text(num(p.units), cUnits, y + 12, { size: 14, weight: 600, align: 'center' })
+      text(num(p.main), cUnits, y + 12, { size: 14, weight: 600, align: 'center' })
       text(num(p.qty), cQty, y + 12, { size: 13, align: 'center' })
       text(dec(p.perHour), cRate, y + 12, { size: 13, color: C.muted, align: 'center' })
       y += 28

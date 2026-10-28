@@ -9,8 +9,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
-import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp, Users } from 'lucide-react'
-import { SUPPLY_GROUPS, fmtK, forecastKdk, forecastReceivers, fromFactRows, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact, toFactRows } from './supplyPlanCalc'
+import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
+import { SUPPLY_GROUPS, fmtK, forecastKdk, fromFactRows, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact, toFactRows } from './supplyPlanCalc'
 import SupplyPeriodPanel from './SupplyPeriodPanel'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
 import { SUPPLY_IMAGES, copySupplyPlanPng, downloadSupplyPlanPng } from './supplyPlanImage'
@@ -96,7 +96,6 @@ function SupplyDay() {
   const [checking, setChecking] = useState(false)
   const [recon, setRecon] = useState(null) // { rows, extra, at }
   const [history, setHistory] = useState(null)
-  const [recvHistory, setRecvHistory] = useState(null) // { plans, work } — для прогноза приёмщиков
   const [groupFilter, setGroupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
@@ -107,12 +106,6 @@ function SupplyDay() {
   useEffect(() => {
     loadDates()
     api.getKdkHistory(180).then(setHistory).catch(() => {})
-    // 75 дней истории: план по дням + сколько приёмщиков работало
-    const today = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10)
-    const from = new Date(Date.parse(`${today}T00:00:00Z`) - 75 * 86400000).toISOString().slice(0, 10)
-    Promise.all([api.getSupplyRange(from, today), api.getWorkload('receiving', from, today)])
-      .then(([range, work]) => setRecvHistory({ plans: range.plans, work: work.rows || [] }))
-      .catch(() => setRecvHistory({ plans: [], work: [] }))
   }, [])
   useEffect(() => {
     setRecon(null)
@@ -170,7 +163,6 @@ function SupplyDay() {
   const planSum = useMemo(() => summarize(plan || []), [plan])
   const factSum = useMemo(() => (recon ? summarizeFact(recon.rows, recon.extra) : null), [recon])
   const forecast = useMemo(() => (plan?.length ? forecastKdk(history, date, kdkPlanOf(plan)) : null), [history, date, plan])
-  const recvForecast = useMemo(() => (plan?.length && recvHistory ? forecastReceivers(recvHistory.plans, recvHistory.work, date, planSum.total) : null), [recvHistory, date, plan, planSum])
 
   const statusCounts = useMemo(() => {
     if (!recon) return null
@@ -312,7 +304,6 @@ function SupplyDay() {
               </Table>
             </div>
 
-            <div className="flex flex-col gap-4">
             <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
               <div className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="size-4 text-primary" /> Прогноз СЗ КДК</div>
               {forecast?.ok ? (
@@ -329,26 +320,6 @@ function SupplyDay() {
                   Мало истории: нужны дни, где есть и график, и загруженная комплектация КДК (сейчас {forecast?.days ?? 0}). Загрузите накопительный отчёт и обновите статистику комплектации за прошлые дни.
                 </div>
               )}
-            </div>
-
-            <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Users className="size-4 text-primary" /> Приёмщики на {WEEKDAY_ACC[new Date(`${date}T00:00:00Z`).getUTCDay()]}</div>
-              {!recvHistory ? <div className="mt-2 text-sm text-muted-foreground">Загрузка истории…</div> : recvForecast?.ok ? (
-                <>
-                  <div className="tabular mt-2 text-[32px] font-semibold leading-tight">~{recvForecast.value} чел.</div>
-                  <div className="text-sm text-muted-foreground">день ~{recvForecast.day} · ночь ~{recvForecast.night}</div>
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div>{fmtNum(recvForecast.x)} {recvForecast.metric.unit} плана, один приёмщик ≈ {fmtNum(recvForecast.perPerson)} {recvForecast.metric.unit}</div>
-                    {recvForecast.perHour != null && <div>выработка ≈ {fmtNum(recvForecast.perHour)} шт в час на человека</div>}
-                    <div>по {recvForecast.days} дням истории · типичная погрешность ±{Math.round(recvForecast.err * 100)}%</div>
-                  </div>
-                </>
-              ) : (
-                <div className="mt-2 text-sm text-muted-foreground">
-                  Мало истории: нужны дни, где есть и график, и статистика приёмки (сейчас {recvForecast?.days ?? 0}, нужно от 7). Обновите статистику приёмки за прошлые дни.
-                </div>
-              )}
-            </div>
             </div>
           </div>
 

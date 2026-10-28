@@ -17,7 +17,7 @@ public partial class StatsService
     {
         public string ShiftDate = "", Shift = "", ExecutorId = "", Name = "", Company = "—";
         public HashSet<string> Units = new();
-        public decimal Qty, Grams;
+        public decimal Qty, Grams, Sku;
         public HashSet<long> Hours = new();
         public DateTime? First, Last;
 
@@ -32,12 +32,15 @@ public partial class StatsService
         public object ToJson() => new
         {
             shiftDate = ShiftDate, shift = Shift, executorId = ExecutorId, name = Name, company = Company,
-            units = Units.Count, qty = Qty, grams = Grams, hours = Hours.Count, first = First, last = Last,
+            units = Units.Count, qty = Qty, grams = Grams, sku = Sku, hours = Hours.Count, first = First, last = Last,
         };
     }
 
-    public async Task<List<object>> GetWorkloadAsync(string op, string dateFrom, string dateTo, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap)
+    // fromUtc/toUtc — необязательный точный интервал времени завершения
+    // (итог смены за произвольный период): строки вне него отбрасываются.
+    public async Task<List<object>> GetWorkloadAsync(string op, string dateFrom, string dateTo, string? shift, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap, DateTime? fromUtc = null, DateTime? toUtc = null)
     {
+        bool InRange(DateTime? ts) => fromUtc == null || (ts != null && ts >= fromUtc && ts < toUtc);
         var allowed = AllowedCompanies(filterCompanies);
         var weightMap = op == "receiving" ? null : await GetWeightMapAsync();
         var result = new List<object>();
@@ -58,11 +61,13 @@ public partial class StatsService
                 foreach (var r in await GetReceivingItemsAsync(dateStr, null, null, s))
                 {
                     if (string.IsNullOrEmpty(r.ExecutorId) && string.IsNullOrEmpty(r.Executor)) continue;
+                    if (!InRange(r.CompletedAt)) continue;
                     if (!PassesFilters(r.Executor, r.ExecutorId, filterExecutorNorm, allowed, idMap)) continue;
                     var a = Get(r.ExecutorId, r.Executor);
                     a.Units.Add(string.IsNullOrEmpty(r.ItemId) ? $"{r.TaskNumber}|{r.CompletedAt:O}" : r.ItemId);
                     a.Qty += r.Pieces;
                     a.Grams += r.WeightInGrams;
+                    a.Sku += r.SkuCount;
                     a.Touch(r.CompletedAt);
                 }
             }
@@ -72,6 +77,7 @@ public partial class StatsService
                 foreach (var item in await GetDateItemsAsync(dateStr, null, null, s))
                 {
                     if (!string.Equals(item.OperationType, wanted, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!InRange(item.CompletedAt)) continue;
                     if (!PassesFilters(item.Executor, item.ExecutorId, filterExecutorNorm, allowed, idMap)) continue;
                     var a = Get(item.ExecutorId, item.Executor);
                     a.Units.Add(GetTaskKeySummary(item));
@@ -95,6 +101,7 @@ public partial class StatsService
                 foreach (var m in rows)
                 {
                     if (!pairSet.Contains((m.Date, (int)m.Hour))) continue;
+                    if (!InRange(m.CompletedAt)) continue;
                     if (!PassesFilters(m.Executor, m.ExecutorId, filterExecutorNorm, allowed, idMap)) continue;
                     var a = Get(m.ExecutorId, m.Executor);
                     a.Units.Add($"{m.SourceHandlingUnitBarcode}|{m.CompletedAt:O}");
