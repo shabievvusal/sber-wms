@@ -138,6 +138,13 @@
 	handle /api/cell-stores* {
 		reverse_proxy dotnet:5080
 	}
+	# фото жалоб «Консолидации» — прямо с диска (том ./data/consolidation-photos),
+	# Node их не касается. Имена файлов случайные, кэш браузера — на год.
+	handle_path /api/consolidation/uploads/* {
+		root * /srv/consolidation-photos
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
 	handle /api/zgz/* {
 		reverse_proxy dotnet:5080
 	}

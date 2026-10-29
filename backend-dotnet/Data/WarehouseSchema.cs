@@ -149,6 +149,8 @@ public static class WarehouseSchema
               updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (warehouse_id, address)
             )");
+        // id ячейки в WMS (2026-10-29) — для поиска в WMS по cellIds
+        await Exec("ALTER TABLE cell_stores ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT ''");
 
         // 0д) штрихкоды товаров из файла весов (2026-10-26) — заполняет Node
         // (product-weights.js), общая для складов, как product_weights

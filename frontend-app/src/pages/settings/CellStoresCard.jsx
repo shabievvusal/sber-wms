@@ -84,6 +84,7 @@ export function CellStoresCard() {
             <div className="min-w-0 flex-1 basis-48">
               <div className="text-sm font-medium">{z.zoneName || z.zoneId}</div>
               <div className="text-xs text-muted-foreground">ячеек {z.cells} · ЦФЗ {z.stores} · обновлено {fmtDateTime(z.updatedAt)}</div>
+              {z.noCellId > 0 && <div className="text-xs text-warning">нет id ячеек WMS у {z.noCellId} — нажмите «Обновить»</div>}
             </div>
             <Button size="sm" variant="outline" disabled={!!busyZone} onClick={() => syncZone(z.zoneId)}>
               <RefreshCw className={busyZone === z.zoneId ? 'size-3.5 animate-spin' : 'size-3.5'} /> Обновить

@@ -742,11 +742,14 @@ export async function getLiveMonitor() {
   return req('/api/monitor/live')
 }
 
-// ─── Жалобы на нарушения (страница называется «Консолидация» по историческим
-// причинам — см. PLAN.md) ────────────────────────────────────────────────────
+// ─── Жалобы на нарушения («Консолидация») ───────────────────────────────────
 
-export async function getConsolidationComplaints() {
-  return req('/api/consolidation/complaints')
+// from/to — ISO-границы даты подачи (необязательные)
+export async function getConsolidationComplaints({ from, to } = {}) {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  return req(`/api/consolidation/complaints?${params}`)
 }
 
 // Кио­ск-форма подачи жалобы (ConsolidationFormPage) — POST с фото

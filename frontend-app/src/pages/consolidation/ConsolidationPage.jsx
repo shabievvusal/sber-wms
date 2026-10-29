@@ -41,7 +41,8 @@ export default function ConsolidationPage() {
   const [loadError, setLoadError] = useState('')
 
   const [violatorFilter, setViolatorFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
+  // по умолчанию — последние 30 дней (за период грузит сервер, а не всё сразу)
+  const [dateFrom, setDateFrom] = useState(() => new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10))
   const [dateTo, setDateTo] = useState('')
   const [companyFilter, setCompanyFilter] = useState('')
   const [violatorPersonFilter, setViolatorPersonFilter] = useState('')
@@ -63,7 +64,9 @@ export default function ConsolidationPage() {
     setLoadError('')
     return withMinDuration(async () => {
       try {
-        const list = await api.getConsolidationComplaints()
+        const to = dateTo ? new Date(dateTo) : null
+        if (to) to.setHours(23, 59, 59, 999)
+        const list = await api.getConsolidationComplaints({ from: dateFrom ? new Date(dateFrom).toISOString() : null, to: to ? to.toISOString() : null })
         setComplaints(list)
         setSelected(prev => new Set([...prev].filter(id => list.some(c => String(c.id) === id))))
       } catch (err) {
@@ -71,7 +74,7 @@ export default function ConsolidationPage() {
         setLoadError(err.message || 'Не удалось загрузить жалобы')
       }
     }).finally(() => setLoading(false))
-  }, [])
+  }, [dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
 
@@ -205,7 +208,6 @@ export default function ConsolidationPage() {
     <div className="mx-auto w-full space-y-4 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Жалобы на нарушения</h1>
-        <p className="text-sm text-muted-foreground">Раздел исторически называется «Консолидация» — см. PLAN.md</p>
       </div>
 
       {loadError && (

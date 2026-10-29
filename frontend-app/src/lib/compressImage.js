@@ -35,3 +35,56 @@ export async function compressImage(file, { maxDim = 1280, quality = 0.82, minSi
     img.src = url
   })
 }
+
+// Сжатие фото в браузере перед отправкой на сервер: фото с телефона (3–8 МБ,
+// 12–50 Мп) → JPEG до 1280 px (~150–300 КБ) и миниатюра до 320 px для
+// списков. Сервер сохраняет готовые файлы как есть и не тратит на них ни
+// процессор, ни память.
+
+const MAX_BYTES = 1.8 * 1024 * 1024 // сервер принимает до 2 МБ на файл
+
+async function decode(file) {
+  // createImageBitmap с imageOrientation учитывает поворот из EXIF (фото «на боку»)
+  if (typeof createImageBitmap === 'function') {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }) } catch { /* ниже — через <img> */ }
+  }
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    return img
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+function toJpeg(source, maxSide, quality) {
+  const w = source.width, h = source.height
+  const k = Math.min(1, maxSide / Math.max(w, h))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(w * k))
+  canvas.height = Math.max(1, Math.round(h * k))
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff' // прозрачность PNG → белый фон
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+  return new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Не удалось сжать фото'))), 'image/jpeg', quality))
+}
+
+/** Файл изображения → { photo, thumb } (Blob JPEG). */
+export async function compressPhoto(file, { maxSide = 1280, thumbSide = 320 } = {}) {
+  const source = await decode(file)
+  try {
+    let quality = 0.78
+    let photo = await toJpeg(source, maxSide, quality)
+    while (photo.size > MAX_BYTES && quality > 0.4) {
+      quality -= 0.15
+      photo = await toJpeg(source, maxSide, quality)
+    }
+    const thumb = await toJpeg(source, thumbSide, 0.7)
+    return { photo, thumb }
+  } finally {
+    source.close?.()
+  }
+}

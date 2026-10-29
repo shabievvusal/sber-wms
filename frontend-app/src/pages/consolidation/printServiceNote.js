@@ -52,6 +52,11 @@ export function getComplaintPhotos(c) {
     : (c.photoFilename ? [c.photoFilename] : [])
 }
 
+// миниатюра для списков (сохраняется рядом с фото как <имя>_t.jpg)
+export function thumbUrl(name) {
+  return name && !name.startsWith('http') && !name.startsWith('data:') ? photoUrl(name.replace(/\.jpg$/, '_t.jpg')) : photoUrl(name)
+}
+
 export function photoUrl(name) {
   if (!name) return ''
   if (name.startsWith('http') || name.startsWith('data:')) return name

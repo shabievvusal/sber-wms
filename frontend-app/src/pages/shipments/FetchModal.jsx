@@ -30,7 +30,7 @@ export default function FetchModal({ open, onOpenChange, onDone }) {
     if (!dateFrom || !dateTo) { setResult('Выберите даты'); return }
     const token = getStoredToken()
     if (!token) {
-      setResult('Нет токена WMS-сессии — эта песочница не подключена к логину. В основном приложении нужно войти заново.')
+      setResult('Нет активного WMS-токена — войдите паролем от WMS')
       return
     }
     setLoading(true)
@@ -62,7 +62,7 @@ export default function FetchModal({ open, onOpenChange, onDone }) {
 
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <span>Тянет данные напрямую из браузера пользователя в wwh.samokat.ru — единственное место, где в проекте остаётся JS-парсинг (см. PLAN.md).</span>
+          <span>Данные загружаются из WMS через ваш браузер — не закрывайте вкладку, пока загрузка не закончится.</span>
         </div>
 
         {result && <div className="text-sm text-muted-foreground">{result}</div>}

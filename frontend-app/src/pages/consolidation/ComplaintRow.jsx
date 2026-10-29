@@ -3,7 +3,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { getComplaintPhotos, photoUrl } from './printServiceNote'
+import { getComplaintPhotos, photoUrl, thumbUrl } from './printServiceNote'
+
+// в списке — миниатюра; нет её (старое фото) — полное
+function Thumb({ name }) {
+  return <img src={thumbUrl(name)} alt="" loading="lazy" className="h-20 w-28 object-cover"
+    onError={e => { if (!e.currentTarget.dataset.full) { e.currentTarget.dataset.full = '1'; e.currentTarget.src = photoUrl(name) } }} />
+}
 import { Search, Pencil, ImageOff, AlertTriangle } from 'lucide-react'
 
 function fmtDateTime(iso) {
@@ -15,7 +21,8 @@ function fmtDateTime(iso) {
 
 export function ComplaintRow({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
   const [expanded, setExpanded] = useState(false)
-  const photos = getComplaintPhotos(c).map(photoUrl)
+  const names = getComplaintPhotos(c)
+  const photos = names.map(photoUrl)
   const hasPhotos = photos.length > 0
 
   return (
@@ -65,7 +72,7 @@ export function ComplaintRow({ complaint: c, selected, onToggle, onLookup, onEdi
             <div className="flex flex-wrap gap-2">
               {photos.length ? photos.map((url, i) => (
                 <button key={i} className="overflow-hidden rounded-md border" onClick={() => onPhotoOpen(photos, i)}>
-                  <img src={url} alt="" className="h-20 w-28 object-cover" />
+                  <Thumb name={names[i]} />
                 </button>
               )) : (
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground"><ImageOff className="size-4" /> Нет фото</div>
@@ -82,7 +89,8 @@ export function ComplaintRow({ complaint: c, selected, onToggle, onLookup, onEdi
 // ComplaintRow, просто вертикальная раскладка вместо строки на 11 колонок.
 export function MobileComplaintCard({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
   const [expanded, setExpanded] = useState(false)
-  const photos = getComplaintPhotos(c).map(photoUrl)
+  const names = getComplaintPhotos(c)
+  const photos = names.map(photoUrl)
   const hasPhotos = photos.length > 0
 
   return (
@@ -133,7 +141,7 @@ export function MobileComplaintCard({ complaint: c, selected, onToggle, onLookup
         <div className="mt-2 flex flex-wrap gap-2 border-t pt-2">
           {photos.length ? photos.map((url, i) => (
             <button key={i} className="overflow-hidden rounded-md border" onClick={() => onPhotoOpen(photos, i)}>
-              <img src={url} alt="" className="h-20 w-28 object-cover" />
+              <Thumb name={names[i]} />
             </button>
           )) : (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground"><ImageOff className="size-4" /> Нет фото</div>

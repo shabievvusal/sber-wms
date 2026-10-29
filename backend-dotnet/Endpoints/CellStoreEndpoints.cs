@@ -6,7 +6,7 @@ namespace BackendDotnet.Endpoints;
 // «Поиску потеряшек»), загрузка из WMS и удаление зоны — admin/developer.
 public static class CellStoreEndpoints
 {
-    public record SyncCell(string? Address, string? StoreName);
+    public record SyncCell(string? Address, string? StoreName, string? CellId);
     public record SyncRequest(string? ZoneId, string? ZoneName, List<SyncCell>? Cells);
 
     public static void MapCellStoreEndpoints(this WebApplication app)
@@ -22,12 +22,14 @@ public static class CellStoreEndpoints
                     zoneName = g.First().ZoneName,
                     cells = g.Count(),
                     stores = g.Where(c => c.StoreName != "").Select(c => c.StoreName).Distinct().Count(),
+                    // ячейки без id WMS — зона загружена до 2026-10-29, нужно «Обновить»
+                    noCellId = g.Count(c => c.CellId == ""),
                     updatedAt = g.Max(c => c.UpdatedAt),
                 }).OrderBy(z => z.zoneName).ToList();
                 return Results.Json(new
                 {
                     zones,
-                    cells = cells.Select(c => new { address = c.Address, storeName = c.StoreName, zoneId = c.ZoneId }).ToList(),
+                    cells = cells.Select(c => new { address = c.Address, cellId = c.CellId, storeName = c.StoreName, zoneId = c.ZoneId }).ToList(),
                 });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
@@ -41,7 +43,7 @@ public static class CellStoreEndpoints
                 if (zoneId == "") return Results.Json(new { error = "Нужен zoneId" }, statusCode: 400);
                 var cells = (body.Cells ?? new())
                     .Where(c => !string.IsNullOrWhiteSpace(c.Address))
-                    .Select(c => (c.Address!.Trim(), (c.StoreName ?? "").Trim()))
+                    .Select(c => (c.Address!.Trim(), (c.CellId ?? "").Trim(), (c.StoreName ?? "").Trim()))
                     .ToList();
                 var saved = await svc.ReplaceZoneAsync(zoneId, (body.ZoneName ?? "").Trim(), cells);
                 return Results.Json(new { ok = true, saved });

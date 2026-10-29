@@ -24,6 +24,7 @@ const tsdPg = process.env.USE_PG === 'true' ? require('./tsd-pg') : null;
 const motivationPg = process.env.USE_PG === 'true' ? require('./motivation-pg') : null;
 const wmsOpsPg = process.env.USE_PG === 'true' ? require('./wms-ops-pg') : null;
 const supplyPlansPg = process.env.USE_PG === 'true' ? require('./supply-plans-pg') : null;
+const consolidationPg = process.env.USE_PG === 'true' ? require('./consolidation-pg') : null;
 const s3Storage = require('./s3');
 const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
@@ -668,18 +669,24 @@ async function rebuildMissingWeightDotnet(options = {}) {
 }
 
 // ─── Консолидация: multer + paths ──────────────────────────────────────────
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const CONSOLIDATION_PATH = () => path.join(dataDir(), 'consolidation.json');
+// фото жалоб — на диске сервера (папка подключена томом, её же раздаёт Caddy)
+const UPLOADS_DIR = process.env.CONSOLIDATION_PHOTOS_DIR || path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+// Фото жалоб приходят уже сжатыми браузером (до 1280 px, JPEG) вместе с
+// миниатюрами — сервер их не разжимает и не пережимает, только сохраняет.
+// Раньше сжатие здесь (sharp) забирало все ядра и сотни МБ памяти на фото.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024, files: 20 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Только изображения'));
+    if (file.mimetype === 'image/jpeg') cb(null, true);
+    else cb(new Error('Только JPEG'));
   },
 });
+const isJpeg = buf => buf && buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+const thumbName = name => name.replace(/\.jpg$/, '_t.jpg');
+const complaintPhotos = c => (Array.isArray(c?.photoFilenames) && c.photoFilenames.length ? c.photoFilenames : (c?.photoFilename ? [c.photoFilename] : []));
 
 const uploadMemory = multer({
   storage: multer.memoryStorage(),
@@ -694,24 +701,6 @@ const uploadExcel = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
-
-const _complaintsCache = new Map(); // склад → список жалоб
-
-function loadComplaints() {
-  if (_complaintsCache.has(currentWarehouse())) return _complaintsCache.get(currentWarehouse());
-  try {
-    if (!fs.existsSync(CONSOLIDATION_PATH())) return [];
-    const list = JSON.parse(fs.readFileSync(CONSOLIDATION_PATH(), 'utf8'));
-    _complaintsCache.set(currentWarehouse(), list);
-    return list;
-  } catch { return []; }
-}
-
-function saveComplaints(list) {
-  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(CONSOLIDATION_PATH(), JSON.stringify(list, null, 2), 'utf8');
-  _complaintsCache.set(currentWarehouse(), list);
-}
 
 function tgSafe(v) {
   return String(v == null ? '' : v).trim();
@@ -3064,8 +3053,9 @@ app.post('/api/schedule/settings', (req, res) => {
 // ─── Консолидация: маршруты ──────────────────────────────────────────────────
 
 // POST /api/consolidation/complaints — создать жалобу
-app.post('/api/consolidation/complaints', upload.array('photo', 10), async (req, res) => {
+app.post('/api/consolidation/complaints', upload.fields([{ name: 'photo', maxCount: 10 }, { name: 'thumb', maxCount: 10 }]), async (req, res) => {
   try {
+    if (!consolidationPg) return res.status(501).json({ ok: false, error: 'Нужен Postgres (USE_PG=true)' });
     const { cell, barcode, employeeName, handlingUnitBarcode } = req.body || {};
     const isZgh = (cell || '').trim().toUpperCase() === 'ZGH';
     if (isZgh && !handlingUnitBarcode) {
@@ -3075,21 +3065,15 @@ app.post('/api/consolidation/complaints', upload.array('photo', 10), async (req,
       return res.status(400).json({ ok: false, error: 'Укажите место хранения и штрихкод' });
     }
     const id = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const uploaded = Array.isArray(req.files) ? req.files : [];
+    const uploaded = req.files?.photo || [];
+    const thumbs = req.files?.thumb || [];
     const photoFilenames = [];
-    if (uploaded.length > 0) {
-      for (let i = 0; i < uploaded.length; i++) {
-        const f = uploaded[i];
-        const suffix = i === 0 ? '' : `_${i + 1}`;
-        const newName = `${id}${suffix}.jpg`;
-        const compressed = await sharp(f.buffer)
-          .rotate()
-          .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 85 })
-          .toBuffer();
-        await s3Storage.uploadFile(`consolidation/${newName}`, compressed);
-        photoFilenames.push(newName);
-      }
+    for (let i = 0; i < uploaded.length; i++) {
+      if (!isJpeg(uploaded[i].buffer)) continue;
+      const newName = `${id}${i === 0 ? '' : `_${i + 1}`}.jpg`;
+      await fs.promises.writeFile(path.join(UPLOADS_DIR, newName), uploaded[i].buffer);
+      if (thumbs[i] && isJpeg(thumbs[i].buffer)) await fs.promises.writeFile(path.join(UPLOADS_DIR, thumbName(newName)), thumbs[i].buffer);
+      photoFilenames.push(newName);
     }
     const photoFilename = photoFilenames[0] || null;
     const complaint = {
@@ -3112,9 +3096,7 @@ app.post('/api/consolidation/complaints', upload.array('photo', 10), async (req,
       lookupDone: false,
       lookupError: null,
     };
-    const list = loadComplaints();
-    list.unshift(complaint);
-    saveComplaints(list);
+    await consolidationPg.insert(complaint);
     res.json({ ok: true, id });
   } catch (err) {
     console.error('POST /api/consolidation/complaints', err);
@@ -3125,18 +3107,13 @@ app.post('/api/consolidation/complaints', upload.array('photo', 10), async (req,
 // GET /api/consolidation/complaints — список жалоб (компания из консолидации или по ФИО из empl)
 app.get('/api/consolidation/complaints', async (req, res) => {
   try {
-    const list = loadComplaints();
+    if (!consolidationPg) return res.status(501).json({ error: 'Нужен Postgres (USE_PG=true)' });
+    // from/to — ISO-границы даты подачи; компания без записи в жалобе — по ФИО (без сохранения)
+    const list = await consolidationPg.list({ from: req.query.from || null, to: req.query.to || null });
     const emplMap = await getEmplMapFioToCompany();
-    let changed = false;
-    const enriched = list.map(c => {
-      if (c.company != null && String(c.company).trim() !== '') return c;
-      const resolved = getCompanyByFio(emplMap, c.violator) || '';
-      if (!resolved) return c;
-      changed = true;
-      return { ...c, company: resolved };
-    });
-    if (changed) saveComplaints(enriched);
-    res.json(enriched);
+    res.json(list.map(c => (c.company != null && String(c.company).trim() !== '')
+      ? c
+      : { ...c, company: getCompanyByFio(emplMap, c.violator) || '' }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3147,7 +3124,7 @@ app.post('/api/consolidation/export/report1', vsSessionRequired, async (req, res
   try {
     const { dateFrom, dateTo, companyFullNames = {} } = req.body || {};
     const emplMap = await getEmplMapFioToCompany();
-    let list = loadComplaints().map(c => ({
+    let list = (await consolidationPg.list()).map(c => ({
       ...c,
       company: (c.company != null && String(c.company).trim() !== '')
         ? c.company
@@ -3178,7 +3155,7 @@ app.post('/api/consolidation/export/report2', vsSessionRequired, async (req, res
     const { fioMap: emplMap, idMap } = await getCompanyLookupMaps();
     const getComp = (fio, id) => getCompanyByIdOrFioSync(idMap, id, fio) || '—';
 
-    let list = loadComplaints().map(c => ({
+    let list = (await consolidationPg.list()).map(c => ({
       ...c,
       company: (c.company != null && String(c.company).trim() !== '')
         ? c.company
@@ -3221,17 +3198,14 @@ app.post('/api/consolidation/export/report2', vsSessionRequired, async (req, res
 });
 
 // PUT /api/consolidation/complaints/:id/status — сменить статус
-app.put('/api/consolidation/complaints/:id/status', (req, res) => {
+app.put('/api/consolidation/complaints/:id/status', async (req, res) => {
   try {
     const { status } = req.body || {};
     if (!['new', 'in_progress', 'resolved'].includes(status)) {
       return res.status(400).json({ ok: false, error: 'Неверный статус' });
     }
-    const list = loadComplaints();
-    const item = list.find(c => c.id === req.params.id);
+    const item = await consolidationPg.patch(req.params.id, { status });
     if (!item) return res.status(404).json({ ok: false, error: 'Не найдено' });
-    item.status = status;
-    saveComplaints(list);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -3239,20 +3213,13 @@ app.put('/api/consolidation/complaints/:id/status', (req, res) => {
 });
 
 // DELETE /api/consolidation/complaints/:id — удалить жалобу
-app.delete('/api/consolidation/complaints/:id', (req, res) => {
+app.delete('/api/consolidation/complaints/:id', async (req, res) => {
   try {
-    const list = loadComplaints();
-    const idx = list.findIndex(c => c.id === req.params.id);
-    if (idx < 0) return res.status(404).json({ ok: false, error: 'Не найдено' });
-    const [removed] = list.splice(idx, 1);
-    saveComplaints(list);
-    // Удалить все фото жалобы
-    const photos = Array.isArray(removed.photoFilenames) && removed.photoFilenames.length > 0
-      ? removed.photoFilenames
-      : (removed.photoFilename ? [removed.photoFilename] : []);
-    for (const file of photos) {
-      const photoPath = path.join(UPLOADS_DIR, file);
-      if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+    const removed = await consolidationPg.remove(req.params.id);
+    if (!removed) return res.status(404).json({ ok: false, error: 'Не найдено' });
+    // фото и миниатюры жалобы
+    for (const file of complaintPhotos(removed)) {
+      for (const name of [file, thumbName(file)]) await fs.promises.unlink(path.join(UPLOADS_DIR, path.basename(name))).catch(() => {});
     }
     res.json({ ok: true });
   } catch (err) {
@@ -3265,19 +3232,17 @@ app.get('/api/consolidation/uploads/:filename', (req, res) => {
   const name = path.basename(req.params.filename);
   if (name.includes('..')) return res.status(400).json({ error: 'Invalid' });
   const filePath = path.join(UPLOADS_DIR, name);
-  if (fs.existsSync(filePath)) {
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    return res.sendFile(filePath);
-  }
-  res.redirect(301, s3Storage.publicUrl(`consolidation/${name}`));
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Фото не найдено' });
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(filePath);
 });
 
 // PUT /api/consolidation/complaints/:id/lookup — сохранить результат WMS-поиска (от клиента)
 app.put('/api/consolidation/complaints/:id/lookup', async (req, res) => {
   try {
-    const list = loadComplaints();
-    const item = list.find(c => c.id === req.params.id);
-    if (!item) return res.status(404).json({ ok: false, error: 'Не найдено' });
+    const current = await consolidationPg.get(req.params.id);
+    if (!current) return res.status(404).json({ ok: false, error: 'Не найдено' });
+    const item = { ...current };
     const d = req.body || {};
     if (d.cell !== undefined) item.cell = d.cell;
     if (d.barcode !== undefined) item.barcode = d.barcode;
@@ -3301,8 +3266,8 @@ app.put('/api/consolidation/complaints/:id/lookup', async (req, res) => {
       const emplMap = await getEmplMapFioToCompany();
       item.company = getCompanyByFio(emplMap, item.violator) || '';
     }
-    saveComplaints(list);
-    res.json({ ok: true, complaint: item });
+    const saved = await consolidationPg.patch(req.params.id, item);
+    res.json({ ok: true, complaint: saved });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -3325,9 +3290,7 @@ app.post('/api/consolidation/telegram/send', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Не настроены telegramBotToken или список чатов (Chat ID) в config' });
     }
 
-    const list = loadComplaints();
-    const byId = new Map(list.map(c => [String(c.id), c]));
-    const selected = complaintIds.map(id => byId.get(id)).filter(Boolean);
+    const selected = await consolidationPg.getMany(complaintIds);
 
     const onlyInProgress = selected.filter(c => c.status === 'in_progress');
     const skipped = selected.filter(c => c.status !== 'in_progress').map(c => c.id);
@@ -4420,6 +4383,8 @@ async function startServer() {
     await vsAuth.init();
     await productWeights.initPg();
     await supplyPlansPg.init();
+    await consolidationPg.init();
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     console.log('[pg] PostgreSQL готов');
   }
   app.listen(PORT, '0.0.0.0', () => {

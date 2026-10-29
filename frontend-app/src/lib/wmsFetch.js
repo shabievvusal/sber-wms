@@ -826,7 +826,7 @@ export async function fetchZoneCells(token, zoneId) {
   for (let p = 2; p <= Math.ceil(first.total / size); p++) items = items.concat((await page(p)).items)
   return {
     zoneName: items[0]?.zone?.name || '',
-    cells: items.map(c => ({ address: c.address, storeName: c.storeName || '' })),
+    cells: items.map(c => ({ address: c.address, cellId: c.id || '', storeName: c.storeName || '' })),
   }
 }
 

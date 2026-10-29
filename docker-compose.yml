@@ -32,6 +32,8 @@ services:
       # в лимиты Let's Encrypt.
       - caddy-data:/data
       - caddy-config:/config
+      # фото жалоб «Консолидации» — Caddy отдаёт их прямо с диска, без Node
+      - ./data/consolidation-photos:/srv/consolidation-photos:ro
     depends_on:
       node:
         condition: service_healthy
@@ -67,6 +69,8 @@ services:
       - PORT=3009
     volumes:
       - node-persist:/app/persist
+      # фото жалоб «Консолидации» — на диске сервера, переживают пересборку
+      - ./data/consolidation-photos:/app/backend/uploads
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/app/host-project
       - ./backend/server.js:/app/backend/server.js

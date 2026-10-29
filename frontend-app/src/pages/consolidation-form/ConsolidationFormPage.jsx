@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import * as api from '@/lib/api'
+import { compressPhoto } from '@/lib/compressImage'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -101,7 +102,14 @@ export default function ConsolidationFormPage() {
       fd.append('barcode', barcode.trim())
       fd.append('employeeName', currentUserName)
       if (isZgh) fd.append('handlingUnitBarcode', euBarcode.trim())
-      for (const f of photos) fd.append('photo', f)
+      // сжимаем на телефоне: на сервер уходят ~200 КБ вместо 3–8 МБ на фото
+      if (photos.length) setStatus({ ok: true, text: 'Сжимаем фото…' })
+      for (const f of photos) {
+        const { photo, thumb } = await compressPhoto(f)
+        fd.append('photo', photo, 'photo.jpg')
+        fd.append('thumb', thumb, 'thumb.jpg')
+      }
+      if (photos.length) setStatus({ ok: true, text: 'Отправляем…' })
       await api.createComplaint(fd)
       try { localStorage.setItem(LS_PREFIX, prefix); localStorage.setItem(LS_ROW, rowVal) } catch { /* ignore */ }
       setStatus({ ok: true, text: 'Жалоба отправлена! Спасибо.' })

@@ -16,6 +16,7 @@ public class CellStoreService
     public class CellStore
     {
         public string Address { get; set; } = "";
+        public string CellId { get; set; } = "";
         public string StoreName { get; set; } = "";
         public string ZoneId { get; set; } = "";
         public string ZoneName { get; set; } = "";
@@ -26,22 +27,22 @@ public class CellStoreService
     {
         var wh = _db.WarehouseId;
         return await _db.Database
-            .SqlQuery<CellStore>($"SELECT address AS \"Address\", store_name AS \"StoreName\", zone_id AS \"ZoneId\", zone_name AS \"ZoneName\", updated_at AS \"UpdatedAt\" FROM cell_stores WHERE warehouse_id = {wh} ORDER BY address")
+            .SqlQuery<CellStore>($"SELECT address AS \"Address\", cell_id AS \"CellId\", store_name AS \"StoreName\", zone_id AS \"ZoneId\", zone_name AS \"ZoneName\", updated_at AS \"UpdatedAt\" FROM cell_stores WHERE warehouse_id = {wh} ORDER BY address")
             .ToListAsync();
     }
 
     // Заменить ячейки зоны целиком — то, что пришло из WMS сейчас.
-    public async Task<int> ReplaceZoneAsync(string zoneId, string zoneName, List<(string Address, string StoreName)> cells)
+    public async Task<int> ReplaceZoneAsync(string zoneId, string zoneName, List<(string Address, string CellId, string StoreName)> cells)
     {
         var wh = _db.WarehouseId;
         await using var tx = await _db.Database.BeginTransactionAsync();
         await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM cell_stores WHERE warehouse_id = {wh} AND zone_id = {zoneId}");
-        foreach (var (address, store) in cells)
+        foreach (var (address, cellId, store) in cells)
         {
             await _db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO cell_stores (warehouse_id, address, store_name, zone_id, zone_name, updated_at)
-                VALUES ({wh}, {address}, {store}, {zoneId}, {zoneName}, now())
-                ON CONFLICT (warehouse_id, address) DO UPDATE SET store_name = {store}, zone_id = {zoneId}, zone_name = {zoneName}, updated_at = now()");
+                INSERT INTO cell_stores (warehouse_id, address, cell_id, store_name, zone_id, zone_name, updated_at)
+                VALUES ({wh}, {address}, {cellId}, {store}, {zoneId}, {zoneName}, now())
+                ON CONFLICT (warehouse_id, address) DO UPDATE SET cell_id = {cellId}, store_name = {store}, zone_id = {zoneId}, zone_name = {zoneName}, updated_at = now()");
         }
         await tx.CommitAsync();
         return cells.Count;
