@@ -116,7 +116,12 @@ export function forecastKdk(history, date, plan) {
       if (!best || err < best.err) best = { metric: m, lag, k, err, days: recent.length }
     }
   }
-  if (!best) return { ok: false, days: Math.min(plans.size, picks.size) }
+  if (!best) {
+    // сколько дней истории есть на самом деле — для честного сообщения
+    const past = [...plans.keys()].filter(d => d < date)
+    const matched = past.filter(d => picks.get(d) > 0 || picks.get(nextDay(d, 1)) > 0).length
+    return { ok: false, planDays: past.length, pickDays: [...picks.values()].filter(t => t > 0).length, matched }
+  }
   const x = plan[best.metric.key]
   return { ok: true, value: Math.round(best.k * x), ...best, x, shiftDate: nextDay(date, best.lag) }
 }

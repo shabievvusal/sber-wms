@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { cn } from '@/lib/utils'
-import { Copy, Download, GitCompareArrows, Image, Upload, TrendingUp } from 'lucide-react'
+import { Copy, Download, GitCompareArrows, Image, Loader2, Upload, TrendingUp } from 'lucide-react'
 import { SUPPLY_GROUPS, fmtK, forecastKdk, fromFactRows, groupOf, kdkPlanOf, pct, reconcile, storageKeys, summarize, summarizeFact, toFactRows } from './supplyPlanCalc'
 import SupplyPeriodPanel from './SupplyPeriodPanel'
 import { exportSupplyPlanXlsx } from './supplyPlanExport'
@@ -95,7 +95,8 @@ function SupplyDay() {
   const [uploading, setUploading] = useState(false)
   const [checking, setChecking] = useState(false)
   const [recon, setRecon] = useState(null) // { rows, extra, at }
-  const [history, setHistory] = useState(null)
+  const [history, setHistory] = useState(null) // null — грузится, { error } — не загрузилась
+  const loadHistory = () => api.getKdkHistory(180).then(setHistory).catch(err => setHistory({ error: err.message || 'ошибка сервера' }))
   const [groupFilter, setGroupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
@@ -105,7 +106,7 @@ function SupplyDay() {
   const loadDates = () => api.getSupplyPlanDates().then(setDates).catch(() => {})
   useEffect(() => {
     loadDates()
-    api.getKdkHistory(180).then(setHistory).catch(() => {})
+    loadHistory()
   }, [])
   useEffect(() => {
     setRecon(null)
@@ -135,7 +136,7 @@ function SupplyDay() {
       await loadDates()
       const r = await api.getSupplyPlan(date)
       setPlan(r.rows || [])
-      api.getKdkHistory(180).then(setHistory).catch(() => {})
+      loadHistory()
     } catch (err) {
       toast.error('Ошибка загрузки: ' + err.message)
     } finally {
@@ -162,7 +163,8 @@ function SupplyDay() {
 
   const planSum = useMemo(() => summarize(plan || []), [plan])
   const factSum = useMemo(() => (recon ? summarizeFact(recon.rows, recon.extra) : null), [recon])
-  const forecast = useMemo(() => (plan?.length ? forecastKdk(history, date, kdkPlanOf(plan)) : null), [history, date, plan])
+  // пока история не загрузилась — прогноза нет (а не «мало истории»)
+  const forecast = useMemo(() => (plan?.length && history?.plans ? forecastKdk(history, date, kdkPlanOf(plan)) : null), [history, date, plan])
 
   const statusCounts = useMemo(() => {
     if (!recon) return null
@@ -315,9 +317,20 @@ function SupplyDay() {
                     <div>по {forecast.days} дням истории · типичная погрешность ±{Math.round(forecast.err * 100)}%</div>
                   </div>
                 </>
+              ) : !history ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-primary" /> Считаем прогноз по истории…</div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full w-1/3 animate-pulse rounded-full bg-primary/60" /></div>
+                </div>
+              ) : history.error ? (
+                <div className="mt-2 space-y-2 text-sm">
+                  <div className="text-destructive">Не удалось загрузить историю: {history.error}</div>
+                  <Button size="sm" variant="outline" onClick={() => { setHistory(null); loadHistory() }}>Повторить</Button>
+                </div>
               ) : (
-                <div className="mt-2 text-sm text-muted-foreground">
-                  Мало истории: нужны дни, где есть и график, и загруженная комплектация КДК (сейчас {forecast?.days ?? 0}). Загрузите накопительный отчёт и обновите статистику комплектации за прошлые дни.
+                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                  <div>Прогноз пока не строится: для расчёта нужно не меньше 7 прошедших дней, где есть и план кросс-дока, и раскладка КДК.</div>
+                  <div className="text-xs">За 180 дней: план КДК — {forecast?.planDays ?? 0} дн., раскладка КДК — {forecast?.pickDays ?? 0} дн., совпало — {forecast?.matched ?? 0} дн.</div>
                 </div>
               )}
             </div>
