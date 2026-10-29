@@ -37,13 +37,14 @@ public class CellStoreService
         var wh = _db.WarehouseId;
         await using var tx = await _db.Database.BeginTransactionAsync();
         await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM cell_stores WHERE warehouse_id = {wh} AND zone_id = {zoneId}");
-        foreach (var (address, cellId, store) in cells)
-        {
-            await _db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO cell_stores (warehouse_id, address, cell_id, store_name, zone_id, zone_name, updated_at)
-                VALUES ({wh}, {address}, {cellId}, {store}, {zoneId}, {zoneName}, now())
-                ON CONFLICT (warehouse_id, address) DO UPDATE SET cell_id = {cellId}, store_name = {store}, zone_id = {zoneId}, zone_name = {zoneName}, updated_at = now()");
-        }
+        // одним запросом через unnest — в зоне ЗГЗ тысячи ячеек
+        var addresses = cells.Select(c => c.Address).ToArray();
+        var cellIds = cells.Select(c => c.CellId).ToArray();
+        var stores = cells.Select(c => c.StoreName).ToArray();
+        await _db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO cell_stores (warehouse_id, address, cell_id, store_name, zone_id, zone_name, updated_at)
+            SELECT {wh}, a, i, s, {zoneId}, {zoneName}, now() FROM unnest({addresses}::text[], {cellIds}::text[], {stores}::text[]) AS t(a, i, s)
+            ON CONFLICT (warehouse_id, address) DO UPDATE SET cell_id = EXCLUDED.cell_id, store_name = EXCLUDED.store_name, zone_id = EXCLUDED.zone_id, zone_name = EXCLUDED.zone_name, updated_at = now()");
         await tx.CommitAsync();
         return cells.Count;
     }

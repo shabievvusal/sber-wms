@@ -551,7 +551,7 @@ export const getPlacementDateSummary = opDateSummary('placement')
 export const getReceivingDateSummary = opDateSummary('receiving')
 export const getRemainsDateSummary = opDateSummary('remains')
 
-// ЦФЗ по ячейкам КДК
+// Ячейки и ЦФЗ (справочник по зонам из WMS: id ячейки, магазин)
 export async function getCellStores() {
   return req('/api/cell-stores')
 }

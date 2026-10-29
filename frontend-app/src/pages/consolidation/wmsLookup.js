@@ -2,7 +2,7 @@
 // браузера в api.samokat.ru с WMS-токеном. Операции комплектации в ячейку
 // жалобы (фильтр WMS по targetCellId) за 24 ч до жалобы — нарушитель тот,
 // кто последним положил туда отсканированный товар (или ЕО). id ячейки —
-// из справочника «ЦФЗ по ячейкам»; нет там — один запрос в WMS по адресу.
+// из справочника «Ячейки и ЦФЗ»; нет там — один запрос в WMS по адресу.
 
 const SAMOKAT_STOCKS_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/changes/search'
 const SAMOKAT_CELLS_URL = 'https://api.samokat.ru/wmsops-wwh/topology/cells/filters/by-address-search'
@@ -149,7 +149,7 @@ function fillFromOp(result, op, barcodeNorm) {
 /**
  * Поиск нарушителя: кто последним до жалобы положил отсканированный товар
  * (или ЕО) в ячейку жалобы. cellIdHint — id ячейки WMS из справочника
- * «ЦФЗ по ячейкам» (без него — один запрос в WMS по адресу).
+ * «Ячейки и ЦФЗ» (без него — один запрос в WMS по адресу).
  */
 export async function lookupViaBrowser(token, barcode, cell, createdAt, preScannedEuBarcode, cellIdHint) {
   const result = {
@@ -207,7 +207,7 @@ export async function lookupViaBrowser(token, barcode, cell, createdAt, preScann
   try {
     const cellIds = cellIdHint ? [cellIdHint] : await findCellIdsByAddress(token, cell)
     if (!cellIds.length) {
-      return { ...result, lookupDone: false, lookupError: `Ячейка ${cell} не найдена в WMS — обновите «ЦФЗ по ячейкам» в настройках` }
+      return { ...result, lookupDone: false, lookupError: `Ячейка ${cell} не найдена в WMS — добавьте или обновите её зону в «Настройки → Ячейки и ЦФЗ»` }
     }
     const ops = (await Promise.all(cellIds.map(id => fetchAllOps(token, { ...baseBody, targetCellId: id, operationTypes: LOOKUP_OP_TYPES })))).flat()
     const sorted = latestFirst(ops)

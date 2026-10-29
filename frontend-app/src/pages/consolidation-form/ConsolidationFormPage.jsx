@@ -1,13 +1,15 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '@/lib/api'
 import { compressPhoto } from '@/lib/compressImage'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { Camera, CheckCircle2, Loader2, X } from 'lucide-react'
 
 const LS_PREFIX = 'consolidation_storage_prefix'
 const LS_ROW = 'consolidation_cell_row'
+const MAX_PHOTOS = 10
 
 // «Иванов Иван Иванович» → «Иванов И.И.» — как в оригинале (utils/format.js),
 // дублируется локально по устоявшемуся в проекте принципу (см. PLAN.md —
@@ -22,9 +24,8 @@ function shortFio(name) {
 }
 
 const ZONES = [
-  { value: 'KDS', label: 'KDS', title: 'Сухой' },
   { value: 'KDH', label: 'KDH', title: 'Холод' },
-  { value: 'ZGH', label: 'ZGH', title: 'ЦФЗ' },
+  { value: 'ZGH', label: 'ZGH', title: 'ЗГЗ' },
 ]
 
 // Перенесено из оригинала (frontend/app/src/pages/consolidation/
@@ -43,7 +44,8 @@ export default function ConsolidationFormPage() {
   const { user } = useAuth()
   const currentUserName = user?.name ? shortFio(user.name) : ''
   const [prefix, setPrefix] = useState(() => {
-    try { return localStorage.getItem(LS_PREFIX) || 'KDH' } catch { return 'KDH' }
+    // запомненная зона, которой больше нет (KDS), — по умолчанию KDH
+    try { const v = localStorage.getItem(LS_PREFIX); return ZONES.some(z => z.value === v) ? v : 'KDH' } catch { return 'KDH' }
   })
   const [rowVal, setRowVal] = useState(() => {
     try { return localStorage.getItem(LS_ROW) || '' } catch { return '' }
@@ -61,12 +63,21 @@ export default function ConsolidationFormPage() {
   const euBarcodeRef = useRef(null)
   const photoRef = useRef(null)
 
+  const previews = useMemo(() => photos.map(f => URL.createObjectURL(f)), [photos])
+  useEffect(() => () => previews.forEach(u => URL.revokeObjectURL(u)), [previews])
+  const addPhotos = e => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    setPhotos(prev => [...prev, ...files].slice(0, MAX_PHOTOS))
+  }
+  const removePhoto = i => setPhotos(prev => prev.filter((_, j) => j !== i))
+
   const isZgh = prefix === 'ZGH'
   const cellPreview = prefix + (rowVal || place ? '-' + [rowVal, place].filter(Boolean).join('-') : '-')
 
   const focusOrder = isZgh
-    ? [euBarcodeRef, barcodeRef, photoRef]
-    : [rowRef, placeRef, barcodeRef, photoRef]
+    ? [euBarcodeRef, barcodeRef]
+    : [rowRef, placeRef, barcodeRef]
 
   const handleKeyDown = e => {
     if (e.key !== 'Enter') return
@@ -112,9 +123,8 @@ export default function ConsolidationFormPage() {
       if (photos.length) setStatus({ ok: true, text: 'Отправляем…' })
       await api.createComplaint(fd)
       try { localStorage.setItem(LS_PREFIX, prefix); localStorage.setItem(LS_ROW, rowVal) } catch { /* ignore */ }
-      setStatus({ ok: true, text: 'Жалоба отправлена! Спасибо.' })
+      setStatus({ ok: true, done: true, text: 'Жалоба отправлена' })
       setPlace(''); setBarcode(''); setEuBarcode(''); setPhotos([])
-      if (photoRef.current) photoRef.current.value = ''
     } catch (err) {
       setStatus({ ok: false, text: 'Ошибка: ' + err.message })
     } finally {
@@ -123,88 +133,90 @@ export default function ConsolidationFormPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-4 p-6">
-      <div className="text-center">
-        <img src="/icon.png" alt="logo" className="mx-auto size-10 object-contain" />
-        <div className="mt-1 text-sm font-bold">СберЛогистика</div>
-        <div className="text-xs text-muted-foreground">Консолидация</div>
+    <div className="mx-auto w-full max-w-md space-y-4 p-4 sm:p-6">
+      <div className="flex items-center gap-3">
+        <img src="/icon.png" alt="" className="size-10 object-contain" />
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Сообщить о нарушении</h1>
+          <div className="text-xs text-muted-foreground">Консолидация · {currentUserName || 'сотрудник'}</div>
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-line bg-card shadow-card p-4">
-        <h1 className="text-xl font-semibold tracking-tight">Сообщить о нарушении</h1>
-        <p className="mb-4 text-sm text-muted-foreground">Заполните форму и прикрепите фото</p>
-
-        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-3">
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium">Зона</span>
-            <div className="grid grid-cols-3 gap-1.5">
-              {ZONES.map(z => (
-                <button
-                  key={z.value}
-                  type="button"
-                  title={z.title}
-                  onClick={() => selectPrefix(z.value)}
-                  className={cn(
-                    'rounded-md border py-2 text-sm font-medium transition-colors',
-                    prefix === z.value ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted',
-                  )}
-                >
-                  {z.label}
-                </button>
-              ))}
-            </div>
+      {status?.ok && status.done ? (
+        <div className="space-y-4 rounded-3xl border border-success/30 bg-success/10 p-6 text-center shadow-card">
+          <CheckCircle2 className="mx-auto size-12 text-success" />
+          <div className="text-lg font-semibold">Жалоба отправлена</div>
+          <div className="text-sm text-muted-foreground">Спасибо! Нарушителя найдут по WMS.</div>
+          <Button className="h-12 w-full text-base" onClick={() => { setStatus(null); setTimeout(() => (isZgh ? euBarcodeRef : placeRef).current?.focus(), 50) }}>Ещё одна жалоба</Button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4 rounded-3xl border border-line bg-card p-4 shadow-card">
+          <div className="grid grid-cols-2 gap-2">
+            {ZONES.map(z => (
+              <button key={z.value} type="button" onClick={() => selectPrefix(z.value)}
+                className={cn('rounded-2xl border p-3 text-left transition-colors', prefix === z.value ? 'border-primary bg-primary text-primary-foreground' : 'border-line bg-card hover:bg-muted')}>
+                <div className="text-lg font-semibold">{z.label}</div>
+                <div className={cn('text-xs', prefix === z.value ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{z.title}</div>
+              </button>
+            ))}
           </div>
 
-          {!isZgh && (
-            <div className="flex items-end gap-2">
-              <label className="flex-1 space-y-1 text-sm">
-                <span className="block text-xs text-muted-foreground">Ряд</span>
-                <Input ref={rowRef} maxLength={1} inputMode="numeric" value={rowVal} onChange={e => setRowVal(e.target.value)} />
-              </label>
-              <label className="flex-1 space-y-1 text-sm">
-                <span className="block text-xs text-muted-foreground">Место в ряду</span>
-                <Input ref={placeRef} maxLength={2} inputMode="numeric" value={place} onChange={e => setPlace(e.target.value)} />
-              </label>
+          {!isZgh ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1">
+                  <span className="block text-xs font-medium text-muted-foreground">Ряд</span>
+                  <Input ref={rowRef} maxLength={1} inputMode="numeric" className="h-12 text-center text-lg" value={rowVal} onChange={e => setRowVal(e.target.value)} />
+                </label>
+                <label className="space-y-1">
+                  <span className="block text-xs font-medium text-muted-foreground">Место в ряду</span>
+                  <Input ref={placeRef} maxLength={2} inputMode="numeric" className="h-12 text-center text-lg" value={place} onChange={e => setPlace(e.target.value)} />
+                </label>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-muted/60 px-3 py-2">
+                <span className="text-xs text-muted-foreground">Ячейка</span>
+                <span className="font-mono text-base font-semibold">{cellPreview}</span>
+              </div>
             </div>
-          )}
-          {!isZgh && <div className="text-xs text-muted-foreground">Ячейка: {cellPreview}</div>}
-
-          {isZgh && (
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">Штрихкод ЕО</span>
-              <Input ref={euBarcodeRef} inputMode="numeric" placeholder="отсканируй или введи ШК ЕО" value={euBarcode} onChange={e => setEuBarcode(e.target.value)} />
+          ) : (
+            <label className="block space-y-1">
+              <span className="block text-xs font-medium text-muted-foreground">Штрихкод ЕО</span>
+              <Input ref={euBarcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте ЕО" value={euBarcode} onChange={e => setEuBarcode(e.target.value)} />
             </label>
           )}
 
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Штрихкод товара{isZgh ? ' (необязательно)' : ''}</span>
-            <Input ref={barcodeRef} inputMode="numeric" required={!isZgh} value={barcode} onChange={e => setBarcode(e.target.value)} />
+          <label className="block space-y-1">
+            <span className="block text-xs font-medium text-muted-foreground">Штрихкод товара{isZgh ? ' (необязательно)' : ''}</span>
+            <Input ref={barcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте товар" required={!isZgh} value={barcode} onChange={e => setBarcode(e.target.value)} />
           </label>
 
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Ваше имя</span>
-            <Input value={currentUserName} readOnly className="bg-muted" />
-          </label>
+          <div className="space-y-2">
+            <span className="block text-xs font-medium text-muted-foreground">Фото нарушения</span>
+            <div className="grid grid-cols-3 gap-2">
+              {previews.map((url, i) => (
+                <div key={url} className="relative aspect-square overflow-hidden rounded-2xl border border-line">
+                  <img src={url} alt="" className="size-full object-cover" />
+                  <button type="button" onClick={() => removePhoto(i)} className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white" title="Убрать фото"><X className="size-3.5" /></button>
+                </div>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <button type="button" onClick={() => photoRef.current?.click()}
+                  className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-line text-muted-foreground hover:border-primary hover:text-primary">
+                  <Camera className="size-6" />
+                  <span className="text-xs">{photos.length ? 'Ещё фото' : 'Добавить фото'}</span>
+                </button>
+              )}
+            </div>
+            <input ref={photoRef} type="file" accept="image/*" multiple className="hidden" onChange={addPhotos} />
+          </div>
 
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Фото нарушения (можно несколько)</span>
-            <input
-              ref={photoRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={e => setPhotos(Array.from(e.target.files || []))}
-              className="w-full text-sm file:mr-3 file:rounded-md file:border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
-            />
-          </label>
+          <Button type="submit" className="h-12 w-full text-base" disabled={busy}>
+            {busy ? <><Loader2 className="size-4 animate-spin" /> {status?.text || 'Отправка…'}</> : 'Отправить жалобу'}
+          </Button>
 
-          <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Отправка...' : 'Отправить'}</Button>
-
-          {status && (
-            <div className={cn('text-sm', status.ok ? 'text-success' : 'text-destructive')}>{status.text}</div>
-          )}
+          {status && !status.ok && <div className="rounded-2xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{status.text}</div>}
         </form>
-      </div>
+      )}
     </div>
   )
 }

@@ -1,153 +1,112 @@
-import { useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import { getComplaintPhotos, photoUrl, thumbUrl } from './printServiceNote'
+import { ImageOff, Pencil, Search } from 'lucide-react'
 
-// в списке — миниатюра; нет её (старое фото) — полное
-function Thumb({ name }) {
-  return <img src={thumbUrl(name)} alt="" loading="lazy" className="h-20 w-28 object-cover"
-    onError={e => { if (!e.currentTarget.dataset.full) { e.currentTarget.dataset.full = '1'; e.currentTarget.src = photoUrl(name) } }} />
+const fmtDate = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—')
+const fmtTime = iso => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '')
+const fmtDateTime = iso => (iso ? `${fmtDate(iso)} ${fmtTime(iso)}` : '—')
+
+// Статус жалобы по результату поиска в WMS
+export function complaintStatus(c) {
+  if (c.lookupError) return { key: 'error', label: 'Ошибка поиска', cls: 'bg-warning/15 text-warning' }
+  if (c.violator) return { key: 'found', label: 'Найден', cls: 'bg-success/15 text-success' }
+  if (c.lookupDone) return { key: 'not_found', label: 'Не найден', cls: 'bg-destructive/10 text-destructive' }
+  return { key: 'new', label: 'Не проверена', cls: 'bg-muted text-muted-foreground' }
 }
-import { Search, Pencil, ImageOff, AlertTriangle } from 'lucide-react'
 
-function fmtDateTime(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const p = n => String(n).padStart(2, '0')
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+function StatusChip({ c }) {
+  const s = complaintStatus(c)
+  return <span title={c.lookupError || undefined} className={cn('inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium', s.cls)}>{s.label}</span>
 }
 
-export function ComplaintRow({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
-  const [expanded, setExpanded] = useState(false)
+// Первое фото жалобы миниатюрой (+N, если фото несколько); нет миниатюры — полное фото
+function PhotoThumb({ c, onPhotoOpen, size = 'size-14' }) {
   const names = getComplaintPhotos(c)
-  const photos = names.map(photoUrl)
-  const hasPhotos = photos.length > 0
-
+  if (!names.length) {
+    return <div className={cn('flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground', size)} title="Нет фото"><ImageOff className="size-4" /></div>
+  }
   return (
-    <>
-      <TableRow
-        className={hasPhotos ? 'cursor-pointer' : ''}
-        onClick={e => hasPhotos && !e.target.closest('button, [role="checkbox"]') && setExpanded(v => !v)}
-      >
-        <TableCell onClick={e => e.stopPropagation()}>
-          <Checkbox checked={selected} onCheckedChange={onToggle} />
-        </TableCell>
-        <TableCell className="text-xs text-muted-foreground">{fmtDateTime(c.createdAt)}</TableCell>
-        <TableCell>{c.employeeName || '—'}</TableCell>
-        <TableCell className="font-mono text-xs">{c.cell || '—'}</TableCell>
-        <TableCell className="font-mono text-xs">{c.barcode || '—'}</TableCell>
-        <TableCell className="font-mono text-xs">{c.nomenclatureCode || '—'}</TableCell>
-        <TableCell className="max-w-48 truncate" title={c.productName}>{c.productName || '—'}</TableCell>
-        <TableCell>
-          {c.violator ? (
-            <span>{c.violator}</span>
-          ) : (
-            <span className="text-muted-foreground">Не найден</span>
-          )}
-          {c.lookupError && (
-            <Badge variant="warning" className="ml-1.5" title={c.lookupError}>
-              <AlertTriangle className="size-3" />
-            </Badge>
-          )}
-        </TableCell>
-        <TableCell className="text-muted-foreground">{c.company || '—'}</TableCell>
-        <TableCell className="text-xs text-muted-foreground">{fmtDateTime(c.operationCompletedAt)}</TableCell>
-        <TableCell onClick={e => e.stopPropagation()}>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" disabled={lookingUp} title="Найти нарушителя" onClick={() => onLookup(c)}>
-              <Search className={lookingUp ? 'size-4 animate-pulse' : 'size-4'} />
-            </Button>
-            <Button size="icon" variant="ghost" title="Изменить вручную" onClick={() => onEdit(c)}>
-              <Pencil className="size-4" />
-            </Button>
-          </div>
-        </TableCell>
-      </TableRow>
-
-      {expanded && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={11} className="bg-muted/20 py-3">
-            <div className="flex flex-wrap gap-2">
-              {photos.length ? photos.map((url, i) => (
-                <button key={i} className="overflow-hidden rounded-md border" onClick={() => onPhotoOpen(photos, i)}>
-                  <Thumb name={names[i]} />
-                </button>
-              )) : (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground"><ImageOff className="size-4" /> Нет фото</div>
-              )}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
-    </>
+    <button type="button" className={cn('relative shrink-0 overflow-hidden rounded-xl border border-line', size)} onClick={() => onPhotoOpen(names.map(photoUrl), 0)} title="Открыть фото">
+      <img src={thumbUrl(names[0])} alt="" loading="lazy" className="size-full object-cover"
+        onError={e => { if (!e.currentTarget.dataset.full) { e.currentTarget.dataset.full = '1'; e.currentTarget.src = photoUrl(names[0]) } }} />
+      {names.length > 1 && <span className="absolute bottom-0.5 right-0.5 rounded-md bg-black/60 px-1 text-[10px] font-semibold text-white">+{names.length - 1}</span>}
+    </button>
   )
 }
 
-// Мобильная карточка — та же строка + разворот фото по тапу, что и в
-// ComplaintRow, просто вертикальная раскладка вместо строки на 11 колонок.
-export function MobileComplaintCard({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
-  const [expanded, setExpanded] = useState(false)
-  const names = getComplaintPhotos(c)
-  const photos = names.map(photoUrl)
-  const hasPhotos = photos.length > 0
-
+function Actions({ c, onLookup, onEdit, lookingUp }) {
   return (
-    <div className="p-3">
-      <div
-        className={hasPhotos ? 'flex cursor-pointer items-start justify-between gap-2' : 'flex items-start justify-between gap-2'}
-        onClick={e => hasPhotos && !e.target.closest('button, [role="checkbox"]') && setExpanded(v => !v)}
-      >
-        <div className="flex min-w-0 items-start gap-2">
-          <span onClick={e => e.stopPropagation()}>
-            <Checkbox checked={selected} onCheckedChange={onToggle} />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate font-medium" title={c.productName}>{c.productName || '—'}</div>
-            <div className="text-xs text-muted-foreground">{fmtDateTime(c.createdAt)} · {c.employeeName || '—'}</div>
-          </div>
+    <div className="flex items-center justify-end gap-0.5">
+      <Button size="icon" variant="ghost" className="size-8" disabled={lookingUp} title="Найти нарушителя в WMS" onClick={() => onLookup(c)}>
+        <Search className={lookingUp ? 'size-4 animate-pulse text-primary' : 'size-4'} />
+      </Button>
+      <Button size="icon" variant="ghost" className="size-8" title="Изменить вручную" onClick={() => onEdit(c)}>
+        <Pencil className="size-4" />
+      </Button>
+    </div>
+  )
+}
+
+export function ComplaintRow({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
+  return (
+    <TableRow data-state={selected ? 'selected' : undefined} className="align-top">
+      <TableCell className="w-10 py-3"><Checkbox checked={selected} onCheckedChange={onToggle} /></TableCell>
+      <TableCell className="w-16 py-2"><PhotoThumb c={c} onPhotoOpen={onPhotoOpen} /></TableCell>
+      <TableCell className="py-3">
+        <div className="text-sm font-medium tabular-nums">{fmtDate(c.createdAt)} <span className="text-muted-foreground">{fmtTime(c.createdAt)}</span></div>
+        <div className="text-xs text-muted-foreground">{c.employeeName || '—'}</div>
+      </TableCell>
+      <TableCell className="py-3">
+        <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold">{c.cell || '—'}</span>
+        {c.handlingUnitBarcode && <div className="mt-1 font-mono text-[11px] text-muted-foreground" title="ЕО">ЕО {c.handlingUnitBarcode}</div>}
+      </TableCell>
+      <TableCell className="max-w-72 py-3">
+        <div className="line-clamp-2 text-sm" title={c.productName || ''}>{c.productName || <span className="text-muted-foreground">товар не определён</span>}</div>
+        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{[c.nomenclatureCode, c.barcode].filter(Boolean).join(' · ') || '—'}</div>
+      </TableCell>
+      <TableCell className="py-3">
+        {c.violator ? (
+          <>
+            <div className="text-sm font-medium">{c.violator}</div>
+            <div className="text-xs text-muted-foreground">{[c.company, c.operationCompletedAt && `положил ${fmtDateTime(c.operationCompletedAt)}`].filter(Boolean).join(' · ')}</div>
+          </>
+        ) : <span className="text-sm text-muted-foreground">—</span>}
+      </TableCell>
+      <TableCell className="py-3"><StatusChip c={c} /></TableCell>
+      <TableCell className="py-2"><Actions c={c} onLookup={onLookup} onEdit={onEdit} lookingUp={lookingUp} /></TableCell>
+    </TableRow>
+  )
+}
+
+// Телефон: та же жалоба карточкой
+export function MobileComplaintCard({ complaint: c, selected, onToggle, onLookup, onEdit, onPhotoOpen, lookingUp }) {
+  return (
+    <div className={cn('flex gap-3 p-3', selected && 'bg-primary/5')}>
+      <div className="flex flex-col items-center gap-2 pt-1">
+        <Checkbox checked={selected} onCheckedChange={onToggle} />
+      </div>
+      <PhotoThumb c={c} onPhotoOpen={onPhotoOpen} size="size-16" />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="line-clamp-2 text-sm font-medium">{c.productName || <span className="text-muted-foreground">товар не определён</span>}</div>
+          <StatusChip c={c} />
         </div>
-        <div className="flex shrink-0 items-center gap-1" onClick={e => e.stopPropagation()}>
-          <Button size="icon" variant="ghost" disabled={lookingUp} title="Найти нарушителя" onClick={() => onLookup(c)}>
-            <Search className={lookingUp ? 'size-4 animate-pulse' : 'size-4'} />
-          </Button>
-          <Button size="icon" variant="ghost" title="Изменить вручную" onClick={() => onEdit(c)}>
-            <Pencil className="size-4" />
-          </Button>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono font-semibold text-foreground">{c.cell || '—'}</span>
+          <span>{fmtDateTime(c.createdAt)}</span>
+          <span>· {c.employeeName || '—'}</span>
+        </div>
+        {c.violator && (
+          <div className="text-xs"><span className="font-medium">{c.violator}</span>{c.company ? <span className="text-muted-foreground"> · {c.company}</span> : null}</div>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] text-muted-foreground">{[c.nomenclatureCode, c.barcode].filter(Boolean).join(' · ')}</span>
+          <Actions c={c} onLookup={onLookup} onEdit={onEdit} lookingUp={lookingUp} />
         </div>
       </div>
-
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-        <span>Место: <span className="font-mono text-xs text-foreground">{c.cell || '—'}</span></span>
-        <span>ШК: <span className="font-mono text-xs text-foreground">{c.barcode || '—'}</span></span>
-        <span>Артикул: <span className="font-mono text-xs text-foreground">{c.nomenclatureCode || '—'}</span></span>
-      </div>
-
-      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <span className="text-muted-foreground">Нарушитель:{' '}
-          {c.violator ? <span className="text-foreground">{c.violator}</span> : <span>Не найден</span>}
-          {c.lookupError && (
-            <Badge variant="warning" className="ml-1.5" title={c.lookupError}>
-              <AlertTriangle className="size-3" />
-            </Badge>
-          )}
-        </span>
-        <span className="text-muted-foreground">Компания: <span className="text-foreground">{c.company || '—'}</span></span>
-        <span className="text-muted-foreground">Нарушение: <span className="text-foreground">{fmtDateTime(c.operationCompletedAt)}</span></span>
-      </div>
-
-      {expanded && (
-        <div className="mt-2 flex flex-wrap gap-2 border-t pt-2">
-          {photos.length ? photos.map((url, i) => (
-            <button key={i} className="overflow-hidden rounded-md border" onClick={() => onPhotoOpen(photos, i)}>
-              <Thumb name={names[i]} />
-            </button>
-          )) : (
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground"><ImageOff className="size-4" /> Нет фото</div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

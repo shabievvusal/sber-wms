@@ -90,7 +90,7 @@ export default function LostEoPage() {
   const [scans, setScans] = useState([]) // [{ code, productIds:Set, name }]
   const [input, setInput] = useState('')
   const [mode, setMode] = useState('match')
-  // ячейка КДК → ЦФЗ (Настройки → «ЦФЗ по ячейкам КДК»)
+  // ячейка КДК → ЦФЗ (Настройки → «Ячейки и ЦФЗ»)
   const [cellStores, setCellStores] = useState(new Map())
   const inputRef = useRef(null)
 

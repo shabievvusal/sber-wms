@@ -69,15 +69,15 @@ export function CellStoresCard() {
   const byStore = useMemo(() => {
     const m = new Map()
     for (const c of data?.cells || []) {
-      const s = c.storeName || '— без ЦФЗ —'
-      if (!m.has(s)) m.set(s, [])
-      m.get(s).push(c.address)
+      if (!c.storeName) continue
+      if (!m.has(c.storeName)) m.set(c.storeName, [])
+      m.get(c.storeName).push(c.address)
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru'))
   }, [data])
 
   return (
-    <SettingCard icon={Store} title="ЦФЗ по ячейкам КДК" subtitle="Какой магазин закреплён за ячейкой — подтягивается из WMS">
+    <SettingCard icon={Store} title="Ячейки и ЦФЗ" subtitle="Ячейки зон из WMS: id ячейки (для поиска в WMS) и закреплённый магазин">
       <div className="space-y-2">
         {(data?.zones || []).map(z => (
           <div key={z.zoneId} className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface-2/60 p-3">
@@ -92,7 +92,7 @@ export function CellStoresCard() {
             <IconAction icon={Trash2} title="Убрать зону" tone="danger" disabled={!!busyZone} onClick={() => removeZone(z)} />
           </div>
         ))}
-        {data && !data.zones.length && <div className="text-sm text-muted-foreground">Зон пока нет — добавьте зону КДК по её ID из WMS.</div>}
+        {data && !data.zones.length && <div className="text-sm text-muted-foreground">Зон пока нет — добавьте зону (КДК, ЗГЗ) по её ID из WMS.</div>}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
