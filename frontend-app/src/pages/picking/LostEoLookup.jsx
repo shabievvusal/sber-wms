@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/components/ui/table'
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Download, ScanBarcode, X } from 'lucide-react'
+import { ScanButton } from '@/components/shared/BarcodeScanner'
 import { DT, NUM, addTable, excelDate, titleRows } from '@/pages/stats/receivingExport'
 
 const thCls = 'h-8 px-2 text-[11px]'
@@ -56,6 +57,10 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
     e.preventDefault()
     const raw = input.trim()
     setInput('')
+    applyQuery(raw)
+  }
+  // из поля или с камеры
+  const applyQuery = raw => {
     if (!raw) return
     if (mode === 'product') {
       const found = resolveBarcode(index, raw)
@@ -149,6 +154,7 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
           placeholder={mode === 'product' ? 'Сканируйте штрихкод товара' : 'Введите ячейку: KDH-4-8, ZGH-4-8 или KDH-4'}
           className="h-10 max-w-sm text-base"
         />
+        <ScanButton className="h-10" title={mode === 'product' ? 'Штрихкод товара' : 'Штрихкод ячейки'} onResult={t => applyQuery(String(t).trim())} />
         <Button type="submit" variant="secondary">Показать</Button>
         {query && (
           <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs">

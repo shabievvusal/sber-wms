@@ -1,0 +1,22 @@
+{
+  "name": "СберЛогистика WMS",
+  "short_name": "WMS СПБ-3",
+  "description": "Склад СПБ-3: статистика, поставки, потеряшки, консолидация",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Сообщить о нарушении", "short_name": "Жалоба", "url": "/#/consolidation-form", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Поиск потеряшек", "short_name": "Потеряшки", "url": "/#/picking-lost-eo", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Поиск ЕО", "short_name": "Поиск ЕО", "url": "/#/picking-eo", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

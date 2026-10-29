@@ -9,6 +9,7 @@ import { Code128Barcode, schedulePrint } from './Code128Barcode'
 import { TYPE_LABELS } from './constants'
 import { fmtTime, userName } from './format'
 import { Search, Printer, RefreshCw } from 'lucide-react'
+import { ScanButton } from '@/components/shared/BarcodeScanner'
 
 const PAGE_SIZE = 100
 
@@ -83,8 +84,9 @@ export default function EoSearchPage() {
     schedulePrint()
   }, [])
 
-  const search = async () => {
-    const clean = barcode.trim()
+  // value — штрихкод с камеры (иначе — из поля)
+  const search = async value => {
+    const clean = (typeof value === 'string' ? value : barcode).trim()
     if (!clean) { setError('Введите ШК продукта'); return }
     setError('')
     setLoading(true)
@@ -170,6 +172,7 @@ export default function EoSearchPage() {
             placeholder="ШК продукта"
           />
         </div>
+        <ScanButton className="h-9" title="Штрихкод товара" onResult={t => { const v = String(t).replace(/\s/g, ''); setBarcode(v); search(v) }} />
         <Button onClick={search} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Поиск...' : 'Найти'}
         </Button>

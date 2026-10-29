@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { Camera, CheckCircle2, Loader2, X } from 'lucide-react'
+import { ScanButton } from '@/components/shared/BarcodeScanner'
 
 const LS_PREFIX = 'consolidation_storage_prefix'
 const LS_ROW = 'consolidation_cell_row'
@@ -181,13 +182,19 @@ export default function ConsolidationFormPage() {
           ) : (
             <label className="block space-y-1">
               <span className="block text-xs font-medium text-muted-foreground">Штрихкод ЕО</span>
-              <Input ref={euBarcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте ЕО" value={euBarcode} onChange={e => setEuBarcode(e.target.value)} />
+              <div className="flex gap-2">
+                <Input ref={euBarcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте ЕО" value={euBarcode} onChange={e => setEuBarcode(e.target.value)} />
+                <ScanButton className="h-12 w-14" title="Штрихкод ЕО" onResult={t => { setEuBarcode(t); barcodeRef.current?.focus() }} />
+              </div>
             </label>
           )}
 
           <label className="block space-y-1">
             <span className="block text-xs font-medium text-muted-foreground">Штрихкод товара{isZgh ? ' (необязательно)' : ''}</span>
-            <Input ref={barcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте товар" required={!isZgh} value={barcode} onChange={e => setBarcode(e.target.value)} />
+            <div className="flex gap-2">
+              <Input ref={barcodeRef} inputMode="numeric" className="h-12 text-lg" placeholder="Отсканируйте товар" required={!isZgh} value={barcode} onChange={e => setBarcode(e.target.value)} />
+              <ScanButton className="h-12 w-14" title="Штрихкод товара" onResult={t => setBarcode(t)} />
+            </div>
           </label>
 
           <div className="space-y-2">

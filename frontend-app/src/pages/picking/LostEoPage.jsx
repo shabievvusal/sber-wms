@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { Check, CloudDownload, MapPinCheck, RotateCcw, ScanBarcode, Search, Undo2, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { LostEoJournal } from './LostEoJournal'
+import { ScanButton } from '@/components/shared/BarcodeScanner'
 import { fmtTime } from './format'
 import { LostEoLookup } from './LostEoLookup'
 
@@ -170,6 +171,11 @@ export default function LostEoPage() {
     e.preventDefault()
     const raw = input.trim()
     setInput('')
+    processScan(raw)
+  }
+
+  // скан из поля (ТСД / клавиатура) или с камеры телефона
+  const processScan = raw => {
     if (!raw || !index) return
     // отсканировали саму этикетку ЕО
     if (index.hus.has(raw)) {
@@ -267,6 +273,7 @@ export default function LostEoPage() {
               className="h-10 max-w-sm text-base"
               inputMode="numeric"
             />
+            <ScanButton className="h-10" continuous title="Сканируйте товары из ЕО" label={<span className="sm:hidden">Камера</span>} onResult={t => processScan(String(t).trim())} />
             <Button type="submit" variant="secondary">Добавить</Button>
             <Button type="button" variant="ghost" onClick={undo} disabled={!scans.length}><Undo2 className="size-4" /> Отменить скан</Button>
             <Button type="button" variant="ghost" onClick={() => { setScans([]); inputRef.current?.focus() }} disabled={!scans.length}><RotateCcw className="size-4" /> Сбросить</Button>

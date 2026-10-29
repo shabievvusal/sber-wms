@@ -5,6 +5,15 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>СберЛогистика WMS</title>
+    <!-- установка на телефон как приложение (иконка на экране, без адресной строки) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0b0f" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="WMS СПБ-3" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script>
       // Тема до первой отрисовки — без вспышки светлого фона (см. src/lib/theme.js)
       try {
