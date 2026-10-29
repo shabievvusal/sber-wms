@@ -846,6 +846,52 @@ async function findWmsProductId(token, code) {
   return (list.find(p => p.nomenclatureCode === code) || list[0])?.id || null
 }
 
+// ─── Поиск ЕО по ШК товара ──────────────────────────────────────────────────
+// ШК → товары (products/search, PRODUCT_BARCODE) → остатки товара по ячейкам
+// и ЕО (stocks/v2/details). Ворота — ячейки G<номер> («Ворота 147»).
+const STOCKS_DETAILS_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/v2/details'
+
+export async function findProductsByBarcode(token, barcode) {
+  const r = await fetch(PRODUCTS_SEARCH_URL, {
+    method: 'POST',
+    headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
+    body: JSON.stringify({ productFilter: { type: 'PRODUCT_BARCODE', barcode }, pageSize: 30, pageNumber: 1 }),
+  })
+  if (!r.ok) throw new Error(`WMS products/search ${r.status}`)
+  const data = await r.json()
+  return (data?.value?.data || []).map(p => ({ id: p.id, name: p.productName || '', code: p.nomenclatureCode || '', imageUrl: p.imageUrl || '' }))
+}
+
+export async function fetchProductStock(token, productId) {
+  const size = 100
+  const out = []
+  for (let pageNumber = 1; pageNumber <= 50; pageNumber++) {
+    const r = await fetch(STOCKS_DETAILS_URL, {
+      method: 'POST',
+      headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
+      body: JSON.stringify({
+        productId, parts: null, statuses: null, cellId: null, handlingUnitBarcode: null, zoneIds: null, locationIds: null,
+        rows: null, sections: null, levels: null, owner: null, sortByQuantity: null, pageNumber, pageSize: size,
+      }),
+    })
+    if (!r.ok) throw new Error(`WMS stocks/v2/details ${r.status}`)
+    const data = await r.json()
+    const items = data?.value?.items || []
+    out.push(...items)
+    if (items.length < size || out.length >= (data?.value?.total ?? 0)) break
+  }
+  return out.map(s => ({
+    cell: s.address?.cellAddress || '',
+    eo: s.address?.handlingUnitBarcode || '',
+    zone: s.location?.zoneName || '',
+    location: s.location?.locationName || '',
+    status: s.status || '',
+    quantity: Number(s.quantity) || 0,
+    productionDate: s.part?.productionDate || null,
+    bestBeforeDate: s.part?.bestBeforeDate || null,
+  }))
+}
+
 export async function fetchWmsProductWeight(token, { code, productId }) {
   const id = productId || await findWmsProductId(token, code)
   if (!id) return { productId: null, grams: 0 }
@@ -1065,6 +1111,41 @@ export async function getEoRemaining(token, sourceHandlingUnitBarcode) {
   })
   if (!total) return null
   return items[0]?.sourceQuantity?.newQuantity ?? null
+}
+
+// Кто комплектует из ЕО: последние до 500 операций, где ЕО — источник
+// (новые сверху). picked — штук отобрано по этим операциям; pickers —
+// сотрудники с числом отборов, последний сверху.
+export async function getEoPicking(token, sourceHandlingUnitBarcode) {
+  const { items, total } = await _fetchOnePageFromBrowser(token, {
+    productId: null, parts: [], operationTypes: [],
+    sourceCellId: null, targetCellId: null,
+    sourceHandlingUnitBarcode, targetHandlingUnitBarcode: null,
+    operationStartedAtFrom: null, operationStartedAtTo: null,
+    operationCompletedAtFrom: null, operationCompletedAtTo: null,
+    executorId: null, pageNumber: 1, pageSize: 500,
+  })
+  const sorted = [...items].sort((a, b) => new Date(b.operationCompletedAt || 0) - new Date(a.operationCompletedAt || 0))
+  const byUser = new Map()
+  let picked = 0
+  for (const it of sorted) {
+    const q = it.sourceQuantity
+    picked += Math.max(0, (Number(q?.oldQuantity) || 0) - (Number(q?.newQuantity) || 0))
+    const u = it.responsibleUser
+    const key = u?.id || [u?.lastName, u?.firstName].join(' ')
+    if (!u || !key.trim()) continue
+    const cur = byUser.get(key) || { user: u, count: 0, lastAt: it.operationCompletedAt }
+    cur.count++
+    byUser.set(key, cur)
+  }
+  return {
+    total: total ?? items.length,
+    complete: items.length >= (total ?? items.length),
+    picked,
+    lastAt: sorted[0]?.operationCompletedAt || null,
+    lastType: sorted[0]?.operationType || null,
+    pickers: [...byUser.values()],
+  }
 }
 
 export async function getEoChangeInfo(token, sourceHandlingUnitBarcode) {
