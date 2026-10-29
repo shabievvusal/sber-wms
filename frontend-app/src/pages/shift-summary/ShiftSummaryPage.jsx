@@ -68,13 +68,13 @@ export default function ShiftSummaryPage() {
 const toIso = local => new Date(`${local}:00+03:00`).toISOString()
 const fmtLocal = local => `${fmtD(local.slice(0, 10))} ${local.slice(11, 16)}`
 
-// последняя закончившаяся смена: днём — прошлая ночь, вечером — сегодняшний день
-function lastShiftRange() {
+// текущая смена: 09–21 — сегодняшний день, 21–24 — ночь с сегодня на завтра,
+// 00–09 — ночь со вчера на сегодня (данные — по текущий момент)
+function currentShiftRange() {
   const n = mskNow(), h = n.getUTCHours(), today = n.toISOString().slice(0, 10)
-  if (h >= 21) return { from: `${today}T09:00`, to: `${today}T21:00` }
-  const y = shiftDay(today, -1)
-  if (h >= 9) return { from: `${y}T21:00`, to: `${today}T09:00` }
-  return { from: `${y}T09:00`, to: `${y}T21:00` }
+  if (h >= 9 && h < 21) return { from: `${today}T09:00`, to: `${today}T21:00` }
+  if (h >= 21) return { from: `${today}T21:00`, to: `${shiftDay(today, 1)}T09:00` }
+  return { from: `${shiftDay(today, -1)}T21:00`, to: `${today}T09:00` }
 }
 
 // заголовок картинки: ровно смена — «Итоги дневной смены · Среда, 28.10.2026», иначе интервал
@@ -86,7 +86,7 @@ function rangeTitle({ from, to }) {
 }
 
 function ShiftTab() {
-  const [range, setRange] = useState(lastShiftRange)
+  const [range, setRange] = useState(currentShiftRange)
   const [data, setData] = useState(null) // { [op]: rows }
   const [loading, setLoading] = useState(false)
   const [company, setCompany] = useState('__all__')
