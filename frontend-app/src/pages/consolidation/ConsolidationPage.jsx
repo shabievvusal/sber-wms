@@ -53,6 +53,17 @@ export default function ConsolidationPage() {
   const [lookupAllText, setLookupAllText] = useState(null)
   const [lookupBusyId, setLookupBusyId] = useState(null)
   const lookingUpRef = useRef(false)
+  // адрес ячейки → id ячейки WMS (справочник «ЦФЗ по ячейкам» в настройках)
+  const cellIdsRef = useRef(null)
+  const cellIdOf = async address => {
+    if (!cellIdsRef.current) {
+      try {
+        const r = await api.getCellStores()
+        cellIdsRef.current = new Map((r?.cells || []).filter(c => c.cellId).map(c => [String(c.address).toUpperCase(), c.cellId]))
+      } catch { cellIdsRef.current = new Map() }
+    }
+    return cellIdsRef.current.get(String(address || '').trim().toUpperCase()) || null
+  }
 
   const [supervisor, setSupervisor] = useState(() => getSupervisorOptions()[0] || '')
   const [photoModal, setPhotoModal] = useState(null) // { photos, idx } | null
@@ -145,7 +156,7 @@ export default function ConsolidationPage() {
     const token = getStoredToken()
     if (!token) return { lookupDone: false, lookupError: 'Нет активного WMS-токена — войдите паролем от WMS' }
     try {
-      return await lookupViaBrowser(token, c.barcode, c.cell, c.createdAt, c.handlingUnitBarcode)
+      return await lookupViaBrowser(token, c.barcode, c.cell, c.createdAt, c.handlingUnitBarcode, await cellIdOf(c.cell))
     } catch (err) {
       return { lookupDone: false, lookupError: err.message || 'Ошибка WMS' }
     }
