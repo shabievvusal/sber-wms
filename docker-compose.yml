@@ -71,7 +71,6 @@ services:
     volumes:
       - node-persist:/app/persist
       - ./backend/server.js:/app/backend/server.js
-      - ./backend/vs-auth.js:/app/backend/vs-auth.js
       - ./backend/vs-auth-pg.js:/app/backend/vs-auth-pg.js
     depends_on:
       postgres:

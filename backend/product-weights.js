@@ -35,24 +35,19 @@ let barcodeMap = null; // Map<barcode, { article, qty }> — qty: 1 у штуч�
 // запрос, так что кратковременная рассинхронизация не критична (в отличие
 // от кэша сотрудников в Фазе 2, который был источником данных на каждый
 // HTTP-запрос).
-const USE_PG = process.env.USE_PG === 'true';
-let pgPool = null;
-if (USE_PG) {
-  const { Pool } = require('pg');
-  pgPool = new Pool({
-    host: process.env.PG_HOST || 'postgres',
-    port: parseInt(process.env.PG_PORT || '5432', 10),
-    database: process.env.PG_DB || 'zlp',
-    user: process.env.PG_USER || 'zlp',
-    password: process.env.PG_PASSWORD || '',
-  });
-  // Без обработчика обрыв простаивающего соединения (рестарт Postgres, сеть)
-  // всплывает как необработанное 'error' и роняет весь процесс Node.
-  pgPool.on('error', err => console.error('[pg] product-weights pool:', err.message));
-}
+const { Pool } = require('pg');
+const pgPool = new Pool({
+  host: process.env.PG_HOST || 'postgres',
+  port: parseInt(process.env.PG_PORT || '5432', 10),
+  database: process.env.PG_DB || 'zlp',
+  user: process.env.PG_USER || 'zlp',
+  password: process.env.PG_PASSWORD || '',
+});
+// Без обработчика обрыв простаивающего соединения (рестарт Postgres, сеть)
+// всплывает как необработанное 'error' и роняет весь процесс Node.
+pgPool.on('error', err => console.error('[pg] product-weights pool:', err.message));
 
 async function initPg() {
-  if (!pgPool) return;
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS product_weights (
       article TEXT PRIMARY KEY,
@@ -79,7 +74,6 @@ async function initPg() {
 }
 
 async function syncBarcodesToPg(map) {
-  if (!pgPool) return;
   const client = await pgPool.connect();
   try {
     await client.query('BEGIN');
@@ -103,7 +97,6 @@ async function syncBarcodesToPg(map) {
 }
 
 async function syncMapToPg(map) {
-  if (!pgPool) return;
   const client = await pgPool.connect();
   try {
     await client.query('BEGIN');

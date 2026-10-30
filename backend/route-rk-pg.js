@@ -1,7 +1,5 @@
 /**
- * route-rk-pg.js — PostgreSQL-реализация того же интерфейса что и route-rk-storage.js
- *
- * Включается через USE_PG=true в .env
+ * route-rk-pg.js — маршруты РК в PostgreSQL (адреса, данные отчёта отгрузки).
  * Настройки: PG_HOST, PG_PORT, PG_DB, PG_USER, PG_PASSWORD
  */
 
@@ -65,7 +63,7 @@ function rowToRoute(row) {
   };
 }
 
-// ─── Вычисляемые поля (идентичны route-rk-storage.js) ───────────────────────
+// ─── Вычисляемые поля ───────────────────────
 
 function shippedTotal(route) {
   return (route.shipment?.items || []).reduce((s, i) => s + (i.rk || 0), 0);

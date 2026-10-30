@@ -1,8 +1,6 @@
 /**
- * vs-auth-pg.js — Postgres-реализация того же интерфейса, что и vs-auth.js.
- *
- * Включается через USE_PG=true в .env (тот же флаг, что и route-rk-pg.js/
- * empl-pg.js/tsd-pg.js). Настройки: PG_HOST, PG_PORT, PG_DB, PG_USER,
+ * vs-auth-pg.js — сессии и пользователи сайта в Postgres (проверка входа в
+ * node; сам вход и управление пользователями — в dotnet). Настройки: PG_HOST, PG_PORT, PG_DB, PG_USER,
  * PG_PASSWORD — та же база `zlp`, что и у остальных *-pg.js модулей, просто
  * свои таблицы, как и у них.
  *

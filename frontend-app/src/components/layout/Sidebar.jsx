@@ -12,6 +12,27 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { WarehouseLabel, WarehousePicker, useWarehouseCount } from '@/components/layout/WarehouseSwitcher'
 import { useAuth } from '@/context/AuthContext'
 import { ROLE_LABELS } from '@/pages/settings/constants'
+import { hashFor } from '@/lib/hashRoute'
+
+// Пункт меню — настоящая ссылка (#/раздел): правая кнопка → «Открыть в новой
+// вкладке», Ctrl/Shift/колёсико работают как у обычной ссылки. Простой клик —
+// переход внутри сайта без перезагрузки (onNavigate).
+function NavLink({ page, onNavigate, className, title, children }) {
+  return (
+    <a
+      href={hashFor(page)}
+      title={title}
+      className={className}
+      onClick={e => {
+        if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return
+        e.preventDefault()
+        onNavigate(page)
+      }}
+    >
+      {children}
+    </a>
+  )
+}
 
 const LS_KEY = 'sidebar_collapsed'
 const spring = { type: 'spring', stiffness: 500, damping: 40 }
@@ -134,23 +155,30 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false, layoutPr
         const groupActive = isGroup && children.some(c => c.page === activePage)
         const isExpanded = expanded.has(key)
 
-        const itemButton = (
-          <button
-            key={key}
-            type="button"
-            disabled={disabled}
-            title={collapsed ? label + (disabled ? ' (скоро)' : '') : undefined}
-            onClick={() => {
-              if (isGroup) { collapsed ? onNavigate(children[0].page) : toggleGroup(key) }
-              else if (page) onNavigate(page)
-            }}
-            className={cn(itemCls(active || groupActive, collapsed), disabled && !isGroup && 'cursor-default opacity-40')}
-          >
+        const itemInner = (
+          <>
             {(active || (groupActive && (collapsed || !isExpanded))) && <ActivePill layoutId={pillId} />}
             <Icon size={17} strokeWidth={active || groupActive ? 2.4 : 2} className="relative shrink-0" />
             {!collapsed && <span className="relative truncate">{label}</span>}
             {!collapsed && disabled && !isGroup && <span className="relative ml-auto shrink-0 text-[10px] text-muted-foreground">скоро</span>}
             {!collapsed && isGroup && <ChevronDown size={15} className={cn('relative ml-auto shrink-0 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} />}
+          </>
+        )
+        const itemTitle = collapsed ? label + (disabled ? ' (скоро)' : '') : undefined
+        const itemButton = page && !isGroup ? (
+          <NavLink key={key} page={page} onNavigate={onNavigate} title={itemTitle} className={itemCls(active, collapsed)}>
+            {itemInner}
+          </NavLink>
+        ) : (
+          <button
+            key={key}
+            type="button"
+            disabled={disabled}
+            title={itemTitle}
+            onClick={() => { if (isGroup) { collapsed ? onNavigate(children[0].page) : toggleGroup(key) } }}
+            className={cn(itemCls(active || groupActive, collapsed), disabled && !isGroup && 'cursor-default opacity-40')}
+          >
+            {itemInner}
           </button>
         )
 
@@ -172,15 +200,10 @@ export function SidebarNav({ activePage, onNavigate, collapsed = false, layoutPr
                     {children.map(child => {
                       const childActive = child.page === activePage
                       return (
-                        <button
-                          key={child.key}
-                          type="button"
-                          onClick={() => onNavigate(child.page)}
-                          className={cn(itemCls(childActive), 'py-1.5')}
-                        >
+                        <NavLink key={child.key} page={child.page} onNavigate={onNavigate} className={cn(itemCls(childActive), 'py-1.5')}>
                           {childActive && <ActivePill layoutId={pillId} />}
                           <span className="relative truncate">{child.label}</span>
-                        </button>
+                        </NavLink>
                       )
                     })}
                   </div>
@@ -297,9 +320,9 @@ function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', the
 function ExtensionLink({ activePage, onNavigate, collapsed }) {
   const active = activePage === 'extension'
   return (
-    <button
-      type="button"
-      onClick={() => onNavigate('extension')}
+    <NavLink
+      page="extension"
+      onNavigate={onNavigate}
       title="Расширение для WMS — разделы сайта прямо в меню WMS"
       className={cn(
         'flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-medium transition-colors',
@@ -309,7 +332,7 @@ function ExtensionLink({ activePage, onNavigate, collapsed }) {
     >
       <Puzzle className="size-4 shrink-0" />
       {!collapsed && <span className="truncate">Расширение для WMS</span>}
-    </button>
+    </NavLink>
   )
 }
 

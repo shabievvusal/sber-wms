@@ -6,19 +6,16 @@ const cookieParser = require('cookie-parser');
 const scheduler = require('./scheduler');
 // склад запроса и папка его данных (см. warehouse-context.js)
 const { dataDir, currentWarehouse, runWithWarehouse, DEFAULT_WAREHOUSE_ID } = require('./warehouse-context');
-const vsAuth = process.env.USE_PG === 'true'
-  ? require('./vs-auth-pg')
-  : require('./vs-auth');
+const vsAuth = require('./vs-auth-pg');
 const productWeights = require('./product-weights');
-const rkStorage = process.env.USE_PG === 'true'
-  ? require('./route-rk-pg')
-  : require('./route-rk-storage');
-const emplPg = process.env.USE_PG === 'true' ? require('./empl-pg') : null;
-const tsdPg = process.env.USE_PG === 'true' ? require('./tsd-pg') : null;
-const motivationPg = process.env.USE_PG === 'true' ? require('./motivation-pg') : null;
-const wmsOpsPg = process.env.USE_PG === 'true' ? require('./wms-ops-pg') : null;
-const supplyPlansPg = process.env.USE_PG === 'true' ? require('./supply-plans-pg') : null;
-const consolidationPg = process.env.USE_PG === 'true' ? require('./consolidation-pg') : null;
+const rkStorage = require('./route-rk-pg');
+// всё хранение — PostgreSQL (режим JSON-файлов «USE_PG=false» убран 2026-10-31)
+const emplPg = require('./empl-pg');
+const tsdPg = require('./tsd-pg');
+const motivationPg = require('./motivation-pg');
+const wmsOpsPg = require('./wms-ops-pg');
+const supplyPlansPg = require('./supply-plans-pg');
+const consolidationPg = require('./consolidation-pg');
 const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
 
@@ -33,9 +30,14 @@ try {
   // compression не установлен — сервер работает без gzip
 }
 
-// ✅ МАКСИМАЛЬНЫЙ ЛИМИТ - 1 ГИГАБАЙТ
-app.use(express.json({ limit: '1024mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1024mb' }));
+// Размер тела запроса: 10 МБ всем, большой лимит — только сохранению выгрузок
+// WMS (браузер присылает выгрузку за период одним запросом). Раньше было 1 ГБ
+// на всё: несколько таких запросов могли съесть память сервера (swap нет).
+const BIG_JSON_PATHS = new Set(['/api/save-fetched-data', '/api/stats/placement/save', '/api/stats/receiving/save', '/api/stats/remains/save']);
+const jsonSmall = express.json({ limit: '10mb' });
+const jsonBig = express.json({ limit: '300mb' });
+app.use((req, res, next) => (BIG_JSON_PATHS.has(req.path) ? jsonBig : jsonSmall)(req, res, next));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Склад запроса (заголовок X-Warehouse, ставит сайт): проверяем, что он
 // пользователю доступен (vs_user_warehouses, см. vs-auth-pg.js applyWarehouse),
@@ -208,22 +210,14 @@ async function wmsWarehouseOfToken(token) {
 const fetchRequestedBy = new Set(); // склады, где попросили обновить данные
 
 // API-маршруты регистрируем до статики, чтобы POST /api/empl и др. не отдавали index.html
+// Открыт без входа: по нему Docker проверяет, жив ли node (healthcheck).
+// Поэтому — только время обновления и флаг запроса; конфиг (там был токен
+// Telegram-бота в открытом виде) больше не отдаётся.
 app.get('/api/status', (req, res) => {
   try {
-    const config = loadConfig();
     res.json({
-      scheduleRunning: scheduler.isRunning(),
-      tokenRefresherRunning: false,
       lastRun: scheduler.getLastRun(),
       fetchRequested: fetchRequestedBy.has(currentWarehouse()),
-      config: {
-        ...config,
-        token: config.token ? '***' : '',
-        refreshToken: config.refreshToken ? '***' : '',
-        cookie: config.cookie ? '***' : '',
-        intervalMinutes: config.intervalMinutes ?? 60,
-        pageSize: config.pageSize ?? 500,
-      },
     });
   } catch (err) {
     console.error('GET /api/status', err);
@@ -236,7 +230,6 @@ app.get('/api/status', (req, res) => {
 
 
 
-const EMPL_CSV_PATH = path.join(__dirname, '..', 'empl.csv');
 // Файлы склада — в папке его данных (у СПБ-3 прежняя data/), см. warehouse-context.js
 const EMPL_IDS_PATH = () => path.join(dataDir(), 'empl-ids.json');
 // Новые исполнители из выгрузки WMS — те, кого нет в списке сотрудников по
@@ -472,23 +465,6 @@ app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
   }
 });
 
-function readEmplCsvText() {
-  const buf = fs.readFileSync(EMPL_CSV_PATH);
-  // UTF-8 BOM (EF BB BF) — сохранено через /api/employees
-  if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
-    return buf.slice(3).toString('utf8');
-  }
-  // Важно: buf.toString('utf8') подставляет U+FFFD (�) на битых байтах и может дать ложные совпадения.
-  // Надёжнее: строгая проверка UTF-8 (fatal), иначе — cp1251 (часто Excel).
-  try {
-    const td = new TextDecoder('utf-8', { fatal: true });
-    return td.decode(buf);
-  } catch {
-    const iconv = require('iconv-lite');
-    return iconv.decode(buf, 'cp1251');
-  }
-}
-
 /** Карта нормализованное ФИО -> компания для фильтра по роли manager */
 function loadEmplIdRegistry() {
   try {
@@ -500,41 +476,9 @@ function loadEmplIdRegistry() {
   }
 }
 
-// Карты соответствия ФИО/executorId → компания. Раньше emplPg держал
-// in-memory кэш, обновляемый после своих же мутаций — убран (см. empl-pg.js),
-// т.к. с переносом части эндпоинтов на dotnet Node перестал быть единственным
-// писателем в таблицу employees. Взамен — свежий SQL-запрос через
-// getCompanyLookupMaps(), который вызывающий код (роуты ниже) делает ОДИН РАЗ
-// за HTTP-запрос (не за айтем), а дальше использует результат синхронно.
-function getEmplMapFioToCompanyCsv() {
-  const map = new Map();
-  if (!fs.existsSync(EMPL_CSV_PATH)) return map;
-  let text;
-  try {
-    text = readEmplCsvText();
-  } catch {
-    return map;
-  }
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) continue;
-    const idx = t.indexOf(';');
-    if (idx < 0) continue;
-    const fio = t.slice(0, idx).trim();
-    const company = t.slice(idx + 1).trim();
-    if (fio) {
-      const key = fio.replace(/\s+/g, ' ').trim().toLowerCase();
-      if (!map.has(key)) map.set(key, company);
-    }
-  }
-  return map;
-}
-
-/** { fioMap, idMap } — idMap равен null в CSV-режиме (без PostgreSQL). */
+/** { fioMap, idMap } — сотрудники и их компании из базы. */
 async function getCompanyLookupMaps() {
-  if (emplPg) return emplPg.getLookupMaps();
-  return { fioMap: getEmplMapFioToCompanyCsv(), idMap: null };
+  return emplPg.getLookupMaps();
 }
 
 /** Обратная совместимость для мест, которым нужна только карта ФИО→компания. */
@@ -559,7 +503,7 @@ function getCompanyByFio(emplMap, executorFio) {
 /**
  * Компания определяется только по UUID executorId. ФИО используется только для отображения.
  * idMap — карта, уже загруженная вызывающим кодом за этот HTTP-запрос через
- * getCompanyLookupMaps() (null означает CSV-режим — тогда используется файловый реестр).
+ * getCompanyLookupMaps().
  */
 function getCompanyByIdOrFioSync(idMap, executorId, executorFio) {
   if (executorId && idMap) {
@@ -702,7 +646,6 @@ const uploadSupplyPlans = multer({ storage: multer.memoryStorage(), limits: { fi
 
 app.post('/api/supply-plans/upload', vsSessionRequired, uploadSupplyPlans.single('file'), async (req, res) => {
   try {
-    if (!supplyPlansPg) return res.status(501).json({ error: 'Нужен Postgres (USE_PG=true)' });
     if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
     const { rows, dayFacts } = await parseSupplyPlansInWorker(req.file.buffer);
     if (!rows.length) return res.status(400).json({ error: 'В файле не найден график: нужны колонки «Дата» и «Номер заказа»' });
@@ -812,17 +755,13 @@ async function getAllExecutors() {
   return inflight;
 }
 
-app.get('/api/empl/find-unregistered', async (req, res) => {
+app.get('/api/empl/find-unregistered', vsSessionRequired, async (req, res) => {
   try {
     // Собираем известные ID. ФИО не используется для сопоставления.
     const knownIds = new Set();
-    if (emplPg) {
-      const data = await emplPg.listEmployees();
-      for (const e of data.employees) {
-        if (e.executorId) knownIds.add(e.executorId);
-      }
-    } else {
-      for (const id of Object.keys(loadEmplIdRegistry())) knownIds.add(id);
+    const data = await emplPg.listEmployees();
+    for (const e of data.employees) {
+      if (e.executorId) knownIds.add(e.executorId);
     }
 
     const employees = (await getAllExecutors())
@@ -1049,7 +988,7 @@ const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/sel
 const ROLLCALL_PATH = () => path.join(dataDir(), 'rollcall.json');
 
 
-app.get('/api/monitor/live', async (req, res) => {
+app.get('/api/monitor/live', vsSessionRequired, async (req, res) => {
   try {
     const config = loadConfig();
     const token = (config.token || '').trim();
@@ -1082,7 +1021,7 @@ app.get('/api/monitor/live', async (req, res) => {
   }
 });
 
-app.get('/api/rollcall', (req, res) => {
+app.get('/api/rollcall', vsSessionRequired, (req, res) => {
   try {
     if (!fs.existsSync(ROLLCALL_PATH())) return res.json({ shiftKey: null, present: [] });
     res.json(JSON.parse(fs.readFileSync(ROLLCALL_PATH(), 'utf8')));
@@ -1091,7 +1030,7 @@ app.get('/api/rollcall', (req, res) => {
   }
 });
 
-app.put('/api/rollcall', (req, res) => {
+app.put('/api/rollcall', vsSessionRequired, (req, res) => {
   try {
     const { shiftKey, present } = req.body || {};
     fs.mkdirSync(dataDir(), { recursive: true });
@@ -1105,9 +1044,8 @@ app.put('/api/rollcall', (req, res) => {
 // ─── Консолидация: маршруты ──────────────────────────────────────────────────
 
 // POST /api/consolidation/complaints — создать жалобу
-app.post('/api/consolidation/complaints', upload.fields([{ name: 'photo', maxCount: 10 }, { name: 'thumb', maxCount: 10 }]), async (req, res) => {
+app.post('/api/consolidation/complaints', vsSessionRequired, upload.fields([{ name: 'photo', maxCount: 10 }, { name: 'thumb', maxCount: 10 }]), async (req, res) => {
   try {
-    if (!consolidationPg) return res.status(501).json({ ok: false, error: 'Нужен Postgres (USE_PG=true)' });
     const { cell, barcode, employeeName, handlingUnitBarcode } = req.body || {};
     const isZgh = (cell || '').trim().toUpperCase() === 'ZGH';
     if (isZgh && !handlingUnitBarcode) {
@@ -1157,9 +1095,8 @@ app.post('/api/consolidation/complaints', upload.fields([{ name: 'photo', maxCou
 });
 
 // GET /api/consolidation/complaints — список жалоб (компания из консолидации или по ФИО из empl)
-app.get('/api/consolidation/complaints', async (req, res) => {
+app.get('/api/consolidation/complaints', vsSessionRequired, async (req, res) => {
   try {
-    if (!consolidationPg) return res.status(501).json({ error: 'Нужен Postgres (USE_PG=true)' });
     // from/to — ISO-границы даты подачи; компания без записи в жалобе — по ФИО (без сохранения)
     const list = await consolidationPg.list({ from: req.query.from || null, to: req.query.to || null });
     const emplMap = await getEmplMapFioToCompany();
@@ -1250,7 +1187,7 @@ app.post('/api/consolidation/export/report2', vsSessionRequired, async (req, res
 });
 
 // PUT /api/consolidation/complaints/:id/status — сменить статус
-app.put('/api/consolidation/complaints/:id/status', async (req, res) => {
+app.put('/api/consolidation/complaints/:id/status', vsSessionRequired, async (req, res) => {
   try {
     const { status } = req.body || {};
     if (!['new', 'in_progress', 'resolved'].includes(status)) {
@@ -1265,7 +1202,7 @@ app.put('/api/consolidation/complaints/:id/status', async (req, res) => {
 });
 
 // DELETE /api/consolidation/complaints/:id — удалить жалобу
-app.delete('/api/consolidation/complaints/:id', async (req, res) => {
+app.delete('/api/consolidation/complaints/:id', vsSessionRequired, async (req, res) => {
   try {
     const removed = await consolidationPg.remove(req.params.id);
     if (!removed) return res.status(404).json({ ok: false, error: 'Не найдено' });
@@ -1280,7 +1217,7 @@ app.delete('/api/consolidation/complaints/:id', async (req, res) => {
 });
 
 // PUT /api/consolidation/complaints/:id/lookup — сохранить результат WMS-поиска (от клиента)
-app.put('/api/consolidation/complaints/:id/lookup', async (req, res) => {
+app.put('/api/consolidation/complaints/:id/lookup', vsSessionRequired, async (req, res) => {
   try {
     const current = await consolidationPg.get(req.params.id);
     if (!current) return res.status(404).json({ ok: false, error: 'Не найдено' });
@@ -1316,7 +1253,7 @@ app.put('/api/consolidation/complaints/:id/lookup', async (req, res) => {
 });
 
 // POST /api/consolidation/telegram/send — отправить выбранные жалобы в Telegram
-app.post('/api/consolidation/telegram/send', async (req, res) => {
+app.post('/api/consolidation/telegram/send', vsSessionRequired, async (req, res) => {
   try {
     const complaintIds = Array.isArray(req.body?.complaintIds)
       ? req.body.complaintIds.map(x => String(x))
@@ -1592,14 +1529,14 @@ function saveViolations(data) {
 }
 
 // Раздача видео
-app.get('/violation-videos/:filename', (req, res) => {
+app.get('/violation-videos/:filename', vsSessionRequired, (req, res) => {
   const file = path.join(VIOLATIONS_DIR, path.basename(req.params.filename));
   if (!fs.existsSync(file)) return res.status(404).json({ error: 'Файл не найден' });
   res.sendFile(file);
 });
 
 // GET /api/violations
-app.get('/api/violations', (_req, res) => {
+app.get('/api/violations', vsSessionRequired, (_req, res) => {
   res.json(loadViolations());
 });
 
@@ -1656,20 +1593,18 @@ app.get('*', (_req, res) => {
 });
 
 async function startServer() {
-  if (process.env.USE_PG === 'true') {
-    console.log('[pg] Инициализация PostgreSQL...');
-    await rkStorage.init();
-    await emplPg.init();
-    await tsdPg.init();
-    await motivationPg.init();
-    await wmsOpsPg.init();
-    await vsAuth.init();
-    await productWeights.initPg();
-    await supplyPlansPg.init();
-    await consolidationPg.init();
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    console.log('[pg] PostgreSQL готов');
-  }
+  console.log('[pg] Инициализация PostgreSQL...');
+  await rkStorage.init();
+  await emplPg.init();
+  await tsdPg.init();
+  await motivationPg.init();
+  await wmsOpsPg.init();
+  await vsAuth.init();
+  await productWeights.initPg();
+  await supplyPlansPg.init();
+  await consolidationPg.init();
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  console.log('[pg] PostgreSQL готов');
   app.listen(PORT, '0.0.0.0', () => {
     scheduler.ensureDataDir();
     startTelegramBindingPolling();

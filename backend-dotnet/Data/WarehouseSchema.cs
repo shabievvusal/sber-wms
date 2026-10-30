@@ -65,6 +65,72 @@ public static class WarehouseSchema
             await Exec($"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {t}_pkey; ALTER TABLE {t} ADD PRIMARY KEY ({cols});");
         }
 
+        // 00) базовые таблицы операций WMS — раньше их создавал только разовый
+        // скрипт переноса migrate-storage-json-to-pg.js (удалён 2026-10-31).
+        // Здесь — чтобы проект поднимался с нуля; в старом виде (без склада,
+        // ключ date+hour+merge_key), дальше шаги ниже добавят warehouse_id и
+        // недостающие колонки, как для существующих таблиц.
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_ops (
+              id BIGSERIAL PRIMARY KEY,
+              date DATE NOT NULL, hour SMALLINT NOT NULL, merge_key TEXT NOT NULL,
+              item_id TEXT, type TEXT, operation_type TEXT, product_name TEXT,
+              product_id TEXT NOT NULL DEFAULT '',
+              nomenclature_code TEXT, barcodes TEXT, production_date TEXT,
+              best_before_date TEXT, source_barcode TEXT, cell TEXT, target_barcode TEXT,
+              started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
+              executor TEXT, executor_id TEXT,
+              src_old NUMERIC, src_new NUMERIC, tgt_old NUMERIC, tgt_new NUMERIC, quantity NUMERIC,
+              UNIQUE (date, hour, merge_key)
+            )");
+        await Exec("CREATE INDEX IF NOT EXISTS wms_ops_date_idx ON wms_ops (date)");
+        await Exec("CREATE INDEX IF NOT EXISTS wms_ops_executor_id_idx ON wms_ops (executor_id)");
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_placement (
+              id BIGSERIAL PRIMARY KEY,
+              date DATE NOT NULL, hour SMALLINT NOT NULL, merge_key TEXT NOT NULL,
+              item_id TEXT, status TEXT, handling_unit_barcode TEXT,
+              source_cell_address TEXT, target_cell_address TEXT,
+              target_cells_addresses JSONB NOT NULL DEFAULT '[]',
+              source_zone_id TEXT, source_zone_name TEXT,
+              responsible_user JSONB NOT NULL DEFAULT '{}',
+              executor_id TEXT, executor TEXT, created_at TIMESTAMPTZ,
+              issue TEXT, condition TEXT, temperature_mode TEXT, sku_count NUMERIC,
+              UNIQUE (date, hour, merge_key)
+            )");
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_receiving (
+              id BIGSERIAL PRIMARY KEY,
+              date DATE NOT NULL, hour SMALLINT NOT NULL, merge_key TEXT NOT NULL,
+              item_id TEXT, status TEXT, type TEXT, task_number TEXT, order_number TEXT,
+              supplier_name TEXT, started_at TIMESTAMPTZ,
+              responsible_user JSONB NOT NULL DEFAULT '{}',
+              executor_id TEXT, executor TEXT, completed_at TIMESTAMPTZ,
+              volume_in_milliliters NUMERIC, weight_in_grams NUMERIC, eo_count NUMERIC,
+              UNIQUE (date, hour, merge_key)
+            )");
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_remains (
+              id BIGSERIAL PRIMARY KEY,
+              date DATE NOT NULL, hour SMALLINT NOT NULL, merge_key TEXT NOT NULL,
+              item_id TEXT, status TEXT, task_type TEXT,
+              source_cell_address TEXT, source_handling_unit_barcode TEXT,
+              target_cell_address TEXT, target_handling_unit_barcode TEXT,
+              consolidation_items JSONB NOT NULL DEFAULT '[]',
+              responsible_user JSONB NOT NULL DEFAULT '{}',
+              executor_id TEXT, executor TEXT, created_at TIMESTAMPTZ,
+              UNIQUE (date, hour, merge_key)
+            )");
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_storage_agg (
+              date DATE NOT NULL, shift TEXT NOT NULL,
+              total_storage_count NUMERIC NOT NULL DEFAULT 0,
+              storage_by_hour JSONB NOT NULL DEFAULT '{}',
+              total_weight_grams NUMERIC NOT NULL DEFAULT 0,
+              weight_by_employee JSONB NOT NULL DEFAULT '{}',
+              PRIMARY KEY (date, shift)
+            )");
+
         // 0) журнал перемещений ЕО (спуск/пополнение/размещение из
         // stocks/changes) — новая таблица без бэкфилла из JSON, поэтому
         // создаётся здесь (сразу со складом; уникальность слияния — в шаге 2)
