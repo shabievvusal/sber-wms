@@ -22,7 +22,7 @@ import { CompanyFilter } from './CompanyFilter'
 import { HourlyChart } from './HourlyChart'
 import { CompanySummaryTable } from './CompanySummaryTable'
 import { MonthlyCompanySummaryTable } from './MonthlyCompanySummaryTable'
-import { HourlyEmployeeTable } from './HourlyEmployeeTable'
+import { HourlyEmployeeTable, zoneTaskCount } from './HourlyEmployeeTable'
 import { MonthlyEmployeeTable } from './MonthlyEmployeeTable'
 import { MissingWeightPanel } from './MissingWeightPanel'
 import {
@@ -457,7 +457,10 @@ export default function StatsPage() {
 
     const C_CO = 1, C_NAME = 2
     const C_H0 = 3, C_HN = 2 + hours.length
-    const C_TOT = C_HN + 1, C_WORK = C_TOT + 1, C_SP = C_WORK + 1
+    // итоги по зонам (только комплектация) — столбцы сразу после «Итого»
+    const zoneCols = isOperationStats ? [] : buildZoneCatalog(mergedEmployeeRows).filter(z => mergedEmployeeRows.some(r => zoneTaskCount(r, z.key) > 0))
+    const C_TOT = C_HN + 1, C_Z0 = C_TOT + 1, C_ZN = C_TOT + zoneCols.length
+    const C_WORK = C_ZN + 1, C_SP = C_WORK + 1
     const C_WS = C_SP + 1, C_WK = C_WS + 1, C_WT = C_WK + 1
     const NCOLS = C_WT
 
@@ -500,6 +503,7 @@ export default function StatsPage() {
     addLR(null, 'Сотрудник', 'ФИО исполнителя')
     addLR(null, 'ЧЧ', 'Кол-во задач за данный час смены; под числом — вес (кг)')
     addLR(null, 'Итого', 'Суммарное кол-во задач за смену')
+    if (zoneCols.length) addLR(null, 'Итого по зонам', 'Кол-во задач сотрудника в каждой зоне за смену (в сумме = «Итого»); под числом — вес (кг)')
     addLR(null, 'В работе', 'Время в работе: длительность смены − суммарные простои (ЧЧ:ММ)')
     addLR(null, 'Старт/Пик', 'Верхняя строка — первая операция смены; нижняя — последняя')
     addLR(null, 'Вес ХР', 'Суммарный вес в зоне хранения (кг)')
@@ -530,6 +534,14 @@ export default function StatsPage() {
         subRow.getCell(C_H0 + i).style = sHdr
       })
     }
+    if (zoneCols.length) {
+      if (zoneCols.length > 1) ws.mergeCells(grpRN, C_Z0, grpRN, C_ZN)
+      grpRow.getCell(C_Z0).value = 'Итого по зонам'; grpRow.getCell(C_Z0).style = gHdr('FF1E3A5F')
+      zoneCols.forEach((z, i) => {
+        subRow.getCell(C_Z0 + i).value = z.label
+        subRow.getCell(C_Z0 + i).style = { ...sHdr, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(z.light) } } }
+      })
+    }
     grpRow.height = 20; subRow.height = 18
     ws.views = [{ state: 'frozen', ySplit: subRN }]
 
@@ -554,6 +566,11 @@ export default function StatsPage() {
         if (v > 0) rowData[C_H0 - 1 + i] = wg > 0 ? `${v}\n${+(wg / 1000).toFixed(1)} кг` : v
       })
       rowData[C_TOT - 1] = r.total || 0
+      zoneCols.forEach((z, i) => {
+        const c = zoneTaskCount(r, z.key)
+        const g = Number(r.byZone?.[z.key]?.weightGrams) || 0
+        rowData[C_Z0 - 1 + i] = c > 0 ? (g > 0 ? `${c}\n${+(g / 1000).toFixed(1)} кг` : c) : ''
+      })
       rowData[C_WORK - 1] = workedMin > 0 ? `${fmt2(workedMin / 60)}:${fmt2(workedMin % 60)}` : '—'
       rowData[C_SP - 1] = `${fmtT(r.firstAt)}\n${fmtT(r.lastAt)}`
       rowData[C_WS - 1] = wgKg(r._weightStorage) || '—'
@@ -563,7 +580,7 @@ export default function StatsPage() {
       const row = ws.addRow(rowData); row.height = 30
       row.eachCell({ includeEmpty: true }, (cell, cn) => {
         const hasNL = typeof cell.value === 'string' && cell.value.includes('\n')
-        const isTotCol = [C_TOT, C_WORK, C_WS, C_WK, C_WT].includes(cn)
+        const isTotCol = [C_TOT, C_WORK, C_WS, C_WK, C_WT].includes(cn) || (cn >= C_Z0 && cn <= C_ZN)
         let fill = isTotCol ? TOTAL_FILL : undefined
         if (cn >= C_H0 && cn <= C_HN) {
           const v = r.byHour?.[hours[cn - C_H0]] || 0
@@ -576,6 +593,7 @@ export default function StatsPage() {
     ws.getColumn(C_CO).width = 18; ws.getColumn(C_NAME).width = 30
     hours.forEach((_, i) => { ws.getColumn(C_H0 + i).width = 8 })
     ws.getColumn(C_TOT).width = 8; ws.getColumn(C_WORK).width = 10; ws.getColumn(C_SP).width = 13
+    zoneCols.forEach((_, i) => { ws.getColumn(C_Z0 + i).width = 10 })
     ws.getColumn(C_WS).width = 11; ws.getColumn(C_WK).width = 11; ws.getColumn(C_WT).width = 11
 
     const buf = await wb.xlsx.writeBuffer()

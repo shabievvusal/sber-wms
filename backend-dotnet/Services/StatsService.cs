@@ -467,6 +467,11 @@ public partial class StatsService
                 idMap != null && !string.IsNullOrEmpty(executorId) ? (ResolveCompany(idMap, executorId) ?? "—") : "—";
 
             var byEmployeeHour = new Dictionary<string, (string Name, Dictionary<int, (int PieceSelectionCount, HashSet<string> KdkSet, decimal WeightGrams, Dictionary<string, int> ZoneCounts, Dictionary<string, decimal> ZoneWeights)> HourMap)>();
+            // Задачи по зонам — тем же счётом, что и «Итого» (штучный отбор — по
+            // строке, раскладка КДК — уникальная пара товар+ячейка за час), чтобы
+            // сумма по зонам сходилась с итогом сотрудника. ZoneCounts выше — по
+            // строкам (для доминирующей зоны часа), для итогов не годится.
+            var zoneTasksByEmp = new Dictionary<string, Dictionary<(int Col, string Zone), (int Pieces, HashSet<string> Kdk)>>();
             foreach (var item in items)
             {
                 var ts = item.CompletedAt;
@@ -496,6 +501,15 @@ public partial class StatsService
                 {
                     var zoneKey = (item.Cell ?? "").Split('-')[0].ToUpperInvariant();
                     if (zoneKey != "") cell.Item4[zoneKey] = cell.Item4.GetValueOrDefault(zoneKey) + 1;
+                    if (zoneKey != "")
+                    {
+                        if (!zoneTasksByEmp.TryGetValue(executorId, out var zt)) zoneTasksByEmp[executorId] = zt = new();
+                        var zk2 = (col, zoneKey);
+                        var e = zt.TryGetValue(zk2, out var ex) ? ex : (0, new HashSet<string>());
+                        if (type == "PIECE_SELECTION_PICKING") e.Item1++;
+                        else e.Item2.Add($"{(!string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode : (!string.IsNullOrEmpty(item.ProductName) ? item.ProductName : "no-product"))}||{(!string.IsNullOrEmpty(item.Cell) ? item.Cell : "no-target-cell")}");
+                        zt[zk2] = e;
+                    }
                     var productName = item.ProductName;
                     if (!string.IsNullOrEmpty(productName))
                     {
@@ -566,8 +580,14 @@ public partial class StatsService
                     total += sz;
                 }
                 var execInfo = byExecutor.TryGetValue(executorId, out var ei) ? ei : default;
+                // задачи по зонам за часы смены (order) — как total
+                var zoneTasks = new Dictionary<string, int>();
+                if (zoneTasksByEmp.TryGetValue(executorId, out var ztRow))
+                    foreach (var ((zcol, zone), v) in ztRow)
+                        if (order.Contains(zcol)) zoneTasks[zone] = zoneTasks.GetValueOrDefault(zone) + v.Pieces + v.Kdk.Count;
                 heRows.Add(new Dictionary<string, object?>
                 {
+                    ["zoneTasks"] = zoneTasks,
                     ["name"] = name,
                     ["executorId"] = executorId,
                     ["company"] = ResolveCompanyForRow(executorId),

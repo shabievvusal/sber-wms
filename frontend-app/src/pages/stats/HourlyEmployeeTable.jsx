@@ -56,6 +56,9 @@ function resolveEmployeeWeight(row, weightDirect) {
   return out
 }
 
+// задачи сотрудника в зоне: zoneTasks (как «Итого»), для старого ответа сервера — строки byZone
+export const zoneTaskCount = (row, key) => row.zoneTasks ? (row.zoneTasks[key] || 0) : (row.byZone?.[key]?.count || 0)
+
 function Legend({ mode, zoneCatalog }) {
   if (mode === 'sz') {
     return (
@@ -118,6 +121,13 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
   const isReceiving = operation === 'receiving'
   const showIdlesCol = mode === 'idles'
   const zoneCatalog = useMemo(() => buildZoneCatalog(rows), [rows])
+  // Итоги по зонам (комплектация): столбец на каждую зону, где за смену были
+  // задачи. zoneTasks — задачи тем же счётом, что «Итого» (сумма по зонам =
+  // итог); вес — из byZone { зона: { count, weightGrams } }.
+  const zoneCols = useMemo(
+    () => isOperationStats ? [] : zoneCatalog.filter(z => rows.some(r => zoneTaskCount(r, z.key) > 0)),
+    [zoneCatalog, rows, isOperationStats]
+  )
 
   const enriched = useMemo(() => rows.map(r => {
     const idleMin = r._idleTotalMinutes || 0
@@ -151,7 +161,10 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
     const metric = isReceiving ? RECEIVING_SORT_METRICS[receivingMetric] : null
     // Сортировка по конкретному часу (запрос пользователя 2026-07-15) —
     // sortCol здесь число (сам час), а не одна из именованных строк ниже.
-    if (typeof sortCol === 'number' && metric) { av = metric.byHour(a)?.[sortCol] || 0; bv = metric.byHour(b)?.[sortCol] || 0 }
+    if (typeof sortCol === 'string' && sortCol.startsWith('zone:')) {
+      const k = sortCol.slice(5)
+      av = zoneTaskCount(a, k); bv = zoneTaskCount(b, k)
+    } else if (typeof sortCol === 'number' && metric) { av = metric.byHour(a)?.[sortCol] || 0; bv = metric.byHour(b)?.[sortCol] || 0 }
     else if (typeof sortCol === 'number') { av = a.byHour?.[sortCol] || 0; bv = b.byHour?.[sortCol] || 0 }
     else if (sortCol === 'total' && metric) { av = metric.total(a) || 0; bv = metric.total(b) || 0 }
     else if (sortCol === 'worked') { av = a._worked || 0; bv = b._worked || 0 }
@@ -180,6 +193,22 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
     }
     return totals
   }, [visible, displayHours, showIdlesCol])
+
+  // те же итоги по зонам: сумма операций и среднее на работавшего в зоне
+  const zoneTotals = useMemo(() => {
+    const out = {}
+    for (const z of zoneCols) {
+      let sum = 0, workers = 0, grams = 0
+      for (const r of visible) {
+        const c = zoneTaskCount(r, z.key)
+        if (c > 0) { sum += c; workers += 1; grams += Number(r.byZone?.[z.key]?.weightGrams) || 0 }
+      }
+      out[z.key] = { sum, workers, grams, avg: workers > 0 ? sum / workers : 0 }
+    }
+    return out
+  }, [visible, zoneCols])
+  const totalSum = useMemo(() => visible.reduce((s, r) => s + (r.total || 0), 0), [visible])
+  const totalWorkers = useMemo(() => visible.filter(r => (r.total || 0) > 0).length, [visible])
 
   if (!rows.length) return <div className="p-6 text-center text-sm text-muted-foreground">Нет данных</div>
 
@@ -244,6 +273,12 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
               {showIdlesCol && <TableHead className={`${thCls} min-w-[220px] text-left`} title="Паузы между задачами">Простои</TableHead>}
 
               <TableHead className={sortThCls} onClick={() => handleSort('total')}>Итого{sortArrow('total')}</TableHead>
+              {zoneCols.map(z => (
+                <TableHead key={z.key} className={`${sortThCls} min-w-[58px]`} style={{ backgroundColor: z.light, color: z.text }}
+                  title={`Итого операций в зоне «${z.label}» за смену`} onClick={() => handleSort(`zone:${z.key}`)}>
+                  {z.label}{sortArrow(`zone:${z.key}`)}
+                </TableHead>
+              ))}
               <TableHead className={sortThCls} title="Время в работе (смена − простои)" onClick={() => handleSort('worked')}>В работе{sortArrow('worked')}</TableHead>
               <TableHead className={thCls} title="Первая / последняя операция">
                 Старт<div className="mt-px border-t border-current pt-px text-[10px] font-normal">Пик</div>
@@ -259,12 +294,24 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
                   {displayHours.map(h => (
                     <TableHead key={h} className={`${thCls} min-w-[46px] bg-muted/40 font-semibold`}>{hourTotals[h]?.sum > 0 ? fmtNum(hourTotals[h].sum) : '—'}</TableHead>
                   ))}
+                  <TableHead className={`${thCls} bg-muted/40 font-semibold`}>{totalSum > 0 ? fmtNum(totalSum) : '—'}</TableHead>
+                  {zoneCols.map(z => (
+                    <TableHead key={z.key} className={`${thCls} bg-muted/40 font-semibold`} title={zoneTotals[z.key]?.grams > 0 ? fmtWeight(zoneTotals[z.key].grams) : undefined}>
+                      {zoneTotals[z.key]?.sum > 0 ? fmtNum(zoneTotals[z.key].sum) : '—'}
+                    </TableHead>
+                  ))}
                   <TableHead colSpan={5} className="bg-muted/40" />
                 </TableRow>
                 <TableRow className="bg-muted/40">
                   <TableHead colSpan={2} className="sticky left-0 z-[1] bg-muted/40 text-left font-semibold" title="Среднее на работавшего сотрудника в этот час">Среднее:</TableHead>
                   {displayHours.map(h => (
                     <TableHead key={h} className={`${thCls} min-w-[46px] bg-muted/40 font-semibold`}>{hourTotals[h]?.avg > 0 ? hourTotals[h].avg.toFixed(1) : '—'}</TableHead>
+                  ))}
+                  <TableHead className={`${thCls} bg-muted/40 font-semibold`} title="Среднее на сотрудника">{totalWorkers > 0 ? (totalSum / totalWorkers).toFixed(1) : '—'}</TableHead>
+                  {zoneCols.map(z => (
+                    <TableHead key={z.key} className={`${thCls} bg-muted/40 font-semibold`} title={`Среднее на работавшего в зоне (${zoneTotals[z.key]?.workers || 0} чел.)`}>
+                      {zoneTotals[z.key]?.avg > 0 ? zoneTotals[z.key].avg.toFixed(1) : '—'}
+                    </TableHead>
                   ))}
                   <TableHead colSpan={5} className="bg-muted/40" />
                 </TableRow>
@@ -274,7 +321,7 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
           <TableBody>
             {hourZoneActive && !sorted.length && (
               <TableRow>
-                <TableCell colSpan={displayHours.length + 8} className="p-6 text-center text-muted-foreground">
+                <TableCell colSpan={displayHours.length + 8 + zoneCols.length} className="p-6 text-center text-muted-foreground">
                   Никто не работал в выбранной зоне в этот час
                 </TableCell>
               </TableRow>
@@ -331,6 +378,20 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
                     <div className="text-[10px] font-normal opacity-75">{fmtNum(row.skuTotal || 0)} SKU · {fmtNum(row.piecesTotal || 0)} шт · {fmtWeight(row.weightGramsTotal)}</div>
                   )}
                 </TableCell>
+                {zoneCols.map(z => {
+                  const c = zoneTaskCount(row, z.key)
+                  const g = Number(row.byZone?.[z.key]?.weightGrams) || 0
+                  return (
+                    <TableCell key={z.key} className={tdCls} title={c > 0 ? `${z.label} — ${fmtNum(c)} оп.${g > 0 ? ` — ${fmtWeight(g)}` : ''}` : undefined}>
+                      {c > 0 ? (
+                        <>
+                          <span className="font-semibold">{fmtNum(c)}</span>
+                          {g > 0 && <div className="mt-0.5 border-t border-current/20 pt-0.5 text-[10px] font-normal opacity-75">{fmtWeight(g)}</div>}
+                        </>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                  )
+                })}
                 <TableCell className={tdCls} title="Время в работе (смена − простои)">
                   {row._worked != null && row._worked > 0 ? `${Math.floor(row._worked / 60)}ч ${row._worked % 60}м` : '—'}
                 </TableCell>
