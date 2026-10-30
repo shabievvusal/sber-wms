@@ -656,9 +656,9 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
-        // Товары без веса за последние days дней (по умолчанию 120) — список для
-        // дозапроса веса из WMS (Настройки → Веса товаров). Сохраняет веса Node
-        // (/api/vs/admin/product-weights/wms), там же источник справочника.
+        // Товары без веса за последние days дней (по умолчанию 120): панель
+        // «Неучтённый вес» в статистике (всем вошедшим) и дозапрос веса из WMS
+        // (Настройки → Веса товаров, сохраняет Node — /api/vs/admin/product-weights/wms).
         app.MapGet("/api/product-weights/missing", async (int? days, StatsService svc) =>
         {
             try
@@ -667,7 +667,7 @@ public static class StatsEndpoints
                 return Results.Json(new { items });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
     }
 
     private record ReceivingQuery(string? Shift, string? FilterExecutorNorm, List<string>? FilterCompanies, Dictionary<string, string> IdMap, DateTime? CompletedFromUtc, DateTime? CompletedToUtc);

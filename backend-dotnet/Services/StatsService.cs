@@ -827,11 +827,9 @@ public partial class StatsService
     }
 
     // ─── Ops: запись (upsert по merge_key, "первый выигрывает" — как loadHourly) ─
-    // Дуал-райт: Node продолжает писать JSON-файлы через tools/SaveFetchedData
-    // (для совместимости с ArticleSpeeds/WeightScan/MissingWeightRebuild/
-    // EmployeePerformance — читают ТОЛЬКО эти файлы), а /api/save-fetched-data
-    // ДОПОЛНИТЕЛЬНО пересылает те же сырые item'ы сюда. Временный мост, см.
-    // PLAN.md.
+    // Единственное хранилище операций WMS: /api/save-fetched-data (Node)
+    // пересылает сюда сырые item'ы кусками. Почасовые JSON-файлы и утилиты
+    // tools/* убраны 2026-10-31.
 
     public async Task<int> IngestOpsAsync(List<System.Text.Json.JsonElement> rawItems)
     {

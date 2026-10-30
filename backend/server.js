@@ -3,13 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const cookieParser = require('cookie-parser');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const scheduler = require('./scheduler');
-const dataCollector = require('./data-collector');
-const storage = require('./storage');
 // склад запроса и папка его данных (см. warehouse-context.js)
-const { dataDir, currentWarehouse, runWithWarehouse, perWarehouse, DEFAULT_WAREHOUSE_ID } = require('./warehouse-context');
+const { dataDir, currentWarehouse, runWithWarehouse, DEFAULT_WAREHOUSE_ID } = require('./warehouse-context');
 const vsAuth = process.env.USE_PG === 'true'
   ? require('./vs-auth-pg')
   : require('./vs-auth');
@@ -31,8 +27,6 @@ app.use(cookieParser());
 const PORT = process.env.PORT || 3000;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const AUTO_FETCH_SETTINGS_PATH = () => path.join(dataDir(), 'auto-fetch-settings.json');
-const execFileAsync = promisify(execFile);
-
 try {
   app.use(require('compression')());
 } catch (_) {
@@ -210,25 +204,6 @@ async function wmsWarehouseOfToken(token) {
   }
 }
 
-async function doFetch() {
-  try {
-    const wh = (await wmsWarehouseOfToken(loadConfig().token)) || DEFAULT_WAREHOUSE_ID;
-    return await runWithWarehouse(wh, async () => {
-      scheduler.setLastRun(new Date());
-      const result = await dataCollector.fetchFromAPI();
-      return { success: true, warehouseId: wh, ...result };
-    });
-  } catch (err) {
-    return {
-      success: false,
-      error: err.message,
-      status: err.status,
-      data: err.data,
-    };
-  }
-}
-
-scheduler.setFetchHandler(doFetch);
 
 const fetchRequestedBy = new Set(); // склады, где попросили обновить данные
 
@@ -256,89 +231,14 @@ app.get('/api/status', (req, res) => {
   }
 });
 
-app.post('/api/fetch-data', async (req, res) => {
-  try {
-    const config = loadConfig();
-    const token = req.body?.token || config.token;
-    const options = req.body?.options || {};
-    // данные WMS — того склада, что выбран у учётки токена
-    const wh = (await wmsWarehouseOfToken(token)) || currentWarehouse();
-    const result = await runWithWarehouse(wh, () => dataCollector.fetchFromAPI(token, options));
-    res.json({ ...result, warehouseId: wh });
-  } catch (err) {
-    const status = err.status || 500;
-    const message = err.message || 'Ошибка запроса данных';
-    if (status >= 500) console.error('POST /api/fetch-data:', message);
-    else console.error('POST /api/fetch-data', err);
-    res.status(status).json({
-      success: false,
-      error: message,
-      data: err.data,
-    });
-  }
-});
 
-// GET /api/missing-weight — только возвращаем последний готовый список.
-// Тяжелая сверка запускается отдельным async endpoint, чтобы не держать сайт.
-app.get('/api/missing-weight', (req, res) => {
-  res.json(loadMissingWeight());
-});
 
-app.get('/api/missing-weight/status', (req, res) => {
-  res.json({ ok: true, ...getMissingWeightRebuildStatus() });
-});
 
-// POST /api/missing-weight/rebuild — запускает .NET-сверку в фоне
-app.post('/api/missing-weight/rebuild', (req, res) => {
-  const started = startMissingWeightRebuild('manual');
-  res.status(started ? 202 : 200).json({ ok: true, started, ...getMissingWeightRebuildStatus() });
-});
 
-// POST /api/missing-weight/sync — синхронизация: добавить новые, убрать получившие вес
-// body: { missing: [{name, article}], withWeight: [article_or_name] }
-app.post('/api/missing-weight/sync', (req, res) => {
-  try {
-    const missing = Array.isArray(req.body.missing) ? req.body.missing : [];
-    const withWeight = new Set(Array.isArray(req.body.withWeight) ? req.body.withWeight : []);
-
-    const current = loadMissingWeight();
-    // Индекс по ключу (article если есть, иначе name)
-    const byKey = new Map();
-    for (const item of current) {
-      const key = (item.article && String(item.article).trim()) || String(item.name).trim();
-      if (key) byKey.set(key, item);
-    }
-    // Добавляем новые
-    for (const item of missing) {
-      const key = (item.article && String(item.article).trim()) || String(item.name).trim();
-      if (!key) continue;
-      if (!byKey.has(key)) byKey.set(key, { name: String(item.name || '').trim(), article: String(item.article || '').trim() });
-    }
-    // Удаляем те, у которых появился вес (от фронта)
-    for (const key of withWeight) {
-      byKey.delete(String(key).trim());
-    }
-    // Дополнительно удаляем всё, что теперь есть в Excel-таблице весов
-    for (const [key, item] of byKey) {
-      const article = String(item.article || '').trim();
-      if (article && productWeights.getWeightGrams(article) > 0) {
-        byKey.delete(key);
-      }
-    }
-
-    const updated = [...byKey.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-    saveMissingWeight(updated);
-    res.json({ ok: true, count: updated.length });
-  } catch (err) {
-    console.error('POST /api/missing-weight/sync', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
 
 const EMPL_CSV_PATH = path.join(__dirname, '..', 'empl.csv');
 // Файлы склада — в папке его данных (у СПБ-3 прежняя data/), см. warehouse-context.js
 const EMPL_IDS_PATH = () => path.join(dataDir(), 'empl-ids.json');
-const MISSING_WEIGHT_PATH = () => path.join(dataDir(), 'missing_weight.json');
 // Новые исполнители из выгрузки WMS — те, кого нет в списке сотрудников по
 // executorId. ФИО — ровно как прислал WMS по этому ID: lastName firstName
 // middleName, без правки регистра и «дописывания» отчеств. Уже записанных
@@ -365,215 +265,6 @@ async function updateNamesRegistry(items) {
     if (!known) newEmployees.push({ executorId, fio });
   }
   return { newEmployees };
-}
-
-function loadMissingWeight() {
-  try {
-    return loadMissingWeightStrict();
-  } catch (_) {}
-  return [];
-}
-
-function loadMissingWeightStrict() {
-  if (!fs.existsSync(MISSING_WEIGHT_PATH())) return [];
-  const text = fs.readFileSync(MISSING_WEIGHT_PATH(), 'utf8').replace(/^\uFEFF/, '');
-  const parsed = JSON.parse(text);
-  if (!Array.isArray(parsed)) throw new Error('missing_weight.json должен быть массивом');
-  return parsed;
-}
-
-function saveMissingWeight(list) {
-  if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(MISSING_WEIGHT_PATH(), JSON.stringify(list, null, 2), 'utf8');
-}
-
-function getMissingWeightProductName(item) {
-  const flat = String(item?.productName || item?.name || '').trim();
-  if (flat) return flat;
-  if (typeof item?.product === 'string') return item.product.trim();
-  if (item?.product && typeof item.product === 'object') {
-    return String(item.product.name || item.product.productName || '').trim();
-  }
-  return '';
-}
-
-function getMissingWeightArticle(item) {
-  const flat = String(item?.nomenclatureCode || item?.article || '').trim();
-  if (flat) return flat;
-  if (item?.product && typeof item.product === 'object') {
-    return String(item.product.nomenclatureCode || item.product.article || '').trim();
-  }
-  return '';
-}
-
-function rebuildMissingWeightFromData() {
-  const weights = productWeights.getMap();
-  const byKey = new Map();
-
-  if (!fs.existsSync(dataDir())) {
-    saveMissingWeight([]);
-    return 0;
-  }
-
-  const dateDirs = fs.readdirSync(dataDir(), { withFileTypes: true })
-    .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name));
-
-  for (const dirent of dateDirs) {
-    const dirPath = path.join(dataDir(), dirent.name);
-    const hourFiles = fs.readdirSync(dirPath)
-      .filter(f => /^\d{2}\.json$/.test(f));
-
-    for (const fileName of hourFiles) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(path.join(dirPath, fileName), 'utf8'));
-        const items = Array.isArray(raw?.items) ? raw.items : [];
-        for (const item of items) {
-          const opType = String(item?.operationType || item?.type || '').toUpperCase();
-          if (opType !== 'PICK_BY_LINE' && opType !== 'PIECE_SELECTION_PICKING') continue;
-
-          const name = getMissingWeightProductName(item);
-          if (!name) continue;
-
-          const article = getMissingWeightArticle(item);
-          if (article && (weights.get(article) || 0) > 0) continue;
-
-          const key = article || name;
-          if (key && !byKey.has(key)) byKey.set(key, { name, article });
-        }
-      } catch {
-        // пропускаем поврежденные почасовые файлы
-      }
-    }
-  }
-
-  const list = [...byKey.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-  saveMissingWeight(list);
-  return list.length;
-}
-
-function getDotnetMissingWeightRebuildCmd() {
-  const dll = path.join(__dirname, '..', 'tools', 'MissingWeightRebuild', 'bin', 'Release', 'net9.0', 'MissingWeightRebuild.dll');
-  if (fs.existsSync(dll)) return { exe: 'dotnet', args: [dll] };
-  const proj = path.join(__dirname, '..', 'tools', 'MissingWeightRebuild', 'MissingWeightRebuild.csproj');
-  if (fs.existsSync(proj)) return { exe: 'dotnet', args: ['run', '--project', proj, '--'] };
-  return null;
-}
-
-// у каждого склада свой пересчёт (своя история в своей папке данных)
-const mwStatus = perWarehouse(() => ({
-  running: false,
-  startedAt: null,
-  finishedAt: null,
-  count: null,
-  error: null,
-  engine: null,
-  reason: null,
-  durationMs: null,
-}));
-
-function getMissingWeightRebuildStatus() {
-  return { ...mwStatus() };
-}
-
-// Автоматический пересчёт (после каждой выгрузки из WMS) — не чаще раза в
-// 3 часа (2026-09-13). .NET-инструмент перечитывает ВСЮ почасовую историю
-// data/*.json (9+ ГБ), а автовыгрузка идёт каждые ~30 минут: история не
-// помещалась в кэш памяти, сервер гнал ~560 ГБ чтения с диска в сутки, и на
-// это время тормозили Postgres и отдача сайта. Список товаров без веса за
-// 3 часа почти не меняется; ручной запуск (reason 'manual') — без ограничений.
-// Время хранится в памяти: после рестарта первая выгрузка пересчитывает сразу.
-const MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS = 3 * 60 * 60 * 1000;
-
-function startMissingWeightRebuild(reason = 'manual') {
-  if (mwStatus().running) return false;
-
-  const lastFinished = Date.parse(mwStatus().finishedAt || '');
-  if (reason !== 'manual'
-      && !mwStatus().error
-      && Date.now() - lastFinished < MISSING_WEIGHT_AUTO_MIN_INTERVAL_MS) {
-    return false;
-  }
-
-  Object.assign(mwStatus(), {
-    running: true,
-    startedAt: new Date().toISOString(),
-    finishedAt: null,
-    count: null,
-    error: null,
-    engine: 'dotnet',
-    reason,
-    durationMs: null,
-  });
-
-  const startedMs = Date.now();
-
-  rebuildMissingWeightDotnet({ allowJsFallback: false })
-    .then(count => {
-      if (count == null) throw new Error('.NET-инструмент MissingWeightRebuild недоступен');
-      const list = loadMissingWeightStrict();
-      if (count > 0 && list.length === 0) {
-        throw new Error(`.NET нашёл ${count} товаров, но файл результата пуст`);
-      }
-      Object.assign(mwStatus(), {
-        running: false,
-        finishedAt: new Date().toISOString(),
-        count: list.length,
-        error: null,
-        durationMs: Date.now() - startedMs,
-      });
-      console.log(`[missing-weight] .NET rebuild done: ${list.length} товаров`);
-    })
-    .catch(err => {
-      const message = err?.message || String(err);
-      Object.assign(mwStatus(), {
-        running: false,
-        finishedAt: new Date().toISOString(),
-        error: message,
-        durationMs: Date.now() - startedMs,
-      });
-      console.error('[missing-weight] .NET rebuild failed:', message);
-    });
-
-  return true;
-}
-
-/**
- * Перестраивает missing_weight.json через .NET-инструмент.
- * Не требует участия фронта — обходит все data/YYYY-MM-DD/HH.json.
- */
-let _rebuildInProgress = false;
-async function rebuildMissingWeightDotnet(options = {}) {
-  const { allowJsFallback = true } = options;
-  if (_rebuildInProgress) return null;
-  _rebuildInProgress = true;
-  const cmd = getDotnetMissingWeightRebuildCmd();
-  if (!cmd) {
-    _rebuildInProgress = false;
-    return allowJsFallback ? rebuildMissingWeightFromData() : null;
-  }
-
-  // Экспортируем таблицу весов во временный JSON { article: grams }
-  const weightsObj = Object.fromEntries(productWeights.getMap());
-  const tmpDir = path.join(dataDir(), 'raw_tmp');
-  fs.mkdirSync(tmpDir, { recursive: true });
-  const weightsPath = path.join(tmpDir, `weights_${Date.now()}.json`);
-  fs.writeFileSync(weightsPath, JSON.stringify(weightsObj), 'utf8');
-
-  try {
-    const { stdout } = await execFileAsync(
-      cmd.exe,
-      cmd.args.concat(['--data-dir', dataDir(), '--weights', weightsPath, '--out', MISSING_WEIGHT_PATH()]),
-      { windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
-    );
-    const out = String(stdout || '').trim();
-    const jsonLine = out.split(/\r?\n/).reverse().find(line => line.trim().startsWith('{'));
-    const parsed = jsonLine ? JSON.parse(jsonLine.trim()) : null;
-    if (parsed?.ok) return parsed.count;
-    return null;
-  } finally {
-    try { fs.unlinkSync(weightsPath); } catch {}
-    _rebuildInProgress = false;
-  }
 }
 
 // ─── Консолидация: multer + paths ──────────────────────────────────────────
@@ -722,190 +413,64 @@ async function sendTelegramMediaGroup(botToken, chatId, caption, files, threadId
   }
 }
 
-// Дуал-райт в dotnet/Postgres кусками — раньше слали весь items одним POST,
-// это упёрлось в лимит Kestrel (MaxRequestBodySize, см. Program.cs) при
-// большом фетче (после того как fetchDataViaBrowser стал слать все часы
-// одним запросом на само сохранение JSON, см. PLAN.md — тот фикс НЕ трогал
-// этот отдельный HTTP-вызов в dotnet, и большой батч стал превышать лимит,
-// инжест молча падал 413, статистика переставала обновляться). Здесь режем
-// на куски по ITEMS_INGEST_CHUNK_SIZE — так подпроцесс .NET для сохранения
-// JSON всё равно запускается один раз (дорогая часть, ради которой всё
-// затевалось), а Postgres-инжест просто становится несколькими более
-// быстрыми HTTP-вызовами вместо одного огромного. Дедуп внутри
-// IngestOpsAsync/Save*ItemsAsync не ломается от разбивки на куски — каждый
-// кусок сверяется с уже закоммиченными строками (в т.ч. из предыдущих
-// кусков этого же запроса) заново.
+
+// Запись в dotnet/Postgres кусками — один огромный POST упирается в лимит
+// Kestrel (MaxRequestBodySize). Дедуп в dotnet сверяет каждый кусок с уже
+// записанным, поэтому разбивка безопасна. Возвращает { added, skipped, error }.
 const ITEMS_INGEST_CHUNK_SIZE = 10000;
 
 async function ingestInChunks(url, items) {
+  let added = 0;
   for (let i = 0; i < items.length; i += ITEMS_INGEST_CHUNK_SIZE) {
     const chunk = items.slice(i, i + ITEMS_INGEST_CHUNK_SIZE);
     try {
-      const ingestRes = await fetch(url, {
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Warehouse': currentWarehouse() },
         body: JSON.stringify({ items: chunk }),
       });
-      if (!ingestRes.ok) return `dotnet ingest HTTP ${ingestRes.status}`;
+      if (!r.ok) return { added, skipped: 0, error: `dotnet ingest HTTP ${r.status}` };
+      const data = await r.json().catch(() => ({}));
+      added += Number(data.added) || 0;
     } catch (err) {
-      return err.message;
+      return { added, skipped: 0, error: err.message };
     }
   }
-  return null;
+  return { added, skipped: Math.max(0, items.length - added), error: null };
 }
 
-// save-fetched-data: мерж по часам (обработка на .NET). Без долговременного raw.
-app.post('/api/save-fetched-data', async (req, res) => {
+// Комплектация и остальные операции из WMS (браузер забрал, сюда — сохранить):
+// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
+// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
+app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
   try {
     const t0 = Date.now();
-    const body = req.body || {};
-    const value = body.value || body;
-    const items = Array.isArray(value?.items) ? value.items : [];
-    if (!fs.existsSync(dataDir())) fs.mkdirSync(dataDir(), { recursive: true });
-
-    // Сохраняем полные имена (с отчеством) до удаления raw-файла
-    let newEmployees = [];
-    if (items.length > 0) {
-      const regResult = await updateNamesRegistry(items);
-      newEmployees = regResult.newEmployees || [];
+    const value = req.body?.value || req.body || {};
+    const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
+    const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
+    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/ops/ingest', items) : { added: 0, skipped: 0, error: null };
+    if (ingest.error) {
+      console.error('/api/save-fetched-data: dotnet ingest failed:', ingest.error);
+      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
     }
-
-    let engine = 'dotnet';
-    let mergeResult = { added: 0, skipped: 0, byShift: {} };
-    let dotnetMs = 0;
-    let rawMs = 0;
-
-    if (items.length > 0) {
-      const dotnetCmd = getDotnetSaveFetchedCmd();
-      if (!dotnetCmd) {
-        console.error('save-fetched-data dotnet error: dotnet not found');
-        return res.status(500).json({ ok: false, error: 'dotnet not found' });
-      }
-      // временный raw для .NET (после обработки удаляем)
-      const tmpDir = path.join(dataDir(), 'raw_tmp');
-      fs.mkdirSync(tmpDir, { recursive: true });
-      const rawName = `fetched_${Date.now()}.json`;
-      const rawPath = path.join(tmpDir, rawName);
-      const tRawStart = Date.now();
-      fs.writeFileSync(rawPath, JSON.stringify(value), 'utf8');
-      rawMs = Date.now() - tRawStart;
-      try {
-        const tDotnetStart = Date.now();
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
-          windowsHide: true,
-          maxBuffer: 10 * 1024 * 1024,
-        });
-        dotnetMs = Date.now() - tDotnetStart;
-        const parsed = stdout ? JSON.parse(stdout) : null;
-        if (parsed && parsed.ok) {
-          mergeResult = {
-            added: Number(parsed.added) || 0,
-            skipped: Number(parsed.skipped) || 0,
-            byShift: parsed.byShift || {},
-          };
-        } else {
-          console.error('save-fetched-data dotnet error: invalid response');
-          return res.status(500).json({ ok: false, error: 'dotnet: invalid response' });
-        }
-      } catch (err) {
-        const msg = err && err.message ? err.message : String(err);
-        console.error('save-fetched-data dotnet error:', msg);
-        return res.status(500).json({ ok: false, error: msg });
-      } finally {
-        try { fs.unlinkSync(rawPath); } catch {}
-      }
-    }
-
-    const shiftKeys = Object.keys(mergeResult.byShift || {});
-    const savedTo = shiftKeys.length ? shiftKeys.join(', ') : 'hourly';
-
-    // «Обновлено» в статистике = время последней РЕАЛЬНОЙ выгрузки, поэтому
-    // отмечаем его здесь, где данные сохраняются, а не только в
-    // /api/vs/mark-updated — тот зовёт лишь устройство с автообновлением,
-    // из-за чего после ручной кнопки «Обновить данные» показанное время не
-    // менялось вообще (пользователь 2026-09-06).
+    // «Обновлено» в статистике = время последней реальной выгрузки
     scheduler.setLastRun(new Date());
-
-    // Обновляем список неучтённых товаров в фоне после сохранения новых данных.
-    startMissingWeightRebuild('save-fetched-data');
-
-    // В новой выгрузке могли появиться исполнители, которых нет в сотрудниках,
-    // — сбрасываем кэш скана, чтобы «Настройки» показали их сразу, не дожидаясь
-    // истечения EXECUTORS_TTL_MS.
+    // новые исполнители сразу видны в «Настройки → Сотрудники»
     invalidateExecutorsCache();
-
-    // Дуал-райт (Фаза 3, временный мост): те же raw-items дополнительно
-    // отправляются в backend-dotnet (Postgres, wms_ops) — читает GET /api/date/
-    // :date/summary и другая перенесённая статистика. JSON-файлы (выше) остаются
-    // источником для ArticleSpeeds/WeightScan/MissingWeightRebuild/
-    // EmployeePerformance — см. PLAN.md. Ошибка дотнет-инжеста не валит основной
-    // ответ (JSON-файлы уже сохранены — это единственный source of truth для
-    // существующих CLI-тулов), но ждём его завершения ПЕРЕД ответом клиенту —
-    // иначе фронт (`loadSummary` сразу после успеха фетча) читает статистику из
-    // Postgres раньше, чем туда реально долетели данные (гонка, из-за которой
-    // «Обновить данные» показывал пустую статистику до перезагрузки страницы).
-    let dotnetError = null;
-    if (items.length > 0 && process.env.USE_PG === 'true') {
-      dotnetError = await ingestInChunks('http://dotnet:5080/api/stats/ops/ingest', items);
-      if (dotnetError) console.error('save-fetched-data: dotnet ingest failed:', dotnetError);
-    }
-
     res.json({
       ok: true,
-      engine,
-      savedTo,
-      added: mergeResult.added,
-      skipped: mergeResult.skipped,
+      engine: 'postgres',
+      added: ingest.added,
+      skipped: ingest.skipped,
       itemsCount: items.length,
-      newEmployees,
-      dotnetError,
-      timings: {
-        totalMs: Date.now() - t0,
-        rawWriteMs: rawMs,
-        dotnetMs,
-      },
+      newEmployees: regResult.newEmployees || [],
+      timings: { totalMs: Date.now() - t0 },
     });
   } catch (err) {
     console.error('POST /api/save-fetched-data', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
-
-function getDotnetSaveFetchedCmd() {
-  const toolDll = path.join(__dirname, '..', 'tools', 'SaveFetchedData', 'bin', 'Release', 'net9.0', 'SaveFetchedData.dll');
-  if (fs.existsSync(toolDll)) {
-    return { exe: 'dotnet', args: [toolDll] };
-  }
-  const toolProj = path.join(__dirname, '..', 'tools', 'SaveFetchedData', 'SaveFetchedData.csproj');
-  if (fs.existsSync(toolProj)) {
-    return { exe: 'dotnet', args: ['run', '--project', toolProj, '--'] };
-  }
-  return null;
-}
-
-function getDotnetSavePlacementCmd() {
-  const toolDll = path.join(__dirname, '..', 'tools', 'SavePlacementData', 'bin', 'Release', 'net9.0', 'SavePlacementData.dll');
-  if (fs.existsSync(toolDll)) return { exe: 'dotnet', args: [toolDll] };
-  const toolProj = path.join(__dirname, '..', 'tools', 'SavePlacementData', 'SavePlacementData.csproj');
-  if (fs.existsSync(toolProj)) return { exe: 'dotnet', args: ['run', '--project', toolProj, '--'] };
-  return null;
-}
-
-function getDotnetSaveReceivingCmd() {
-  const toolDll = path.join(__dirname, '..', 'tools', 'SaveReceivingData', 'bin', 'Release', 'net9.0', 'SaveReceivingData.dll');
-  if (fs.existsSync(toolDll)) return { exe: 'dotnet', args: [toolDll] };
-  const toolProj = path.join(__dirname, '..', 'tools', 'SaveReceivingData', 'SaveReceivingData.csproj');
-  if (fs.existsSync(toolProj)) return { exe: 'dotnet', args: ['run', '--project', toolProj, '--'] };
-  return null;
-}
-
-function getDotnetSaveRemainsCmd() {
-  const toolDll = path.join(__dirname, '..', 'tools', 'SaveRemainsData', 'bin', 'Release', 'net9.0', 'SaveRemainsData.dll');
-  if (fs.existsSync(toolDll)) return { exe: 'dotnet', args: [toolDll] };
-  const toolProj = path.join(__dirname, '..', 'tools', 'SaveRemainsData', 'SaveRemainsData.csproj');
-  if (fs.existsSync(toolProj)) return { exe: 'dotnet', args: ['run', '--project', toolProj, '--'] };
-  return null;
-}
 
 function readEmplCsvText() {
   const buf = fs.readFileSync(EMPL_CSV_PATH);
@@ -1214,13 +779,11 @@ const EXECUTORS_TTL_MS = 5 * 60 * 1000;
 // по складу: { at, list: [{ executorId, fio }] } и Promise активного скана (single-flight)
 const executorsCacheBy = new Map();
 const executorsInflightBy = new Map();
-const executorsDirCache = new Map(); // 'склад|YYYY-MM-DD' -> { stamp, execs: Map<id, fio> }
-
 function invalidateExecutorsCache() {
   executorsCacheBy.delete(currentWarehouse());
 }
 
-/** Исполнители из Postgres (wms_ops) — то же множество, что и в почасовых JSON. */
+/** Исполнители из Postgres (wms_ops и остальные таблицы операций). */
 async function collectExecutorsFromPg() {
   const rows = await wmsOpsPg.listExecutors();
   const out = [];
@@ -1233,62 +796,6 @@ async function collectExecutorsFromPg() {
   return out;
 }
 
-/** Исполнители из почасовых файлов: асинхронно, с покаталожным кэшем. */
-async function collectExecutorsFromFiles() {
-  const fsp = fs.promises;
-  if (!fs.existsSync(dataDir())) return [];
-
-  let dateDirs;
-  try {
-    dateDirs = (await fsp.readdir(dataDir(), { withFileTypes: true }))
-      .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
-      .map(e => e.name);
-  } catch { return []; }
-
-  const found = new Map(); // executorId -> fio
-  for (const dir of dateDirs) {
-    const dirPath = path.join(dataDir(), dir);
-    let hourFiles;
-    try { hourFiles = (await fsp.readdir(dirPath)).filter(f => /^\d{2}\.json$/.test(f)); } catch { continue; }
-    hourFiles.sort();
-
-    // Штамп каталога — имена+mtime+размер часовых файлов. Прошедшие дни больше
-    // не меняются, так что их JSON не перечитываем: stat вместо read+parse.
-    let stamp = '';
-    for (const hf of hourFiles) {
-      try {
-        const st = await fsp.stat(path.join(dirPath, hf));
-        stamp += `${hf}:${st.mtimeMs}:${st.size};`;
-      } catch {}
-    }
-
-    const dirKey = currentWarehouse() + '|' + dir;
-    const cached = executorsDirCache.get(dirKey);
-    let execs;
-    if (cached && cached.stamp === stamp) {
-      execs = cached.execs;
-    } else {
-      execs = new Map();
-      for (const hf of hourFiles) {
-        let raw;
-        try { raw = JSON.parse(await fsp.readFile(path.join(dirPath, hf), 'utf8')); } catch { continue; }
-        const list = Array.isArray(raw.items) ? raw.items : Object.values(raw.items || {});
-        for (const item of list) {
-          const fio        = (item.executor   || '').trim();
-          const executorId = (item.executorId || '').trim();
-          if (!fio || !executorId || execs.has(executorId)) continue;
-          execs.set(executorId, fio);
-        }
-      }
-      executorsDirCache.set(dirKey, { stamp, execs });
-    }
-
-    for (const [id, fio] of execs) if (!found.has(id)) found.set(id, fio);
-  }
-
-  return [...found].map(([executorId, fio]) => ({ executorId, fio }));
-}
-
 async function getAllExecutors() {
   const wh = currentWarehouse();
   const cached = executorsCacheBy.get(wh);
@@ -1296,14 +803,8 @@ async function getAllExecutors() {
   if (executorsInflightBy.has(wh)) return executorsInflightBy.get(wh);
 
   const inflight = (async () => {
-    let list = null;
-    if (wmsOpsPg) {
-      // Таблицы может не быть (установка без выполненной миграции) — тогда
-      // не 500, а честный обход файлов.
-      try { list = await collectExecutorsFromPg(); }
-      catch (err) { console.error('find-unregistered: wms_ops недоступна, читаем файлы:', err.message); }
-    }
-    if (list === null) list = await collectExecutorsFromFiles();
+    // только из базы: почасовых JSON-файлов больше нет (2026-10-31)
+    const list = await collectExecutorsFromPg();
     executorsCacheBy.set(wh, { at: Date.now(), list });
     return list;
   })().finally(() => { executorsInflightBy.delete(wh); });
@@ -1455,59 +956,28 @@ app.post('/api/vs/mark-updated', vsSessionRequired, (req, res) => {
 
 // ─── API для страницы /vs (смены, дата, мониторинг, перекличка) ─────────────────
 
+// placement из WMS (браузер забрал, сюда — сохранить):
+// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
+// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
 app.post('/api/stats/placement/save', vsSessionRequired, async (req, res) => {
   try {
+    const t0 = Date.now();
     const value = req.body?.value || req.body || {};
     const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
     const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-
-    // Мёрдж больше не считает сам Node (JS) — пересылается готовому .NET
-    // инструменту (1-в-1 паттерн /api/save-fetched-data, см. PLAN.md «Убрать
-    // JS-дублирование в дуал-райт мосте»).
-    let result = { added: 0, skipped: 0, byShift: {} };
-    if (items.length > 0) {
-      const dotnetCmd = getDotnetSavePlacementCmd();
-      if (!dotnetCmd) {
-        console.error('placement/save dotnet error: dotnet not found');
-        return res.status(500).json({ ok: false, error: 'dotnet not found' });
-      }
-      const tmpDir = path.join(dataDir(), 'raw_tmp');
-      fs.mkdirSync(tmpDir, { recursive: true });
-      const rawPath = path.join(tmpDir, `placement_${Date.now()}.json`);
-      fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
-      try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
-          windowsHide: true,
-          maxBuffer: 10 * 1024 * 1024,
-        });
-        const parsed = stdout ? JSON.parse(stdout) : null;
-        if (!parsed || !parsed.ok) {
-          console.error('placement/save dotnet error: invalid response');
-          return res.status(500).json({ ok: false, error: 'dotnet: invalid response' });
-        }
-        result = { added: Number(parsed.added) || 0, skipped: Number(parsed.skipped) || 0, byShift: parsed.byShift || {} };
-      } catch (err) {
-        const msg = err && err.message ? err.message : String(err);
-        console.error('placement/save dotnet error:', msg);
-        return res.status(500).json({ ok: false, error: msg });
-      } finally {
-        try { fs.unlinkSync(rawPath); } catch {}
-      }
-    }
-    let dotnetError = null;
-    if (items.length > 0 && process.env.USE_PG === 'true') {
-      dotnetError = await ingestInChunks('http://dotnet:5080/api/stats/placement/ingest', items);
-      if (dotnetError) console.error('placement/save: dotnet ingest failed:', dotnetError);
+    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/placement/ingest', items) : { added: 0, skipped: 0, error: null };
+    if (ingest.error) {
+      console.error('/api/stats/placement/save: dotnet ingest failed:', ingest.error);
+      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
     }
     res.json({
       ok: true,
       operation: 'placement',
-      savedTo: Object.keys(result.byShift || {}).join(', '),
-      added: result.added,
-      skipped: result.skipped,
+      added: ingest.added,
+      skipped: ingest.skipped,
       itemsCount: items.length,
       newEmployees: regResult.newEmployees || [],
-      dotnetError,
+      timings: { totalMs: Date.now() - t0 },
     });
   } catch (err) {
     console.error('POST /api/stats/placement/save', err);
@@ -1515,57 +985,28 @@ app.post('/api/stats/placement/save', vsSessionRequired, async (req, res) => {
   }
 });
 
+// receiving из WMS (браузер забрал, сюда — сохранить):
+// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
+// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
 app.post('/api/stats/receiving/save', vsSessionRequired, async (req, res) => {
   try {
+    const t0 = Date.now();
     const value = req.body?.value || req.body || {};
     const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
     const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-
-    // См. комментарий в /api/stats/placement/save — тот же паттерн.
-    let result = { added: 0, skipped: 0, byShift: {} };
-    if (items.length > 0) {
-      const dotnetCmd = getDotnetSaveReceivingCmd();
-      if (!dotnetCmd) {
-        console.error('receiving/save dotnet error: dotnet not found');
-        return res.status(500).json({ ok: false, error: 'dotnet not found' });
-      }
-      const tmpDir = path.join(dataDir(), 'raw_tmp');
-      fs.mkdirSync(tmpDir, { recursive: true });
-      const rawPath = path.join(tmpDir, `receiving_${Date.now()}.json`);
-      fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
-      try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
-          windowsHide: true,
-          maxBuffer: 10 * 1024 * 1024,
-        });
-        const parsed = stdout ? JSON.parse(stdout) : null;
-        if (!parsed || !parsed.ok) {
-          console.error('receiving/save dotnet error: invalid response');
-          return res.status(500).json({ ok: false, error: 'dotnet: invalid response' });
-        }
-        result = { added: Number(parsed.added) || 0, skipped: Number(parsed.skipped) || 0, byShift: parsed.byShift || {} };
-      } catch (err) {
-        const msg = err && err.message ? err.message : String(err);
-        console.error('receiving/save dotnet error:', msg);
-        return res.status(500).json({ ok: false, error: msg });
-      } finally {
-        try { fs.unlinkSync(rawPath); } catch {}
-      }
-    }
-    let dotnetError = null;
-    if (items.length > 0 && process.env.USE_PG === 'true') {
-      dotnetError = await ingestInChunks('http://dotnet:5080/api/stats/receiving/ingest', items);
-      if (dotnetError) console.error('receiving/save: dotnet ingest failed:', dotnetError);
+    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/receiving/ingest', items) : { added: 0, skipped: 0, error: null };
+    if (ingest.error) {
+      console.error('/api/stats/receiving/save: dotnet ingest failed:', ingest.error);
+      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
     }
     res.json({
       ok: true,
       operation: 'receiving',
-      savedTo: Object.keys(result.byShift || {}).join(', '),
-      added: result.added,
-      skipped: result.skipped,
+      added: ingest.added,
+      skipped: ingest.skipped,
       itemsCount: items.length,
       newEmployees: regResult.newEmployees || [],
-      dotnetError,
+      timings: { totalMs: Date.now() - t0 },
     });
   } catch (err) {
     console.error('POST /api/stats/receiving/save', err);
@@ -1573,57 +1014,28 @@ app.post('/api/stats/receiving/save', vsSessionRequired, async (req, res) => {
   }
 });
 
+// remains из WMS (браузер забрал, сюда — сохранить):
+// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
+// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
 app.post('/api/stats/remains/save', vsSessionRequired, async (req, res) => {
   try {
+    const t0 = Date.now();
     const value = req.body?.value || req.body || {};
     const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
     const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-
-    // См. комментарий в /api/stats/placement/save — тот же паттерн.
-    let result = { added: 0, skipped: 0, byShift: {} };
-    if (items.length > 0) {
-      const dotnetCmd = getDotnetSaveRemainsCmd();
-      if (!dotnetCmd) {
-        console.error('remains/save dotnet error: dotnet not found');
-        return res.status(500).json({ ok: false, error: 'dotnet not found' });
-      }
-      const tmpDir = path.join(dataDir(), 'raw_tmp');
-      fs.mkdirSync(tmpDir, { recursive: true });
-      const rawPath = path.join(tmpDir, `remains_${Date.now()}.json`);
-      fs.writeFileSync(rawPath, JSON.stringify({ items }), 'utf8');
-      try {
-        const { stdout } = await execFileAsync(dotnetCmd.exe, dotnetCmd.args.concat(['--input', rawPath, '--data-dir', dataDir()]), {
-          windowsHide: true,
-          maxBuffer: 10 * 1024 * 1024,
-        });
-        const parsed = stdout ? JSON.parse(stdout) : null;
-        if (!parsed || !parsed.ok) {
-          console.error('remains/save dotnet error: invalid response');
-          return res.status(500).json({ ok: false, error: 'dotnet: invalid response' });
-        }
-        result = { added: Number(parsed.added) || 0, skipped: Number(parsed.skipped) || 0, byShift: parsed.byShift || {} };
-      } catch (err) {
-        const msg = err && err.message ? err.message : String(err);
-        console.error('remains/save dotnet error:', msg);
-        return res.status(500).json({ ok: false, error: msg });
-      } finally {
-        try { fs.unlinkSync(rawPath); } catch {}
-      }
-    }
-    let dotnetError = null;
-    if (items.length > 0 && process.env.USE_PG === 'true') {
-      dotnetError = await ingestInChunks('http://dotnet:5080/api/stats/remains/ingest', items);
-      if (dotnetError) console.error('remains/save: dotnet ingest failed:', dotnetError);
+    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/remains/ingest', items) : { added: 0, skipped: 0, error: null };
+    if (ingest.error) {
+      console.error('/api/stats/remains/save: dotnet ingest failed:', ingest.error);
+      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
     }
     res.json({
       ok: true,
       operation: 'remains',
-      savedTo: Object.keys(result.byShift || {}).join(', '),
-      added: result.added,
-      skipped: result.skipped,
+      added: ingest.added,
+      skipped: ingest.skipped,
       itemsCount: items.length,
       newEmployees: regResult.newEmployees || [],
-      dotnetError,
+      timings: { totalMs: Date.now() - t0 },
     });
   } catch (err) {
     console.error('POST /api/stats/remains/save', err);
@@ -1682,7 +1094,7 @@ app.get('/api/rollcall', (req, res) => {
 app.put('/api/rollcall', (req, res) => {
   try {
     const { shiftKey, present } = req.body || {};
-    storage.ensureDataDir();
+    fs.mkdirSync(dataDir(), { recursive: true });
     fs.writeFileSync(ROLLCALL_PATH(), JSON.stringify({ shiftKey: shiftKey || null, present: present || [] }), 'utf8');
     res.json({ ok: true });
   } catch (err) {
@@ -1813,17 +1225,17 @@ app.post('/api/consolidation/export/report2', vsSessionRequired, async (req, res
       cur.setDate(cur.getDate() + 1);
     }
 
-    // Получаем данные по выходу сотрудников за каждый день диапазона
+    // Выход сотрудников по компаниям за каждый день диапазона — из базы
+    // (комплектация в wms_ops), число уникальных сотрудников на компанию.
     const employeesByCompanyByDay = {};
+    const pickers = dateRange.length ? await wmsOpsPg.pickersByShiftDate(dateRange[0], dateRange[dateRange.length - 1]) : [];
+    const sets = {};
+    for (const p of pickers) {
+      const comp = getComp(p.executor, p.executorId);
+      ((sets[p.date] = sets[p.date] || {})[comp] = sets[p.date][comp] || new Set()).add(p.executorId || normalizeFioForMatch(p.executor));
+    }
     for (const dateStr of dateRange) {
-      const dayData = computeCompanyDay(dateStr, null, getComp);
-      // dayData: { rawCompany: { employees: string[] } }
-      // Нормализуем: храним кол-во уникальных сотрудников
-      const normalized = {};
-      for (const [comp, dc] of Object.entries(dayData)) {
-        normalized[comp] = { employees: Array.isArray(dc.employees) ? dc.employees.length : 0 };
-      }
-      employeesByCompanyByDay[dateStr] = normalized;
+      employeesByCompanyByDay[dateStr] = Object.fromEntries(Object.entries(sets[dateStr] || {}).map(([comp, s]) => [comp, { employees: s.size }]));
     }
 
     const buffer = await consolidationReports.generateReport2(list, companyFullNames, fineAmount, employeesByCompanyByDay, dateRange);
@@ -1978,50 +1390,6 @@ app.post('/api/consolidation/telegram/send', async (req, res) => {
 });
 
 // ─── Кэш дневной сводки по компаниям ─────────────────────────────────────────
-
-/** Вычислить сводку по компаниям за один день и вернуть объект { companyName: { totalTasks, storageOps, kdkOps, weightStorageGrams, weightKdkGrams, employees: string[] } } */
-function computeCompanyDay(dateStr, shift, getComp) {
-  const items = storage.getDateItems(dateStr, { shift: shift || undefined });
-  if (!items.length) return {};
-
-  const dayByCompany = new Map();
-  for (const item of items) {
-    const op = (item.operationType || '').toUpperCase();
-    const isKdk     = op === 'PICK_BY_LINE';
-    const isPallet  = op === 'PALLET_SELECTION_MOVE_TO_PICK_BY_LINE';
-    const isStorage = op === 'PIECE_SELECTION_PICKING';
-    if (!isKdk && !isPallet && !isStorage) continue;
-
-    const company = getComp(item.executor, item.executorId);
-    const taskKey = isKdk
-      ? `task|${item.executor||''}|${item.cell||''}|${item.nomenclatureCode||item.productName||''}`
-      : `id|${item.id||''}`;
-
-    if (!dayByCompany.has(company)) dayByCompany.set(company, { taskKeys: new Set(), storageOps: 0, kdkOps: 0, palletOps: 0, weightStorageGrams: 0, weightKdkGrams: 0, employees: new Set() });
-    const dc = dayByCompany.get(company);
-    if (!dc.taskKeys.has(taskKey)) {
-      dc.taskKeys.add(taskKey);
-      if (isKdk) dc.kdkOps++; else if (isPallet) dc.palletOps++; else dc.storageOps++;
-    }
-    const grams = productWeights.getWeightGrams(String(item.nomenclatureCode||'').trim()) * Math.max(1, Number(item.quantity)||1);
-    if (grams > 0) { if (isKdk) dc.weightKdkGrams += grams; else dc.weightStorageGrams += grams; }
-    dc.employees.add(normalizeFioForMatch(item.executor));
-  }
-
-  const result = {};
-  for (const [company, dc] of dayByCompany) {
-    result[company] = {
-      totalTasks:         dc.taskKeys.size,
-      storageOps:         dc.storageOps,
-      kdkOps:             dc.kdkOps,
-      palletOps:          dc.palletOps,
-      weightStorageGrams: dc.weightStorageGrams,
-      weightKdkGrams:     dc.weightKdkGrams,
-      employees:          [...dc.employees],
-    };
-  }
-  return result;
-}
 
 // GET /api/shipments/missing-codes — ЦФЗ-адреса без кода получателя
 app.get('/api/shipments/missing-codes', vsSessionRequired, async (req, res) => {

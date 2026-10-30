@@ -25,64 +25,18 @@ RUN npm run build
 
 
 # ───────────────────────────────────────────────────────────────
-# Stage 2: сборка .NET инструментов
-# ───────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dotnet-builder
-
-WORKDIR /tools
-
-COPY tools/ ./
-
-RUN dotnet publish SaveFetchedData/SaveFetchedData.csproj \
-        -c Release -o /out/SaveFetchedData \
-        --self-contained false && \
-    dotnet publish MissingWeightRebuild/MissingWeightRebuild.csproj \
-        -c Release -o /out/MissingWeightRebuild \
-        --self-contained false && \
-    dotnet publish WeightScan/WeightScan.csproj \
-        -c Release -o /out/WeightScan \
-        --self-contained false && \
-    dotnet publish ArticleSpeeds/ArticleSpeeds.csproj \
-        -c Release -o /out/ArticleSpeeds \
-        --self-contained false && \
-    dotnet publish EmployeePerformance/EmployeePerformance.csproj \
-        -c Release -o /out/EmployeePerformance \
-        --self-contained false && \
-    dotnet publish SavePlacementData/SavePlacementData.csproj \
-        -c Release -o /out/SavePlacementData \
-        --self-contained false && \
-    dotnet publish SaveReceivingData/SaveReceivingData.csproj \
-        -c Release -o /out/SaveReceivingData \
-        --self-contained false && \
-    dotnet publish SaveRemainsData/SaveRemainsData.csproj \
-        -c Release -o /out/SaveRemainsData \
-        --self-contained false
-
-
-# ───────────────────────────────────────────────────────────────
-# Stage 3: production Node.js runtime
+# Stage 2: production Node.js runtime
 # ───────────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
 
-# Системные зависимости: libicu72/libssl3 — для .NET
-# runtime (глобализация ru-RU, HTTPS).
+# ca-certificates — исходящий HTTPS (Telegram); wget — для отладки в контейнере.
+# .NET в образе node больше нет: утилиты tools/* удалены (2026-10-31), node
+# не запускает ни одного .NET-процесса (сайт на .NET — отдельный контейнер dotnet).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
-        libicu72 \
-        libssl3 \
     && rm -rf /var/lib/apt/lists/*
-
-# .NET runtime копируется из официального образа, а не ставится apt-ом из
-# packages.microsoft.com (2026-09-13): этот репозиторий недоступен с
-# российских серверов — сборка висела на wget до таймаута. mcr.microsoft.com
-# при этом отдаётся нормально. Образ runtime:9.0 — Debian 12 (bookworm), как
-# и node:20-slim, так что бинарники совместимы. Инструментам в tools/ хватает
-# чистого runtime — все они консольные (Microsoft.NET.Sdk), без ASP.NET.
-COPY --from=mcr.microsoft.com/dotnet/runtime:9.0 /usr/share/dotnet /usr/share/dotnet
-RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet \
-    && dotnet --list-runtimes
 
 WORKDIR /app
 
@@ -109,19 +63,6 @@ COPY backend/ ./backend/
 # Frontend build
 # ───────────────────────────────────────────────────────────────
 COPY --from=frontend-builder /build/dist ./frontend/app/dist/
-
-
-# ───────────────────────────────────────────────────────────────
-# .NET tools
-# ───────────────────────────────────────────────────────────────
-COPY --from=dotnet-builder /out/SaveFetchedData       ./tools/SaveFetchedData/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/MissingWeightRebuild  ./tools/MissingWeightRebuild/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/WeightScan            ./tools/WeightScan/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/ArticleSpeeds         ./tools/ArticleSpeeds/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/EmployeePerformance   ./tools/EmployeePerformance/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/SavePlacementData     ./tools/SavePlacementData/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/SaveReceivingData     ./tools/SaveReceivingData/bin/Release/net9.0/
-COPY --from=dotnet-builder /out/SaveRemainsData       ./tools/SaveRemainsData/bin/Release/net9.0/
 
 
 # ───────────────────────────────────────────────────────────────

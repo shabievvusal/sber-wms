@@ -648,18 +648,6 @@ export async function getStatus() {
   return req('/api/status')
 }
 
-export async function getMissingWeight() {
-  return req('/api/missing-weight')
-}
-
-export async function getMissingWeightStatus() {
-  return req('/api/missing-weight/status')
-}
-
-export async function rebuildMissingWeight() {
-  return req('/api/missing-weight/rebuild', { method: 'POST' })
-}
-
 // `executors` — [{executorId, fio}, ...] (форма `newEmployees` из
 // StatsPage.jsx/save-fetched-data). Бэкенд (`EmployeeAddNewRequest`,
 // dotnet) принимает либо `executors` (объекты с executorId — так
@@ -706,14 +694,6 @@ export async function markUpdated() {
 // fetchDataViaBrowser/fetchPlacementViaBrowser/fetchRemainsViaBrowser
 // оригинала (прямые браузерные вызовы в api.samokat.ru — не перенесены,
 // см. PLAN.md).
-export async function fetchData(payload) {
-  return req('/api/fetch-data', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload || {}),
-  })
-}
-
 // ─── Мониторинг смены (перекличка + живая активность) ──────────────────────
 
 export async function getDateItems(dateStr, { shift } = {}) {

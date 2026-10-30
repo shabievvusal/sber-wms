@@ -496,7 +496,6 @@ export async function fetchDataViaBrowser(token, options = {}) {
     added: saveRes.added ?? 0,
     skipped: saveRes.skipped ?? 0,
     engine: saveRes.engine ?? null,
-    dotnetError: saveRes.dotnetError ?? null,
     timings: saveRes.timings ?? null,
     newEmployees: saveRes.newEmployees || [],
   }

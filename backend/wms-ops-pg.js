@@ -61,4 +61,27 @@ async function listExecutors() {
   return rows;
 }
 
-module.exports = { init, listExecutors };
+/**
+ * Кто комплектовал по датам смен (09:00 даты → 09:00 следующей) — штучный
+ * отбор, раскладка КДК и паллетный отбор в КДК. Для сводного отчёта
+ * консолидации (выход сотрудников компаний по дням).
+ * → [{ date: 'YYYY-MM-DD', executorId, executor }]
+ */
+async function pickersByShiftDate(dateFrom, dateTo) {
+  const { rows } = await pool.query(`
+    SELECT d AS date, executor_id AS "executorId", max(executor) AS executor
+      FROM (
+        SELECT to_char(CASE WHEN hour >= 9 THEN date ELSE date - 1 END, 'YYYY-MM-DD') AS d, executor_id, executor
+          FROM wms_ops
+         WHERE warehouse_id = $1
+           AND operation_type IN ('PICK_BY_LINE', 'PALLET_SELECTION_MOVE_TO_PICK_BY_LINE', 'PIECE_SELECTION_PICKING')
+           AND date BETWEEN $2::date AND $3::date + 1
+           AND (executor_id <> '' OR executor <> '')
+      ) AS t
+     WHERE d BETWEEN $2 AND $3
+     GROUP BY d, executor_id
+  `, [currentWarehouse(), dateFrom, dateTo]);
+  return rows;
+}
+
+module.exports = { init, listExecutors, pickersByShiftDate };

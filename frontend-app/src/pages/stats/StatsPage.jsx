@@ -248,7 +248,7 @@ export default function StatsPage() {
           const remainsText = remainsRes?.__error ? ' · остатки не загружены' : ` · остатки: ${remainsRes.fetched ?? '?'}/${remainsRes.added ?? '?'}`
           const movesText = movesRes?.__error ? ' · спуск/пополнение/размещение не загружены' : ` · спуск/пополнение/размещение: ${movesRes.fetched ?? '?'}/${movesRes.added ?? '?'}`
           toast.success(`Комплектация: получено ${selectionRes.fetched ?? '?'}, добавлено ${selectionRes.added ?? '?'}${remainsText}${movesText}`)
-          const enginePart = selectionRes.engine === 'dotnet' ? '.NET' : selectionRes.engine === 'node' ? 'Node' : (selectionRes.engine || 'Браузер')
+          const enginePart = selectionRes.engine === 'postgres' ? 'База' : selectionRes.engine === 'dotnet' ? '.NET' : (selectionRes.engine || 'Браузер')
           const totalMsPart = selectionRes.timings?.totalMs ? ` · итого ${(selectionRes.timings.totalMs / 1000).toFixed(1)}с` : ''
           setEngineNote(`${enginePart}${totalMsPart} · комплектация +${selectionRes.added ?? 0}`)
         }
@@ -257,17 +257,9 @@ export default function StatsPage() {
         // ни разу и не предлагался к добавлению в список.
         const found = mergeNewEmployees(selectionRes.newEmployees || [], remainsRes?.newEmployees || [], movesRes?.newEmployees || [])
         if (found.length) setNewEmployees(prev => mergeNewEmployees(prev, found))
-      } else if (!rangeOverride) {
-        // Скользящее окно (rangeOverride) есть только у автообновления, а оно
-        // без браузерного WMS-токена бессмысленно — серверный same-origin
-        // фетч ниже поддерживает только обычный диапазон часов вручную.
-        const res = await api.fetchData({ dateStr, shift, fromHour: Number(fetchHourFrom), toHour: Number(fetchHourTo) })
-        if (!silent) {
-          toast.success('Данные обновлены')
-          setEngineNote(res?.duration != null ? `Node · итого ${(res.duration / 1000).toFixed(1)}с · получено ${res.count ?? '?'}` : '')
-        }
       } else {
-        throw new Error('Нет WMS-токена для автообновления')
+        // данные WMS забирает только браузер с токеном WMS (серверной загрузки нет)
+        throw new Error('Нет активного WMS-токена — войдите паролем от WMS')
       }
       await loadSummary({ silent: true })
       loadStatus()
