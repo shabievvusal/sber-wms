@@ -1,6 +1,7 @@
 // Печать этикеток 100×75 мм на термопринтере: каждая строка — своя страница
 // (@page точно по размеру этикетки, без полей), штрихкод Code 128 и текст.
-// Печатается из отдельного окна, чтобы стили сайта не влияли на раскладку.
+// Печатается из скрытого фрейма на этой же странице: сразу диалог печати,
+// без отдельного окна, и стили сайта не влияют на раскладку этикеток.
 
 import { buildCode128Bars, canCode128 } from '@/pages/picking/Code128Barcode'
 
@@ -34,9 +35,16 @@ function labelHtml(text, { showText }) {
 
 export function printLabels(lines, { size = '100x75', showText = true } = {}) {
   const { w, h } = LABEL_SIZES[size]
-  const win = window.open('', '_blank', 'width=480,height=640')
-  if (!win) throw new Error('Браузер заблокировал окно печати — разрешите всплывающие окна для сайта')
-  win.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Этикетки (${lines.length})</title>
+  document.getElementById('label-print-frame')?.remove()
+  const frame = document.createElement('iframe')
+  frame.id = 'label-print-frame'
+  frame.setAttribute('aria-hidden', 'true')
+  // нулевой размер, а не visibility:hidden — иначе часть браузеров печатает пустые листы
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+  document.body.appendChild(frame)
+  const doc = frame.contentDocument
+  doc.open()
+  doc.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Этикетки (${lines.length})</title>
 <style>
   @page { size: ${w}mm ${h}mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,10 +55,12 @@ export function printLabels(lines, { size = '100x75', showText = true } = {}) {
   .bc { width: 100%; height: ${Math.round(h * 0.52)}mm; }
   .bc svg { width: 100%; height: 100%; display: block; fill: #000; }
   .txt { font-weight: 700; text-align: center; line-height: 1.05; word-break: break-all; letter-spacing: 0.02em; }
-  @media screen { body { background: #e5e7eb; } .label { background: #fff; margin: 4mm auto; box-shadow: 0 1px 4px rgba(0,0,0,.25); } }
 </style></head><body>
 ${lines.map(t => labelHtml(t, { showText })).join('\n')}
-<script>window.onload = () => { window.focus(); window.print(); };<\/script>
 </body></html>`)
-  win.document.close()
+  doc.close()
+  // печать после отрисовки фрейма; фрейм убираем после закрытия диалога
+  const win = frame.contentWindow
+  win.addEventListener('afterprint', () => setTimeout(() => frame.remove(), 500), { once: true })
+  setTimeout(() => { win.focus(); win.print() }, 100)
 }
