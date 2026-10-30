@@ -732,7 +732,7 @@ public partial class StatsService
     }
 
     // Легаси-fallback (data/shift_*.json) не переносим — после бэкфилла
-    // Postgres единственный источник для всех дат, старых и новых (см. PLAN.md).
+    // Postgres единственный источник для всех дат, старых и новых.
     public async Task<List<WmsOpEntity>> GetShiftItemsAsync(string shiftKey)
     {
         var parts = shiftKey.Split('_');
@@ -859,7 +859,7 @@ public partial class StatsService
         // КАЖДЫЙ элемент батча уходил отдельный `SELECT EXISTS(...)` — при батче
         // в тысячи операций (обычный размер одной часовой пачки) это давало по
         // несколько секунд ТОЛЬКО на проверку дублей, и совокупно по всем часовым
-        // пачкам одного фетча — многие минуты (см. PLAN.md).
+        // пачкам одного фетча — многие минуты.
         var parsedDates = new (DateOnly Date, short Hour, DateTime CompletedAtUtc)?[rawItems.Count];
         var dateHourPairs = new HashSet<(DateOnly, short)>();
         for (var i = 0; i < rawItems.Count; i++)

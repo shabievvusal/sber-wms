@@ -1,0 +1,2 @@
+# shell-скрипты запускаются на Linux — только LF
+*.sh text eol=lf

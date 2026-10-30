@@ -10,9 +10,7 @@ const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text
 
 // Тулбар перенесён из оригинала (StatsToolbar.jsx) — действия гейтятся по
 // роли (`actions`), как и в оригинале (`fetch_data`/`recheck_data`/
-// `request_fetch`), через локальный предпросмотр роли в StatsPage.jsx (в
-// песочнице нет общей сессии/системы прав — тот же приём, что и ролевой
-// предпросмотр в SettingsPage).
+// `request_fetch`), по роли вошедшего пользователя (StatsPage.jsx).
 export function StatsToolbar({
   dateStr, onDateChange, shift, onShiftChange, operation, onOperationChange,
   fetchHourFrom, fetchHourTo, onFetchHourFromChange, onFetchHourToChange,

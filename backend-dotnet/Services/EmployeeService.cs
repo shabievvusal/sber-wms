@@ -6,7 +6,7 @@ namespace BackendDotnet.Services;
 
 // Перенос empl-pg.js — только чистые CRUD-операции над таблицей employees.
 // GET /api/empl/find-unregistered, POST /api/empl/enrich-names,
-// POST /api/empl/upgrade-fio-ids остались на Node (см. PLAN.md): они
+// POST /api/empl/upgrade-fio-ids остались на Node: они
 // сканируют локальные файлы (data/*/HH.json, names_registry.json, raw_tmp/),
 // которых у dotnet-контейнера нет (не смонтированы, см. docker-compose.yml) —
 // тот же приём, что и с /api/rk/routes/*/eos/request-refresh в Фазе 1

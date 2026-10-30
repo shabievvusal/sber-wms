@@ -47,7 +47,6 @@ builder.Services.AddScoped<MotivationService>();
 builder.Services.AddScoped<ZgzService>();
 builder.Services.AddScoped<CellStoreService>();
 builder.Services.AddSingleton<StockConsolidationService>();
-builder.Services.AddSingleton<S3Service>();
 builder.Services.AddSingleton<PhotoService>();
 builder.Services.AddSingleton<SseService>();
 

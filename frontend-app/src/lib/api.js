@@ -1,5 +1,4 @@
-// Минимальный API-слой для превью редизайна. Бьёт в тот же бэкенд (см. vite.config.js proxy),
-// намеренно НЕ импортирует ../../app/src/api/index.js — песочница должна оставаться независимой.
+// API-слой сайта: запросы к своему бэкенду (node и dotnet за Caddy; в разработке — vite.config.js proxy).
 import { isEmbedded } from '@/lib/embed'
 import { getWarehouseId } from '@/lib/warehouse'
 
@@ -159,14 +158,14 @@ export async function deleteRkRoutesByDateRange(dateFrom, dateTo) {
 }
 
 // fetchRkFromWms — намеренно НЕ реализуем здесь: требует настоящий токен браузерной
-// сессии в wwh.samokat.ru (см. PLAN.md, «единственное легитимное место для JS»).
+// сессии в wwh.samokat.ru.
 // FetchModal ниже честно показывает это ограничение, а не притворяется, что скачал данные.
 
 // ─── Приёмка (кио­ск отгрузки/приёмки РК) ───────────────────────────────────
 // searchRkRoutes/submitRkShipment/submitRkReceiving — POST-эндпоинты кладовщика
 // (без сессии), не путать с updateRkShipment/updateRkReceiving выше (PUT,
 // редактирование администратором из ShipmentsPage — это два разных реальных
-// роута на бэкенде, см. PLAN.md).
+// роута на бэкенде).
 
 // `days` — окно в N последних календарных дней (сегодня + предыдущие).
 // Шлёт только «Список ЕО» и только для списка по умолчанию: у него нет
@@ -209,9 +208,12 @@ export async function submitRkReceiving(routeId, payload) {
   })
 }
 
+// Фото сжимаются в браузере (до 1280 px) — на сервер уходят сотни КБ, а не
+// мегабайты с камеры телефона; dotnet только нормализует и делает превью.
 export async function uploadRkPhotos(files) {
+  const { compressImage } = await import('@/lib/compressImage')
   const form = new FormData()
-  for (const f of files) form.append('photos', f)
+  for (const f of files) form.append('photos', await compressImage(f))
   const r = await fetch('/api/rk/photos', { method: 'POST', credentials, body: form })
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error || 'Ошибка загрузки фото')
@@ -325,7 +327,7 @@ export async function updateTsdSettings(totalCount) {
 
 // ─── Выдача ТСД (терминалов сбора данных) — кио­ск-сканирование ────────────
 // Все три эндпоинта требуют USE_PG=true на бэкенде (backend/tsd-pg.js) — без
-// поднятого Postgres сервер отвечает 503 (см. PLAN.md).
+// поднятого Postgres сервер отвечает 503.
 
 export async function getTsdAssignments() {
   return req('/api/tsd-assignments')
@@ -689,11 +691,6 @@ export async function markUpdated() {
   return req('/api/vs/mark-updated', { method: 'POST' })
 }
 
-// Серверный фетч селекции данными из WMS собственным токеном бэкенда (без
-// браузерного bearer-токена) — same-origin, в отличие от
-// fetchDataViaBrowser/fetchPlacementViaBrowser/fetchRemainsViaBrowser
-// оригинала (прямые браузерные вызовы в api.samokat.ru — не перенесены,
-// см. PLAN.md).
 // ─── Мониторинг смены (перекличка + живая активность) ──────────────────────
 
 export async function getDateItems(dateStr, { shift } = {}) {
@@ -714,10 +711,8 @@ export async function putRollcall(shiftKey, present) {
   })
 }
 
-// Прокси через наш бэкенд (сервер хранит свой токен WMS) — путь по умолчанию.
-// В оригинале есть ещё getLiveMonitorViaBrowser (прямой fetch в api.samokat.ru
-// с токеном из localStorage) как алтернативный путь при закешированном
-// браузерном токене WMS — в песочнице не переносим, см. PLAN.md.
+// Живой мониторинг через наш бэкенд (серверный токен WMS из config.json) —
+// когда в браузере нет своего токена WMS (иначе MonitorPage ходит в WMS сама).
 export async function getLiveMonitor() {
   return req('/api/monitor/live')
 }

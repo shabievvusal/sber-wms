@@ -3,8 +3,7 @@
 // Полный клиентский пересчёт статистики из сырых items (statsCalc.js) НЕ
 // перенесён — как и в уже перенесённых ReportsPage/AnalysisPage, здесь
 // потребляется только уже готовый агрегированный ответ бэкенда
-// (getDateSummaryFull), а не дублируется его серверная логика на клиенте
-// (см. PLAN.md про statsCalc.js/storage.js).
+// (getDateSummaryFull), а не дублируется его серверная логика на клиенте.
 
 import { whKey } from '@/lib/warehouse'
 import { DAY_HOURS, NIGHT_HOURS, SHIFT_MINUTES } from './constants'

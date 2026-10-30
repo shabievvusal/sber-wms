@@ -1,7 +1,7 @@
 // Хелперы — перенесены из оригинала (MonitorPage.jsx + utils/format.js), но
 // БЕЗ fio-based fallback/дедупа (normalizeFio/personKey/titleCase из
 // оригинала): здесь связка между реестром сотрудников/переклички/живого
-// снимка/задач — только по executorId, см. PLAN.md (решение от 2026-07-12).
+// снимка/задач — только по executorId (решение от 2026-07-12).
 
 export function formatDuration(ms) {
   if (!ms || ms < 0) return '—'

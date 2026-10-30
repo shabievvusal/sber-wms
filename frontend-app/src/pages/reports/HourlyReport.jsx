@@ -16,7 +16,7 @@ import { Select } from '@/components/ui/select'
 // Перенесено «точь-в-точь» с оригинала (frontend/app/src/pages/reports/HourlyReport.jsx)
 // по прямому запросу пользователя — та же 9-колоночная таблица-ведомость с
 // жёлтыми шапками секций и узкой панелью ручного ввода справа, не
-// переосмысленная под карточки. См. PLAN.md.
+// переосмысленная под карточки.
 
 const td = 'border border-[#888] px-2 py-[3px] whitespace-nowrap align-middle'
 const yh = `${td} bg-[#FFFF00] font-bold text-center`

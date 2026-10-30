@@ -8,8 +8,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react'
 import { fetchRkFromWms, getStoredToken } from '@/lib/wmsFetch'
 
 // Загрузка маршрутов из wwh.samokat.ru ТРЕБУЕТ настоящий токен браузерной сессии
-// пользователя в WMS (см. PLAN.md — единственное легитимное место для JS в этом
-// проекте). Токен появляется в localStorage, только если при входе указан пароль
+// пользователя в WMS. Токен появляется в localStorage, только если при входе указан пароль
 // от WMS и он совпал (AuthContext.jsx кладёт его сюда же) — если пользователь
 // вошёл сайт-паролем без WMS-ветки (allowWithoutToken) или токен истёк без
 // живого refresh-токена, тут по-прежнему честная ошибка, а не притворство.

@@ -25,7 +25,7 @@ import { Select } from '@/components/ui/select'
 // returnTsdByBarcode) — same-origin, требуют USE_PG=true на бэкенде (backend/
 // tsd-pg.js) — без Postgres backend отвечает 503. Раздел действительно в
 // NAV_ITEMS оригинала (первоклассный пункт меню, не скрытый кио­ск-роут вроде
-// ReceivePage) — см. PLAN.md.
+// ReceivePage).
 //
 // Список сотрудников — ДВА источника (добавлено 2026-07-15, запрос
 // пользователя): (1) api.getEmployees() — обычный реестр, ключ executorId,

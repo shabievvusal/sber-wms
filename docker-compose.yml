@@ -35,6 +35,8 @@ services:
       # фото жалоб «Консолидации» лежат в томе node (persist/uploads, см.
       # docker-entrypoint.sh) — Caddy отдаёт их прямо с диска, без Node
       - node-persist:/srv/node-persist:ro
+      # фото РК (приёмка/отгрузка) — пишет dotnet, Caddy отдаёт с диска
+      - rk-photos:/srv/rk-photos:ro
     depends_on:
       node:
         condition: service_healthy
@@ -84,9 +86,7 @@ services:
 
   # Фаза 0 — /api/dotnet-status. Фаза 1 — route-rk-pg.js перенесён целиком
   # (routes/ship/receive/eo/drivers/cfz/photos/events), см. Program.cs.
-  # env_file: .env — нужен целиком (не только PG_*), т.к. фото теперь льются
-  # в S3 отсюда же (S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET/
-  # S3_PUBLIC_URL), та же переменная DOTNET_PORT (если задана) тоже отсюда.
+  # Фото РК — на томе rk-photos (dotnet пишет, Caddy раздаёт с диска).
   dotnet:
     build: ./backend-dotnet
     restart: unless-stopped
@@ -100,6 +100,10 @@ services:
       - PG_DB=${PG_DB:-zlp}
       - PG_USER=${PG_USER:-zlp}
       - PG_PASSWORD=${PG_PASSWORD}
+      - RK_PHOTOS_DIR=/data/rk-photos
+    volumes:
+      # фото РК и превью — переживают пересборку (раньше лежали внутри контейнера)
+      - rk-photos:/data/rk-photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,4 +159,6 @@ volumes:
   caddy-data:
     driver: local
   caddy-config:
+    driver: local
+  rk-photos:
     driver: local

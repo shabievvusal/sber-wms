@@ -12,10 +12,10 @@
  * Фаза 0: сессии/пользователи (vs_sessions/vs_users) — Postgres.
  * Фаза 4: ОСТАЛЬНЫЕ 4 файловых поддомена (кастомные роли, заявки на
  * регистрацию, лог попыток входа, коды привязки Telegram) — были
- * сознательно отложены Фазой 0 (см. историю PLAN.md), теперь тоже
+ * сознательно отложены Фазой 0, теперь тоже
  * переехали в Postgres (vs_custom_roles/vs_pending_users/vs_logins/
  * vs_telegram_bind_codes). Node продолжает владеть ЭТИМИ функциями (нужны
- * /api/node/*, /api/vs/telegram/* — см. PLAN.md, «что остаётся на Node»),
+ * /api/vs/telegram/*),
  * просто их реализация теперь читает/пишет Postgres вместо файлов —
  * ripple-эффект: роли переплетены почти везде (`isValidRole`/`resolveRole`/
  * `getModulesForRole`/`resolveModules` были синхронными, читали файл

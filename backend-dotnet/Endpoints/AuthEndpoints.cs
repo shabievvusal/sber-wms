@@ -8,10 +8,9 @@ namespace BackendDotnet.Endpoints;
 // админ-роуты ролей/заявок/пользователей. Дословный перенос 4-ветвистой
 // логики /api/vs/auth/login (сайт-пароль [+опционально WMS-токен тем же
 // паролем] / allowWithoutToken без пароля / WMS-пароль как единственная
-// проверка) — см. PLAN.md.
+// проверка).
 //
-// /api/vs/telegram/* и Telegram-consumer-loop остаются на Node (см. PLAN.md,
-// «что остаётся на Node») — сюда не переносятся.
+// /api/vs/telegram/* и Telegram-consumer-loop остаются на Node — сюда не переносятся.
 public static class AuthEndpoints
 {
     private static readonly CookieOptions SessionCookieOptions = new()

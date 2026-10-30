@@ -15,7 +15,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.410.7" />
     <!-- Фаза 4: hashPassword/verifyPassword в vs-auth-pg.js используют
          crypto.scryptSync(password, salt, 64) (Node-дефолты N=16384, r=8,
          p=1) — .NET не имеет встроенного scrypt. Проверено вручную

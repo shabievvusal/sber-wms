@@ -16,6 +16,8 @@ const motivationPg = require('./motivation-pg');
 const wmsOpsPg = require('./wms-ops-pg');
 const supplyPlansPg = require('./supply-plans-pg');
 const consolidationPg = require('./consolidation-pg');
+// небольшие данные node (перекличка, нарушения, настройки) — «склад + ключ → JSON»
+const state = require('./state-pg');
 const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
 
@@ -105,21 +107,13 @@ function normalizeAutoFetchSettings(input = {}) {
   };
 }
 
-function loadAutoFetchSettings() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(AUTO_FETCH_SETTINGS_PATH(), 'utf8'));
-    return normalizeAutoFetchSettings(raw);
-  } catch {
-    return { ...DEFAULT_AUTO_FETCH_SETTINGS };
-  }
+async function loadAutoFetchSettings() {
+  const raw = await state.get('auto-fetch-settings', { legacyFile: AUTO_FETCH_SETTINGS_PATH() });
+  return raw ? normalizeAutoFetchSettings(raw) : { ...DEFAULT_AUTO_FETCH_SETTINGS };
 }
 
-function saveAutoFetchSettings(settings) {
-  const normalized = normalizeAutoFetchSettings(settings);
-  const dir = path.dirname(AUTO_FETCH_SETTINGS_PATH());
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(AUTO_FETCH_SETTINGS_PATH(), JSON.stringify(normalized, null, 2), 'utf8');
-  return normalized;
+async function saveAutoFetchSettings(settings) {
+  return state.set('auto-fetch-settings', normalizeAutoFetchSettings(settings));
 }
 
 function loadConfig() {
@@ -213,10 +207,10 @@ const fetchRequestedBy = new Set(); // склады, где попросили �
 // Открыт без входа: по нему Docker проверяет, жив ли node (healthcheck).
 // Поэтому — только время обновления и флаг запроса; конфиг (там был токен
 // Telegram-бота в открытом виде) больше не отдаётся.
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
   try {
     res.json({
-      lastRun: scheduler.getLastRun(),
+      lastRun: await scheduler.getLastRun(),
       fetchRequested: fetchRequestedBy.has(currentWarehouse()),
     });
   } catch (err) {
@@ -230,8 +224,6 @@ app.get('/api/status', (req, res) => {
 
 
 
-// Файлы склада — в папке его данных (у СПБ-3 прежняя data/), см. warehouse-context.js
-const EMPL_IDS_PATH = () => path.join(dataDir(), 'empl-ids.json');
 // Новые исполнители из выгрузки WMS — те, кого нет в списке сотрудников по
 // executorId. ФИО — ровно как прислал WMS по этому ID: lastName firstName
 // middleName, без правки регистра и «дописывания» отчеств. Уже записанных
@@ -249,13 +241,9 @@ async function updateNamesRegistry(items) {
   }
 
   const { idMap } = await getCompanyLookupMaps();
-  const knownIds = idMap
-    ? null
-    : new Set(Object.keys(loadEmplIdRegistry()));
   const newEmployees = [];
   for (const [executorId, fio] of itemNames) {
-    const known = idMap ? idMap.has(executorId) : knownIds.has(executorId);
-    if (!known) newEmployees.push({ executorId, fio });
+    if (!idMap.has(executorId)) newEmployees.push({ executorId, fio });
   }
   return { newEmployees };
 }
@@ -447,7 +435,7 @@ app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
       return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
     }
     // «Обновлено» в статистике = время последней реальной выгрузки
-    scheduler.setLastRun(new Date());
+    await scheduler.setLastRun(new Date());
     // новые исполнители сразу видны в «Настройки → Сотрудники»
     invalidateExecutorsCache();
     res.json({
@@ -464,17 +452,6 @@ app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
-
-/** Карта нормализованное ФИО -> компания для фильтра по роли manager */
-function loadEmplIdRegistry() {
-  try {
-    if (!fs.existsSync(EMPL_IDS_PATH())) return {};
-    const raw = JSON.parse(fs.readFileSync(EMPL_IDS_PATH(), 'utf8'));
-    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  } catch {
-    return {};
-  }
-}
 
 /** { fioMap, idMap } — сотрудники и их компании из базы. */
 async function getCompanyLookupMaps() {
@@ -509,10 +486,6 @@ function getCompanyByIdOrFioSync(idMap, executorId, executorFio) {
   if (executorId && idMap) {
     const c = idMap.get(String(executorId).trim());
     if (c != null) return c;
-  }
-  if (executorId && !idMap) {
-    const rec = loadEmplIdRegistry()[String(executorId).trim()];
-    if (rec && rec.company != null) return rec.company;
   }
   return null;
 }
@@ -856,18 +829,18 @@ app.post('/api/vs/request-fetch', vsSessionRequired, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/vs/auto-fetch-settings', vsSessionRequired, (_req, res) => {
+app.get('/api/vs/auto-fetch-settings', vsSessionRequired, async (_req, res) => {
   try {
-    res.json(loadAutoFetchSettings());
+    res.json(await loadAutoFetchSettings());
   } catch (err) {
     console.error('GET /api/vs/auto-fetch-settings', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired, (req, res) => {
+app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired, async (req, res) => {
   try {
-    res.json(saveAutoFetchSettings(req.body || {}));
+    res.json(await saveAutoFetchSettings(req.body || {}));
   } catch (err) {
     console.error('PUT /api/vs/admin/auto-fetch-settings', err);
     res.status(400).json({ error: err.message });
@@ -881,8 +854,8 @@ app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired,
 // «попроси другое устройство сходить в WMS» стала лишней сущностью.
 
 // Корп. устройство вызывает после завершения полного runFetchForHours
-app.post('/api/vs/mark-updated', vsSessionRequired, (req, res) => {
-  scheduler.setLastRun(new Date());
+app.post('/api/vs/mark-updated', vsSessionRequired, async (req, res) => {
+  await scheduler.setLastRun(new Date());
   fetchRequestedBy.delete(currentWarehouse());
   res.json({ ok: true });
 });
@@ -1021,20 +994,18 @@ app.get('/api/monitor/live', vsSessionRequired, async (req, res) => {
   }
 });
 
-app.get('/api/rollcall', vsSessionRequired, (req, res) => {
+app.get('/api/rollcall', vsSessionRequired, async (req, res) => {
   try {
-    if (!fs.existsSync(ROLLCALL_PATH())) return res.json({ shiftKey: null, present: [] });
-    res.json(JSON.parse(fs.readFileSync(ROLLCALL_PATH(), 'utf8')));
+    res.json(await state.get('rollcall', { legacyFile: ROLLCALL_PATH(), fallback: { shiftKey: null, present: [] } }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put('/api/rollcall', vsSessionRequired, (req, res) => {
+app.put('/api/rollcall', vsSessionRequired, async (req, res) => {
   try {
     const { shiftKey, present } = req.body || {};
-    fs.mkdirSync(dataDir(), { recursive: true });
-    fs.writeFileSync(ROLLCALL_PATH(), JSON.stringify({ shiftKey: shiftKey || null, present: present || [] }), 'utf8');
+    await state.set('rollcall', { shiftKey: shiftKey || null, present: present || [] });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1520,12 +1491,13 @@ const uploadViolation = multer({
   },
 });
 
-function loadViolations() {
-  try { return JSON.parse(fs.readFileSync(VIOLATIONS_PATH(), 'utf8')); }
-  catch { return []; }
+// список нарушений — в базе (state-pg), видео — файлами в VIOLATIONS_DIR
+async function loadViolations() {
+  const list = await state.get('violations', { legacyFile: VIOLATIONS_PATH(), fallback: [] });
+  return Array.isArray(list) ? list : [];
 }
 function saveViolations(data) {
-  fs.writeFileSync(VIOLATIONS_PATH(), JSON.stringify(data, null, 2));
+  return state.set('violations', data);
 }
 
 // Раздача видео
@@ -1536,16 +1508,16 @@ app.get('/violation-videos/:filename', vsSessionRequired, (req, res) => {
 });
 
 // GET /api/violations
-app.get('/api/violations', vsSessionRequired, (_req, res) => {
-  res.json(loadViolations());
+app.get('/api/violations', vsSessionRequired, async (_req, res) => {
+  try { res.json(await loadViolations()); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/violations — создать нарушение
-app.post('/api/violations', vsSessionRequired, uploadViolation.single('video'), (req, res) => {
+app.post('/api/violations', vsSessionRequired, uploadViolation.single('video'), async (req, res) => {
   try {
     const { title, damage } = req.body;
     if (!title || !req.file) return res.status(400).json({ error: 'Нужны название и видео' });
-    const violations = loadViolations();
+    const violations = await loadViolations();
     const item = {
       id:        `${Date.now()}_${Math.random().toString(36).slice(2)}`,
       title:     String(title).trim(),
@@ -1554,7 +1526,7 @@ app.post('/api/violations', vsSessionRequired, uploadViolation.single('video'), 
       createdAt: new Date().toISOString(),
     };
     violations.unshift(item);
-    saveViolations(violations);
+    await saveViolations(violations);
     res.json(item);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1562,13 +1534,13 @@ app.post('/api/violations', vsSessionRequired, uploadViolation.single('video'), 
 });
 
 // DELETE /api/violations/:id
-app.delete('/api/violations/:id', vsSessionRequired, (req, res) => {
+app.delete('/api/violations/:id', vsSessionRequired, async (req, res) => {
   try {
-    const violations = loadViolations();
+    const violations = await loadViolations();
     const idx = violations.findIndex(v => v.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Не найдено' });
     const [removed] = violations.splice(idx, 1);
-    saveViolations(violations);
+    await saveViolations(violations);
     const file = path.join(VIOLATIONS_DIR, removed.videoFile);
     if (fs.existsSync(file)) fs.unlinkSync(file);
     res.json({ ok: true });
@@ -1603,6 +1575,7 @@ async function startServer() {
   await productWeights.initPg();
   await supplyPlansPg.init();
   await consolidationPg.init();
+  await state.init();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   console.log('[pg] PostgreSQL готов');
   app.listen(PORT, '0.0.0.0', () => {

@@ -1,101 +1,48 @@
+// Конфиг node (config.json: Telegram, серверный токен WMS для мониторинга) и
+// «Обновлено: ЧЧ:ММ» в статистике — время последней реальной выгрузки из WMS,
+// у каждого склада своё. Хранится в базе (state-pg.js), чтобы переживать
+// перезапуск; в памяти — кэш, чтобы частый опрос статуса не ходил в базу.
+// Периодический серверный опрос WMS убран (2026-10-31): данные забирает браузер.
 const path = require('path');
 const fs = require('fs');
+const { dataDir, currentWarehouse } = require('./warehouse-context');
+const state = require('./state-pg');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const DATA_DIR = path.join(__dirname, 'data');
 
-// у каждого склада своё «Обновлено» — файл в папке его данных
-const { dataDir, currentWarehouse } = require('./warehouse-context');
-const LAST_RUN_PATH = () => path.join(dataDir(), 'last-run.json');
-
-let intervalId = null;
-let fetchHandler = null;
-
-// Время последней реальной выгрузки. Хранится на диске, а не только в
-// памяти: это то самое «Обновлено: HH:MM» в тулбаре статистики, и после
-// перезапуска контейнера оно показывало «—», хотя данные за смену давно
-// собраны (пользователь 2026-09-06: «неправильно указывается время
-// последнего обновления»).
-const lastRunBy = new Map(); // склад → Date | null
-function readLastRun() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(LAST_RUN_PATH(), 'utf8'));
-    const d = raw && raw.lastRun ? new Date(raw.lastRun) : null;
-    return d && !isNaN(d) ? d : null;
-  } catch {
-    return null;
-  }
-}
-
 function loadConfig() {
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (e) {
-    return { token: '', intervalMinutes: 60, apiUrl: 'https://api.samokat.ru/wmsops-wwh/stocks/changes/search', useVpn: true };
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  } catch {
+    return { token: '' };
   }
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-function setFetchHandler(handler) {
-  fetchHandler = handler;
-}
+const lastRunBy = new Map(); // склад → Date | null
 
-function start() {
-  if (intervalId) return { ok: true, message: 'Уже запущен' };
-  const config = loadConfig();
-  if (!config.token || config.token.trim() === '') {
-    return { ok: false, message: 'Токен не задан. Укажите Bearer токен в настройках.' };
-  }
-  const minutes = Math.max(1, parseInt(config.intervalMinutes, 10) || 60);
-  ensureDataDir();
-  intervalId = setInterval(async () => {
-    if (fetchHandler) await fetchHandler();
-  }, minutes * 60 * 1000);
-  return { ok: true, message: `Автоопрос каждые ${minutes} мин` };
-}
-
-function stop() {
-  if (intervalId) {
-    clearInterval(intervalId);
-    intervalId = null;
-  }
-  return { ok: true, message: 'Остановлено' };
-}
-
-function isRunning() {
-  return !!intervalId;
-}
-
-function getLastRun() {
+async function getLastRun() {
   const wh = currentWarehouse();
-  if (!lastRunBy.has(wh)) lastRunBy.set(wh, readLastRun());
+  if (!lastRunBy.has(wh)) {
+    const v = await state.get('last-run', { legacyFile: path.join(dataDir(), 'last-run.json') });
+    const d = v?.lastRun ? new Date(v.lastRun) : null;
+    lastRunBy.set(wh, d && !isNaN(d) ? d : null);
+  }
   return lastRunBy.get(wh);
 }
 
-function setLastRun(date) {
+async function setLastRun(date) {
   const lastRun = date || new Date();
   lastRunBy.set(currentWarehouse(), lastRun);
   try {
-    ensureDataDir();
-    fs.writeFileSync(LAST_RUN_PATH(), JSON.stringify({ lastRun: lastRun.toISOString() }), 'utf8');
-  } catch { /* не критично — время просто не переживёт перезапуск */ }
+    await state.set('last-run', { lastRun: lastRun.toISOString() });
+  } catch (err) {
+    console.error('[scheduler] last-run не сохранён:', err.message); // не критично — останется в памяти
+  }
 }
 
-module.exports = {
-  loadConfig,
-  ensureDataDir,
-  setFetchHandler,
-  start,
-  stop,
-  isRunning,
-  getLastRun,
-  setLastRun,
-  CONFIG_PATH,
-  DATA_DIR,
-};
+module.exports = { loadConfig, ensureDataDir, getLastRun, setLastRun, CONFIG_PATH, DATA_DIR };

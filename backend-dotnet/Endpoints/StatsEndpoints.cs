@@ -11,7 +11,7 @@ namespace BackendDotnet.Endpoints;
 //
 // /api/stats/*/ingest — НЕ проксируются через Caddy наружу (нет в
 // Caddyfile), вызываются только Node напрямую (dotnet:5080) как часть
-// дуал-райта (ops) — см. PLAN.md. Без гейтинга сессией: доверенный
+// дуал-райта (ops). Без гейтинга сессией: доверенный
 // server-to-server вызов внутри docker-сети, не достижим извне.
 public static class StatsEndpoints
 {

@@ -13,8 +13,7 @@ const LS_ROW = 'consolidation_cell_row'
 const MAX_PHOTOS = 10
 
 // «Иванов Иван Иванович» → «Иванов И.И.» — как в оригинале (utils/format.js),
-// дублируется локально по устоявшемуся в проекте принципу (см. PLAN.md —
-// мелкие форматтеры не выносятся в общий модуль между разделами).
+// дублируется локально: мелкие форматтеры не выносятся в общий модуль между разделами.
 function shortFio(name) {
   if (!name) return ''
   const parts = String(name).trim().split(/\s+/)
@@ -36,11 +35,8 @@ const ZONES = [
 // сырые факты (ячейка/штрихкод/фото) — кто нарушитель, определяется позже
 // WMS-поиском на стороне ConsolidationPage, эта форма о нём вообще не знает.
 //
-// В оригинале это отдельный роут без Layout/сайдбара (как ReceivePage) —
-// здесь тот же принцип, что и у ReceivePage: не в NAV_ITEMS, доступ только
-// через ссылку из ConsolidationPage, но по-прежнему внутри общей оболочки
-// песочницы (в ней нет отдельных «безрамочных» роутов вообще, см. PLAN.md
-// про ReceivePage).
+// Как и ReceivePage, не в меню (NAV_ITEMS): открывается по ссылке из
+// ConsolidationPage или ярлыком «Жалоба» на иконке приложения.
 export default function ConsolidationFormPage() {
   const { user } = useAuth()
   const currentUserName = user?.name ? shortFio(user.name) : ''

@@ -29,7 +29,7 @@ const LS_COLS_KEY = 'supplies_visible_cols'
 // frontend/app/src/pages/supplies/SuppliesPage.jsx), включая то, что там по
 // умолчанию видны ВСЕ колонки, а не урезанный набор. Единственное отличие:
 // 'taskNumber' здесь тоже зафиксирован (fixed) — чтобы всегда было на чём
-// поставить настоящую ссылку для «открыть в новой вкладке» (см. PLAN.md).
+// поставить настоящую ссылку для «открыть в новой вкладке».
 const COLUMNS = [
   { key: 'status', label: 'Статус', fixed: true },
   { key: 'acceptedBy', label: 'Кто принял' },
@@ -216,7 +216,7 @@ export default function SuppliesPage({ initialId }) {
   // умолчанию сегодня, как в оригинале). Перезагрузка при смене диапазона
   // плановой даты (тот же приём, что и в оригинале, только один диапазон
   // вместо раздельных planned/completed — их в new zlp никогда не было
-  // двух, см. PLAN.md).
+  // двух).
   useEffect(() => {
     let cancelled = false
     const load = async () => {

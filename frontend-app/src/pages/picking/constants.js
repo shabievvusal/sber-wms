@@ -3,7 +3,7 @@
 // TEMP_OPTIONS в PieceSelectionPage ≡ PIECE_SOURCE_ZONES/PIECE_TEMPS в
 // KdkLayoutPage) без общего источника правды. Здесь — один общий модуль,
 // это не смена поведения, а устранение дрейф-риска, отмеченного при разборе
-// оригинала (см. PLAN.md).
+// оригинала.
 
 export const TEMP_LABELS = {
   LOW_COLD: 'Низкий холод',

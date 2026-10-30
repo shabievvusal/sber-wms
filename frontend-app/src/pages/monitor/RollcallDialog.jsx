@@ -6,18 +6,18 @@ import { shortFio } from './format'
 import { ClipboardList } from 'lucide-react'
 
 /**
- * Порт RollcallModal оригинала. Упрощение (см. PLAN.md): оригинал строит
+ * Порт RollcallModal оригинала. Упрощение: оригинал строит
  * объединение {зарегистрированные сотрудники} ∪ {люди из живого снимка} ∪
  * {уже отмеченные в перекличке} с дедупом по «первым двум словам ФИО» —
  * нужно только для реальных разночтений написания имени между разными
  * системами. Здесь связка везде по executorId — ни normalizeFio, ни
- * fio-fallback, ни alias-склейки нет и не должно быть (см. PLAN.md).
+ * fio-fallback, ни alias-склейки нет и не должно быть.
  */
 export function RollcallDialog({ employees, present, onOpenChange, onSave }) {
   const [checks, setChecks] = useState(() => new Set(present))
 
   // Без executorId сотрудника нельзя однозначно связать с переклич./живым
-  // снимком (см. PLAN.md — фолбэка по ФИО больше нет), поэтому такие записи
+  // снимком, поэтому такие записи
   // сюда не попадают — их сначала нужно привязать к UUID в Настройках.
   const linkedEmployees = employees.filter(e => e.executorId)
 
