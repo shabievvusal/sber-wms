@@ -64,13 +64,12 @@ RUN dotnet publish SaveFetchedData/SaveFetchedData.csproj \
 # ───────────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
 
-# Системные зависимости: libvips — для sharp, libicu72/libssl3 — для .NET
+# Системные зависимости: libicu72/libssl3 — для .NET
 # runtime (глобализация ru-RU, HTTPS).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
-        libvips \
         libicu72 \
         libssl3 \
     && rm -rf /var/lib/apt/lists/*

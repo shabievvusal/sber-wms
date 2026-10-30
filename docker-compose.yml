@@ -70,8 +70,6 @@ services:
       - PORT=3009
     volumes:
       - node-persist:/app/persist
-      - /var/run/docker.sock:/var/run/docker.sock
-      - .:/app/host-project
       - ./backend/server.js:/app/backend/server.js
       - ./backend/vs-auth.js:/app/backend/vs-auth.js
       - ./backend/vs-auth-pg.js:/app/backend/vs-auth-pg.js
