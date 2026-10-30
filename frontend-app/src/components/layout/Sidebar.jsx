@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart2, Monitor, ScanBarcode, ScanSearch, Package, CalendarClock,
   ClipboardList, ListChecks, Boxes, LayoutGrid, Truck, PackageSearch, AlertTriangle, Settings,
-  ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle, Gauge, MoveDiagonal,
+  ChevronDown, LogOut, ArrowLeftRight, Combine, Award, Warehouse, PanelLeftClose, PanelLeftOpen, X, Puzzle, Gauge, MoveDiagonal, Tags,
 } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -46,6 +46,7 @@ export const NAV_ITEMS = [
       { key: 'picking-lost-eo', Icon: ScanSearch, label: 'Поиск потеряшек', page: 'picking-lost-eo', module: 'picking' },
       { key: 'picking-gaps', Icon: AlertTriangle, label: 'Пропуски в отборе', page: 'picking-gaps', module: 'picking' },
       { key: 'picking-slotting', Icon: MoveDiagonal, label: 'Расстановка товара', page: 'picking-slotting', module: 'picking' },
+      { key: 'picking-labels', Icon: Tags, label: 'Печать этикеток', page: 'picking-labels', module: 'picking' },
     ],
   },
   { key: 'shipments', Icon: Truck, label: 'Отгрузка', page: 'shipments', module: 'shipments' },

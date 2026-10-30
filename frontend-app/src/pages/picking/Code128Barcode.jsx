@@ -39,7 +39,10 @@ function getCode128Codes(value) {
   return [...codes, checksum % 103, 106]
 }
 
-function buildCode128Bars(value) {
+/** Можно ли закодировать строку в Code 128 (только ASCII 32–126, без кириллицы). */
+export const canCode128 = value => getCode128Codes(value).length > 0
+
+export function buildCode128Bars(value) {
   const quiet = 10
   let x = quiet
   const bars = []

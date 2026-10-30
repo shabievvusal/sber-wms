@@ -17,6 +17,7 @@
   "shortcuts": [
     { "name": "Сообщить о нарушении", "short_name": "Жалоба", "url": "/#/consolidation-form", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
     { "name": "Поиск потеряшек", "short_name": "Потеряшки", "url": "/#/picking-lost-eo", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Поиск ЕО", "short_name": "Поиск ЕО", "url": "/#/picking-eo", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Поиск ЕО", "short_name": "Поиск ЕО", "url": "/#/picking-eo", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Печать этикеток", "short_name": "Этикетки", "url": "/#/picking-labels", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
   ]
 }
