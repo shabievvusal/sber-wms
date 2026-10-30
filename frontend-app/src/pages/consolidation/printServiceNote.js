@@ -38,14 +38,6 @@ export function formatCompanyForSz(raw) {
   return SZ_COMPANY_NAMES[key] || (key.startsWith('ооо "') ? raw.trim() : `ООО "${raw.trim()}"`)
 }
 
-export function getTaskAreaPhrase(c) {
-  if (c.taskArea === 'kdk') return 'выполнял задачу в КДК'
-  if (c.taskArea === 'storage') return 'выполняя задачу в хранении'
-  const op = (c.operationType || '').toUpperCase()
-  if (op === 'PICK_BY_LINE' || op.includes('PALLET')) return 'выполнял задачу в КДК'
-  return 'выполняя задачу в хранении'
-}
-
 export function getComplaintPhotos(c) {
   return Array.isArray(c.photoFilenames) && c.photoFilenames.length > 0
     ? c.photoFilenames

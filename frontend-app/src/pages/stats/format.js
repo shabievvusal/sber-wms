@@ -207,24 +207,6 @@ export function hourRangeLabel(col) {
   return `${String(start).padStart(2, '0')}–${String(col).padStart(2, '0')}`
 }
 
-/** Сколько часов смены уже прошло (включая текущий) — для «сегодня» считает
- * по реальному московскому времени, для прошлых дат — вся смена (12ч). */
-export function getHoursPassedIncludingCurrent(dateStr, shift) {
-  const { dateStr: todayStr } = getCurrentShiftInfo()
-  if (dateStr !== todayStr) return 12
-  const MOSCOW_MS = 3 * 60 * 60 * 1000
-  const moscow = new Date(Date.now() + MOSCOW_MS)
-  const h = moscow.getUTCHours()
-  const m = moscow.getUTCMinutes()
-  const hoursFrom = start => Math.max(1, Math.min(12, Math.ceil(((h - start + 24) % 24) + m / 60)))
-  return shift === 'night' ? hoursFrom(21) : hoursFrom(9)
-}
-
-export function calcRate(total, employees, hoursPassed) {
-  if (!employees || !hoursPassed) return 0
-  return Math.round(total / employees / hoursPassed)
-}
-
 /** Сколько минут смены уже прошло (для «сегодня» — реальное время, для
  * прошлых дат — вся смена, 720 мин) — знаменатель для
  * computeWorkedMinutesInShift (оригинал: statsCalc.js, getElapsedShiftMinutes). */

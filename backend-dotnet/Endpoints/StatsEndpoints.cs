@@ -153,37 +153,6 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
-        app.MapGet("/api/stats/placement/monthly-employees", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
-        {
-            try
-            {
-                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                var dates = StatsService.GetDateRangeList(from, to);
-                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
-                var idMap = await svc.GetIdMapAsync();
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                var rows = new List<object>();
-                foreach (var dateStr in dates)
-                {
-                    var summary = (dynamic)await svc.GetPlacementSummaryAsync(dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
-                    var hb = summary.hourlyByEmployee;
-                    foreach (var row in hb.rows)
-                    {
-                        var byHour = (Dictionary<string, int>)row.byHour;
-                        var hoursCount = byHour.Values.Count(v => v > 0);
-                        rows.Add(new { date = dateStr, company = row.company ?? "—", name = row.name, total = row.total is int t ? t : 0, workedMinutes = hoursCount * 60, firstAt = row.firstAt, lastAt = row.lastAt });
-                    }
-                }
-                return Results.Json(new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
         // ─── Receiving ──────────────────────────────────────────────────────
 
         app.MapPost("/api/stats/receiving/ingest", async (ReceivingSaveRequest body, StatsService svc) =>
@@ -359,37 +328,6 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        app.MapGet("/api/stats/receiving/monthly-employees", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
-        {
-            try
-            {
-                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                var dates = StatsService.GetDateRangeList(from, to);
-                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
-                var idMap = await svc.GetIdMapAsync();
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                var rows = new List<object>();
-                foreach (var dateStr in dates)
-                {
-                    var summary = (dynamic)await svc.GetReceivingSummaryAsync(dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
-                    var hb = summary.hourlyByEmployee;
-                    foreach (var row in hb.rows)
-                    {
-                        var byHour = (Dictionary<string, int>)row.byHour;
-                        var hoursCount = byHour.Values.Count(v => v > 0);
-                        rows.Add(new { date = dateStr, company = row.company ?? "—", name = row.name, total = row.total is int t ? t : 0, workedMinutes = hoursCount * 60, firstAt = row.firstAt, lastAt = row.lastAt });
-                    }
-                }
-                return Results.Json(new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
         // ─── Remains ────────────────────────────────────────────────────────
 
         app.MapPost("/api/stats/remains/ingest", async (RemainsSaveRequest body, StatsService svc) =>
@@ -422,37 +360,6 @@ public static class StatsEndpoints
                 var idMap = await svc.GetIdMapAsync();
                 var summary = await svc.GetRemainsSummaryAsync(date, fromHour, toHour, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
                 return Results.Json(Merge(new { date, shift = (object?)normalizedShift }, summary));
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
-        app.MapGet("/api/stats/remains/monthly-employees", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
-        {
-            try
-            {
-                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                var dates = StatsService.GetDateRangeList(from, to);
-                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
-                var idMap = await svc.GetIdMapAsync();
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                var rows = new List<object>();
-                foreach (var dateStr in dates)
-                {
-                    var summary = (dynamic)await svc.GetRemainsSummaryAsync(dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
-                    var hb = summary.hourlyByEmployee;
-                    foreach (var row in hb.rows)
-                    {
-                        var byHour = (Dictionary<string, int>)row.byHour;
-                        var hoursCount = byHour.Values.Count(v => v > 0);
-                        rows.Add(new { date = dateStr, company = row.company ?? "—", name = row.name, total = row.total is int t ? t : 0, workedMinutes = hoursCount * 60, firstAt = row.firstAt, lastAt = row.lastAt });
-                    }
-                }
-                return Results.Json(new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
             }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
@@ -503,68 +410,9 @@ public static class StatsEndpoints
                 catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
             });
 
-            app.MapGet($"/api/stats/{op}/monthly-employees", async (string? dateFrom, string? dateTo, string? shift, StatsService svc, SessionService sessions, HttpContext ctx) =>
-            {
-                try
-                {
-                    var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                    var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                    var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                    var dates = StatsService.GetDateRangeList(from, to);
-                    if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
-                    var idMap = await svc.GetIdMapAsync();
-                    var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                    var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                    var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                    var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                    var rows = new List<object>();
-                    foreach (var dateStr in dates)
-                    {
-                        var summary = (dynamic)await svc.GetStockMovesSummaryAsync(taskType, dateStr, null, null, normalizedShift, filterExecutorNorm, filterCompanies, idMap);
-                        var hb = summary.hourlyByEmployee;
-                        foreach (var row in hb.rows)
-                        {
-                            var byHour = (Dictionary<string, int>)row.byHour;
-                            var hoursCount = byHour.Values.Count(v => v > 0);
-                            rows.Add(new { date = dateStr, company = row.company ?? "—", name = row.name, total = row.total is int t ? t : 0, workedMinutes = hoursCount * 60, firstAt = row.firstAt, lastAt = row.lastAt });
-                        }
-                    }
-                    return Results.Json(new { dateFrom = from, dateTo = to, shift = (object?)normalizedShift, rows });
-                }
-                catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-            });
         }
 
         // ─── Смены ──────────────────────────────────────────────────────────
-
-        app.MapGet("/api/shifts", async (HttpContext ctx, StatsService svc, SessionService sessions) =>
-        {
-            try
-            {
-                var shifts = await svc.ListShiftsAsync();
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                if (session?.Role == "supervisor" && !string.IsNullOrEmpty(session.ShiftType))
-                {
-                    shifts = shifts.Where(s => ((dynamic)s).shiftKey is string sk && sk.EndsWith("_" + session.ShiftType)).ToList();
-                }
-                return Results.Json(shifts);
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
-        app.MapGet("/api/shifts/current", (StatsService svc) => Results.Json(new { shiftKey = svc.GetCurrentShiftKey() }));
-
-        app.MapGet("/api/shifts/{shiftKey}/items", async (string shiftKey, StatsService svc) =>
-        {
-            try
-            {
-                if (!System.Text.RegularExpressions.Regex.IsMatch(shiftKey, @"^\d{4}-\d{2}-\d{2}_(day|night)$"))
-                    return Results.Json(new { error = "Неверный формат shiftKey" }, statusCode: 400);
-                var items = await svc.GetShiftItemsAsync(shiftKey);
-                return Results.Json(new { shiftKey, count = items.Count, items });
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
 
         // ─── Удаление/подсчёт данных за смену (Настройки → Система, только
         // admin/developer — безвозвратное удаление боевых данных сразу из всех
@@ -593,27 +441,6 @@ public static class StatsEndpoints
         }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
 
         // ─── Анализ: employee-rates / monthly-company / monthly-employees ──
-
-        app.MapGet("/api/analysis/employee-rates", async (string? dateFrom, string? dateTo, string? shift, int? idleThresholdMinutes, HttpContext ctx, StatsService svc, SessionService sessions) =>
-        {
-            try
-            {
-                var from = (dateFrom ?? "").Length >= 10 ? dateFrom![..10] : (dateFrom ?? "");
-                var to = (dateTo ?? "").Length >= 10 ? dateTo![..10] : (dateTo ?? "");
-                var normalizedShift = shift == "day" || shift == "night" ? shift : null;
-                var idleThresholdMs = idleThresholdMinutes is >= 0 ? idleThresholdMinutes.Value * 60 * 1000 : 15 * 60 * 1000;
-                var dates = StatsService.GetDateRangeList(from, to);
-                if (dates.Count == 0) return Results.Json(new { error = "Неверный диапазон дат" }, statusCode: 400);
-                var idMap = await svc.GetIdMapAsync();
-                var session = await sessions.GetSessionFromCookieAsync(ctx.Request);
-                var user = session != null ? await sessions.FindUserByLoginAsync(session.Login) : null;
-                var filterExecutorNorm = user is { SelfOnly: true } && !string.IsNullOrEmpty(user.Name) ? NormalizeFioForMatch(user.Name) : null;
-                var filterCompanies = user?.VisibleCompanies is { Count: > 0 } ? user.VisibleCompanies : null;
-                var result = await svc.GetEmployeeRatesAsync(from, to, normalizedShift, idleThresholdMs, filterExecutorNorm, filterCompanies, idMap);
-                return Results.Json(result);
-            }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
 
         app.MapGet("/api/stats/monthly-company", async (int? year, int? month, string? shift, StatsService svc) =>
         {

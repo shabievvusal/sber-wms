@@ -519,19 +519,6 @@ export async function getMonthlyEmployees(dateFrom, dateTo, shift, zone) {
   return req(`/api/stats/monthly-employees?${params}`)
 }
 
-function monthlyOpEmployees(path) {
-  return async (dateFrom, dateTo, shift) => {
-    const params = new URLSearchParams({ dateFrom, dateTo })
-    if (shift) params.set('shift', shift)
-    return req(`/api/stats/${path}/monthly-employees?${params}`)
-  }
-}
-export const getMonthlyPlacementEmployees = monthlyOpEmployees('placement')
-export const getMonthlyReceivingEmployees = monthlyOpEmployees('receiving')
-export const getMonthlyRemainsEmployees = monthlyOpEmployees('remains')
-export const getMonthlyMovedownEmployees = monthlyOpEmployees('movedown')
-export const getMonthlyRefillEmployees = monthlyOpEmployees('refill')
-
 export async function getMonthlyCompany(year, month, shift) {
   const params = new URLSearchParams({ year, month })
   if (shift) params.set('shift', shift)
@@ -789,16 +776,8 @@ const jsonBody = (method, body) => ({
   body: JSON.stringify(body),
 })
 
-export async function getMotivationSettings() {
-  return req('/api/motivation/settings')
-}
-
 export async function saveMotivationSettings(settings) {
   return req('/api/motivation/settings', jsonBody('PUT', settings))
-}
-
-export async function getMotivationPeople(date, shift) {
-  return req(`/api/motivation/people?${new URLSearchParams({ date, shift })}`)
 }
 
 export async function addMotivationPeople({ date, shift, receivedAt, fromStats = false, people }) {

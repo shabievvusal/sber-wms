@@ -21,17 +21,14 @@ import { ComplaintRow, MobileComplaintCard, complaintStatus } from './ComplaintR
 import { EditComplaintDialog } from './EditComplaintDialog'
 import { ExportReportDialog } from './ExportReportDialog'
 import { printServiceNotes } from './printServiceNote'
+import { getSupervisors } from '@/pages/settings/supervisors'
 import { Download, ExternalLink, Printer, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-react'
 
 const PER_PAGE = 30
 const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
-const LS_SUPERVISORS = 'memos_supervisors'
 
 function getCompanyFullNames() {
   try { return JSON.parse(localStorage.getItem(whKey(LS_COMPANY_FULL_NAMES)) || '{}') } catch { return {} }
-}
-function getSupervisorOptions() {
-  try { return JSON.parse(localStorage.getItem(whKey(LS_SUPERVISORS)) || '[]') } catch { return [] }
 }
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -78,7 +75,7 @@ export default function ConsolidationPage() {
     return cellIdsRef.current.get(String(address || '').trim().toUpperCase()) || null
   }
 
-  const [supervisor, setSupervisor] = useState(() => getSupervisorOptions()[0] || '')
+  const [supervisor, setSupervisor] = useState(() => getSupervisors()[0] || '')
   const [photoModal, setPhotoModal] = useState(null) // { photos, idx } | null
   const [editComplaint, setEditComplaint] = useState(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -284,9 +281,9 @@ export default function ConsolidationPage() {
               <div className="text-sm font-medium">Начальник смены</div>
               <Select className="h-9 w-full" value={supervisor} onChange={e => setSupervisor(e.target.value)}>
                 <option value="">— выберите —</option>
-                {getSupervisorOptions().map(n => <option key={n} value={n}>{n}</option>)}
+                {getSupervisors().map(n => <option key={n} value={n}>{n}</option>)}
               </Select>
-              {!getSupervisorOptions().length && <div className="text-xs text-muted-foreground">Список начальников смены — в Настройки → Документы</div>}
+              {!getSupervisors().length && <div className="text-xs text-muted-foreground">Список начальников смены — в Настройки → Документы</div>}
               <Button size="sm" className="w-full" onClick={handlePrintSz}><Printer className="size-3.5" /> Печать ({selected.size})</Button>
             </PopoverContent>
           </Popover>

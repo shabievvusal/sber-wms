@@ -45,24 +45,8 @@ function enrichRows(rows) {
   })
 }
 
-const API_BY_OP = {
-  selection: (from, to, shift, zone) => api.getMonthlyEmployees(from, to, shift, zone),
-  placement: (from, to, shift) => api.getMonthlyPlacementEmployees(from, to, shift),
-  receiving: (from, to, shift) => api.getMonthlyReceivingEmployees(from, to, shift),
-  remains: (from, to, shift) => api.getMonthlyRemainsEmployees(from, to, shift),
-  movedown: (from, to, shift) => api.getMonthlyMovedownEmployees(from, to, shift),
-  refill: (from, to, shift) => api.getMonthlyRefillEmployees(from, to, shift),
-}
-
-// заголовок таблицы и префикс имени XLSX-файла
-const OP_LABELS = {
-  selection: { title: 'Производительность', file: 'производительность' },
-  placement: { title: 'Размещение', file: 'размещение' },
-  receiving: { title: 'Приёмка', file: 'приемка' },
-  remains: { title: 'Остатки', file: 'остатки' },
-  movedown: { title: 'Спуск', file: 'спуск' },
-  refill: { title: 'Пополнение', file: 'пополнение' },
-}
+// Только комплектация: у приёмки своя вкладка за период (ReceivingPeriodStats),
+// у спуска/пополнения/размещения/остатков — OpsPeriodStats (StatsPage.jsx).
 
 // Перенесено из оригинала (MonthlyEmployeeTable.jsx) дословно — вкладка «За
 // период» показывает ПЛОСКИЙ список строк «сотрудник × день» (не свёрнутую
@@ -74,7 +58,7 @@ const OP_LABELS = {
 // XLSX-экспорт через exportRef. Список зон в фильтре — `zoneCatalog`,
 // переданный сверху из StatsPage.jsx (собран из уже загруженной сводки дня,
 // без хардкода — см. format.js: buildZoneCatalog).
-export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatalog = [] }) {
+export function MonthlyEmployeeTable({ exportRef, rangeRef, zoneCatalog = [] }) {
   const [dateFrom, setDateFrom] = useState(monthStartStr())
   const [dateTo, setDateTo] = useState(todayStr())
   const [shift, setShift] = useState('')
@@ -86,11 +70,9 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
   const [sortDir, setSortDir] = useState('desc')
   const [error, setError] = useState('')
 
-  const isOperationStats = operation !== 'selection'
-  const opLabel = (OP_LABELS[operation] || OP_LABELS.selection).title
-  const totalLabel = isOperationStats ? 'Итого операций' : 'Итого СЗ'
-  const rateHourLabel = isOperationStats ? 'Опер./ч' : 'СЗ/ч'
-  const rateMinLabel = isOperationStats ? 'Опер./мин' : 'СЗ/мин'
+  const totalLabel = 'Итого СЗ'
+  const rateHourLabel = 'СЗ/ч'
+  const rateMinLabel = 'СЗ/мин'
   const selectedZone = zoneCatalog.find(z => z.key === zone)
 
   const load = async () => {
@@ -98,7 +80,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
     setLoading(true)
     setError('')
     try {
-      const res = await API_BY_OP[operation](dateFrom, dateTo, shift || undefined, zone || undefined)
+      const res = await api.getMonthlyEmployees(dateFrom, dateTo, shift || undefined, zone || undefined)
       setRows(enrichRows(res.rows || []))
     } catch (err) {
       setRows([])
@@ -154,7 +136,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
 
     const zoneLbl = selectedZone ? ` • ${selectedZone.label}` : ''
     const shiftLbl = shift === 'night' ? ' • Ночь' : shift === 'day' ? ' • День' : ''
-    const title = `${opLabel} • ${fmtDate(loadedRange?.from)} — ${fmtDate(loadedRange?.to)}${isOperationStats ? '' : zoneLbl}${shiftLbl}`
+    const title = `Производительность • ${fmtDate(loadedRange?.from)} — ${fmtDate(loadedRange?.to)}${zoneLbl}${shiftLbl}`
 
     const NCOLS = 7
     ws.addRow([title])
@@ -162,7 +144,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
     ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
     ws.getRow(1).height = 26
 
-    const avgLabels = [isOperationStats ? 'Ср. оп.' : 'Ср. СЗ', rateHourLabel, rateMinLabel]
+    const avgLabels = ['Ср. СЗ', rateHourLabel, rateMinLabel]
     const avgValues = [avg?.avgTotal ?? '', avg?.avgSzPerHour ?? '', avg?.avgSzPerMin ?? '']
     avgLabels.forEach((lbl, i) => {
       const labelCell = ws.getRow(1).getCell(9 + i * 2)
@@ -198,7 +180,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url
-    a.download = `${(OP_LABELS[operation] || OP_LABELS.selection).file}_${loadedRange?.from}_${loadedRange?.to}${operation === 'selection' && zone ? '_' + zone : ''}.xlsx`
+    a.download = `производительность_${loadedRange?.from}_${loadedRange?.to}${zone ? '_' + zone : ''}.xlsx`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
@@ -218,16 +200,14 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
           <option value="day">День (9–21)</option>
           <option value="night">Ночь (21–9)</option>
         </Select>
-        {!isOperationStats && (
-          <Select
-            className={selectClass}
-            style={selectedZone ? { backgroundColor: selectedZone.light, color: selectedZone.text, borderColor: selectedZone.light } : undefined}
-            value={zone} onChange={e => setZone(e.target.value)}
-          >
-            <option value="">Все зоны</option>
-            {zoneCatalog.map(z => <option key={z.key} value={z.key}>{z.label}</option>)}
-          </Select>
-        )}
+        <Select
+          className={selectClass}
+          style={selectedZone ? { backgroundColor: selectedZone.light, color: selectedZone.text, borderColor: selectedZone.light } : undefined}
+          value={zone} onChange={e => setZone(e.target.value)}
+        >
+          <option value="">Все зоны</option>
+          {zoneCatalog.map(z => <option key={z.key} value={z.key}>{z.label}</option>)}
+        </Select>
         <Button size="sm" variant="secondary" onClick={load} disabled={loading || !dateFrom || !dateTo}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}
         </Button>
@@ -245,7 +225,7 @@ export function MonthlyEmployeeTable({ operation, exportRef, rangeRef, zoneCatal
       {avg && (
         <div className="flex flex-wrap gap-2">
           <div className="flex min-w-20 flex-col items-center rounded-md bg-muted/50 px-3.5 py-1">
-            <span className="text-[11px] text-muted-foreground">{isOperationStats ? 'Ср. оп.' : 'Ср. СЗ'}</span>
+            <span className="text-[11px] text-muted-foreground">Ср. СЗ</span>
             <span className="text-base font-semibold">{avg.avgTotal}</span>
           </div>
           <div className="flex min-w-20 flex-col items-center rounded-md bg-muted/50 px-3.5 py-1">

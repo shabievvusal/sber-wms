@@ -48,7 +48,6 @@ builder.Services.AddScoped<ZgzService>();
 builder.Services.AddScoped<CellStoreService>();
 builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<PhotoService>();
-builder.Services.AddSingleton<SseService>();
 
 // Тело запроса может быть большим (фото + JSON-импорт маршрутов) — снимаем
 // дефолтный лимит Kestrel, конкретный лимит на файл — в PhotoEndpoints.
@@ -61,25 +60,11 @@ await WarehouseSchema.EnsureAsync(connString);
 // склад запроса (заголовок X-Warehouse) — до всех эндпоинтов
 app.UseWarehouseContext();
 
-app.MapGet("/api/dotnet-status", async (AppDbContext db) =>
-{
-    try
-    {
-        var count = await db.Database.SqlQueryRaw<long>("SELECT count(*) AS \"Value\" FROM vs_sessions").FirstAsync();
-        return Results.Ok(new { ok = true, service = "dotnet", sessions = count });
-    }
-    catch (Exception ex)
-    {
-        return Results.Json(new { ok = false, service = "dotnet", error = ex.Message }, statusCode: 503);
-    }
-});
-
 app.MapRouteEndpoints();
 app.MapShipmentEndpoints();
 app.MapEoEndpoints();
 app.MapDriverEndpoints();
 app.MapPhotoEndpoints();
-app.MapEventsEndpoints();
 app.MapTsdEndpoints();
 app.MapEmployeeEndpoints();
 app.MapStatsEndpoints();

@@ -1147,21 +1147,3 @@ export async function getEoPicking(token, sourceHandlingUnitBarcode) {
   }
 }
 
-export async function getEoChangeInfo(token, sourceHandlingUnitBarcode) {
-  const { items, total } = await _fetchOnePageFromBrowser(token, {
-    productId: null, parts: [], operationTypes: [],
-    sourceCellId: null, targetCellId: null,
-    sourceHandlingUnitBarcode, targetHandlingUnitBarcode: null,
-    operationStartedAtFrom: null, operationStartedAtTo: null,
-    operationCompletedAtFrom: null, operationCompletedAtTo: null,
-    executorId: null, pageNumber: 1, pageSize: 1,
-  })
-  const item = items[0] || null
-  return {
-    total: total ?? items.length,
-    item,
-    remaining: item?.sourceQuantity?.newQuantity ?? null,
-    completedAt: item?.operationCompletedAt || null,
-    executor: item?.responsibleUser || null,
-  }
-}

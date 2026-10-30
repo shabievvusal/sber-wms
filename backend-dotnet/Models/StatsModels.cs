@@ -30,10 +30,8 @@ public class WmsStorageAggEntity
 }
 
 // hourlyByEmployee типизирован отдельно (в отличие от остальных полей
-// сводки, оставленных как object/Dictionary для прямой JSON-сериализации),
-// потому что employee-rates (GetEmployeeRatesAsync) читает его обратно
-// (row.byHour/row.byZone/row.total) — держать как object было бы нельзя
-// без даункаста/dynamic на каждый доступ.
+// сводки, оставленных как object/Dictionary для прямой JSON-сериализации):
+// его строки читаются обратно в помесячных сводках (row.byHour/row.byZone/row.total).
 public class HourlyByEmployeeResult
 {
     public List<int> Hours { get; set; } = new();

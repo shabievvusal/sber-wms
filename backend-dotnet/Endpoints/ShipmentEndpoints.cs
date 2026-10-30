@@ -11,13 +11,12 @@ public static class ShipmentEndpoints
     public static void MapShipmentEndpoints(this WebApplication app)
     {
         // POST /api/rk/routes/:routeId/ship — отгрузка (кладовщик, без сессии)
-        app.MapPost("/api/rk/routes/{routeId}/ship", async (string routeId, ShipmentRequest body, RouteService svc, SseService sse) =>
+        app.MapPost("/api/rk/routes/{routeId}/ship", async (string routeId, ShipmentRequest body, RouteService svc) =>
         {
             try
             {
                 if (body.Items == null) return Results.BadRequest(new { ok = false, error = "Некорректный формат данных" });
                 var route = await svc.SubmitShipmentAsync(Uri.UnescapeDataString(routeId), body);
-                await sse.NotifyAsync("routes-updated");
                 return Results.Json(new { ok = true, route });
             }
             catch (Exception err)
@@ -27,13 +26,12 @@ public static class ShipmentEndpoints
         });
 
         // POST /api/rk/routes/:routeId/receive — приёмка возврата РК
-        app.MapPost("/api/rk/routes/{routeId}/receive", async (string routeId, ReceivingRequest body, RouteService svc, SseService sse) =>
+        app.MapPost("/api/rk/routes/{routeId}/receive", async (string routeId, ReceivingRequest body, RouteService svc) =>
         {
             try
             {
                 if (body.Items == null) return Results.BadRequest(new { ok = false, error = "Некорректный формат данных" });
                 var route = await svc.SubmitReceivingAsync(Uri.UnescapeDataString(routeId), body);
-                await sse.NotifyAsync("routes-updated");
                 return Results.Json(new { ok = true, route });
             }
             catch (Exception err)

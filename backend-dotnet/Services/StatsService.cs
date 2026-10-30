@@ -725,23 +725,6 @@ public partial class StatsService
         return $"{prev:yyyy-MM-dd}_night";
     }
 
-    public string GetCurrentShiftKey()
-    {
-        var m = ToMoscow(DateTime.UtcNow);
-        return GetShiftKeyFromMoscowDateHour(m.ToString("yyyy-MM-dd"), m.Hour);
-    }
-
-    // Легаси-fallback (data/shift_*.json) не переносим — после бэкфилла
-    // Postgres единственный источник для всех дат, старых и новых.
-    public async Task<List<WmsOpEntity>> GetShiftItemsAsync(string shiftKey)
-    {
-        var parts = shiftKey.Split('_');
-        if (parts.Length != 2) return new List<WmsOpEntity>();
-        var dateStr = parts[0];
-        var type = parts[1];
-        return await GetDateItemsAsync(dateStr, null, null, type);
-    }
-
     private record ShiftRow(string ShiftKey, string Date, string Type, int Count, DateTime? UpdatedAt, long? FileSize);
 
     public async Task<List<object>> ListShiftsAsync()
@@ -1824,71 +1807,6 @@ public partial class StatsService
     }
 
     // ─── /api/analysis/employee-rates ──────────────────────────────────────────
-
-    public async Task<object> GetEmployeeRatesAsync(string dateFrom, string dateTo, string? shift, long idleThresholdMs, string? filterExecutorNorm, List<string>? filterCompanies, Dictionary<string, string>? idMap)
-    {
-        var dates = GetDateRangeList(dateFrom, dateTo);
-        var totals = new Dictionary<string, (decimal TasksCount, int HoursWorked, decimal PeakPerHour, Dictionary<string, (decimal Count, decimal WeightGrams)> ByZone)>();
-
-        foreach (var dateStr in dates)
-        {
-            var summary = await GetDateSummaryAsync(dateStr, shift, idleThresholdMs, filterExecutorNorm, filterCompanies, idMap);
-            var hb = summary.HourlyByEmployee;
-            foreach (var row in hb.Rows)
-            {
-                var name = row.GetValueOrDefault("name") as string ?? "";
-                if (string.IsNullOrEmpty(name)) continue;
-                var byHour = row.GetValueOrDefault("byHour") as Dictionary<string, object?> ?? new();
-                var hoursWorked = 0;
-                decimal peakPerHour = 0;
-                foreach (var h in hb.Hours)
-                {
-                    var v = byHour.GetValueOrDefault(h.ToString()) is int iv ? iv : 0;
-                    if (v > 0) hoursWorked++;
-                    if (v > peakPerHour) peakPerHour = v;
-                }
-                if (!totals.TryGetValue(name, out var t)) t = (0, 0, 0, new Dictionary<string, (decimal, decimal)>());
-                t.TasksCount += row.GetValueOrDefault("total") is int totalVal ? totalVal : 0;
-                t.HoursWorked += hoursWorked;
-                if (peakPerHour > t.PeakPerHour) t.PeakPerHour = peakPerHour;
-                if (row.GetValueOrDefault("byZone") is Dictionary<string, object?> byZone)
-                {
-                    foreach (var (zk, zv) in byZone)
-                    {
-                        if (zv is not Dictionary<string, object?> zvd) continue;
-                        (decimal Count, decimal WeightGrams) zEntry = t.ByZone.TryGetValue(zk, out var ze) ? ze : (0, 0);
-                        zEntry.Count += zvd.GetValueOrDefault("count") is int cv ? cv : 0;
-                        zEntry.WeightGrams += zvd.GetValueOrDefault("weightGrams") is decimal wv ? wv : 0;
-                        t.ByZone[zk] = zEntry;
-                    }
-                }
-                totals[name] = t;
-            }
-        }
-
-        var list = totals.Select(kv =>
-        {
-            var (name, t) = (kv.Key, kv.Value);
-            var hours = t.HoursWorked;
-            var szPerHour = hours > 0 ? t.TasksCount / hours : 0;
-            var totalWeightGrams = t.ByZone.Values.Sum(z => z.WeightGrams);
-            var kgPerHour = hours > 0 ? (totalWeightGrams / 1000) / hours : 0;
-            var kgPerHourByZone = t.ByZone.ToDictionary(z => z.Key, z => hours > 0 ? Math.Round(z.Value.WeightGrams / 1000 / hours, 2) : 0);
-            return new
-            {
-                name,
-                tasksCount = t.TasksCount,
-                hoursWorked = (int)Math.Round((double)hours),
-                szPerHour = Math.Round(szPerHour, 2),
-                peakPerHour = Math.Round(t.PeakPerHour, 2),
-                kgPerHour = Math.Round(kgPerHour, 2),
-                kgPerHourByZone,
-                byZone = t.ByZone.ToDictionary(z => z.Key, z => new { count = z.Value.Count, weightGrams = z.Value.WeightGrams }),
-            };
-        }).OrderByDescending(e => e.szPerHour).ThenByDescending(e => e.tasksCount).ThenBy(e => e.name, StringComparer.Create(new CultureInfo("ru-RU"), false)).ToList();
-
-        return new { dateFrom, dateTo, shift = shift ?? (object?)null, count = list.Count, employees = list };
-    }
 
     // ─── /api/stats/monthly-company (аналог computeCompanyDay + цикл по дням) ──
 

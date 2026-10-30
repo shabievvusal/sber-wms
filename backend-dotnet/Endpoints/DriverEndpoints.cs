@@ -29,21 +29,9 @@ public static class DriverEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        app.MapGet("/api/rk/drivers/pending", async (string? q, RouteService svc) =>
-        {
-            try { return Results.Json(await svc.GetDriversWithPendingAsync(q ?? "")); }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
         app.MapGet("/api/rk/drivers/{name}/routes/pending", async (string name, RouteService svc) =>
         {
             try { return Results.Json(await svc.GetRoutesByDriverPendingAsync(Uri.UnescapeDataString(name))); }
-            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
-        });
-
-        app.MapGet("/api/rk/drivers/unshipped", async (string? q, RouteService svc) =>
-        {
-            try { return Results.Json(await svc.GetDriversUnshippedAsync(q ?? "")); }
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 

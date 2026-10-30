@@ -871,7 +871,7 @@ export default function StatsPage() {
             ? <ReceivingPeriodStats exportRef={monthlyExportRef} />
             : OPS_WITH_REPORT.includes(operation)
               ? <OpsPeriodStats operation={operation} exportRef={monthlyExportRef} />
-              : <MonthlyEmployeeTable operation={operation} exportRef={monthlyExportRef} rangeRef={monthlyRangeRef} zoneCatalog={dayZoneCatalog} />
+              : <MonthlyEmployeeTable exportRef={monthlyExportRef} rangeRef={monthlyRangeRef} zoneCatalog={dayZoneCatalog} />
         ) : (
           <div className={busyCls} aria-busy={reloading}>
           <HourlyEmployeeTable

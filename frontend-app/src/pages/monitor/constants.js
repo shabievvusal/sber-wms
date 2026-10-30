@@ -9,7 +9,3 @@ export const TASK_TYPE_VARIANT = {
   'Паллет': 'purple',
 }
 
-// Смены — фиксированные по московскому времени (UTC+3), ночная смена
-// перетекает через полночь.
-export const SHIFT_DAY_START_HOUR = 9
-export const SHIFT_NIGHT_START_HOUR = 21

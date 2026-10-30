@@ -1559,6 +1559,9 @@ const DIST_DIR = path.join(__dirname, '..', 'frontend', 'app', 'dist');
 // имена бандлов. index: false — чтобы "/" тоже шёл через обработчик ниже.
 app.use('/assets', express.static(path.join(DIST_DIR, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }));
 app.use(express.static(DIST_DIR, { index: false }));
+// неизвестный адрес API — честный 404 в JSON, а не страница сайта со статусом 200
+// (иначе ошибка в адресе или забытое правило Caddy выглядели как «пустой ответ»)
+app.all('/api/*', (req, res) => res.status(404).json({ error: `Нет такого адреса API: ${req.method} ${req.path}` }));
 app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(DIST_DIR, 'index.html'));

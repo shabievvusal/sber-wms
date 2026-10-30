@@ -66,22 +66,6 @@ import { confirmDialog } from '@/components/ui/confirm'
 //   - мобильные карточки (сейчас адаптив только через горизонтальный скролл)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function matchesQuery(r, q) {
-  if (!q) return true
-  const needle = q.trim().toLowerCase()
-  if (!needle) return true
-  const haystack = [
-    r.routeNumber, r.driver?.name, r.vehicle?.model, r.vehicle?.number,
-    ...(r.cfzAddresses || []).map(a => a.address),
-  ].filter(Boolean).join(' ').toLowerCase()
-  return haystack.includes(needle)
-}
-
-function matchesNameQuery(entry, keyField, q) {
-  if (!q) return true
-  return String(entry[keyField] || '').toLowerCase().includes(q.trim().toLowerCase())
-}
-
 const ROUTES_PER_PAGE = 30
 
 const STATUS_FILTERS = [

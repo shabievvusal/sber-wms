@@ -1,50 +1,11 @@
-# Trek 2. Фаза 0 — passthrough на node + /api/dotnet-status (проверочный).
-# Фаза 1 — /api/rk/* и /rk-photos/* переехали на dotnet (route-rk-pg.js
-# перенесён целиком). Исключение /eos/request-refresh (in-memory очередь
-# eoRefreshQueue на node) больше не нужно: ручной запрос обновления ЕО убран
-# 2026-09-06 — списки обновляются фоном сами, — так что теперь на dotnet
-# уходит ВЕСЬ /api/rk/*.
-# Фаза 2 — tsd-pg.js целиком и часть empl-pg.js (чистый CRUD над employees)
-# переехали на dotnet. GET /api/empl/find-unregistered, POST /api/empl/
-# enrich-names и /api/empl/upgrade-fio-ids остаются на node — они читают
-# локальные файлы (data/*/HH.json, names_registry.json, raw_tmp/), которые
-# не смонтированы в контейнер dotnet; сюда попадают через общий handle{node}
-# ниже (для них отдельных блоков не нужно).
-# /api/tsd/manual-employees* (2026-07-15) — сотрудники без executorId
-# (не встречаются в статистике WMS), заводятся вручную в Настройках
-# исключительно для выдачи ТСД; отдельная таблица tsd_manual_employees,
-# не пересекается с /api/employees. Тоже на dotnet (TsdService.cs).
-# Фаза 4 — vs-auth.js/server.js (аутентификация) → dotnet. /api/vs/auth/*
-# (register/login/me/logout) и /api/vs/admin/{roles,pending,users}* (CRUD
-# ролей/заявок/пользователей) — целиком на dotnet, читают те же таблицы
-# vs_users/vs_sessions (Фаза 0) + новые vs_custom_roles/vs_pending_users/
-# vs_logins (Фаза 4) напрямую. /api/vs/telegram/* (зависит от config.json
-# приложения и живого Telegram Bot API), /api/vs/admin/auto-fetch-settings,
-# /api/vs/admin/company-day-cache/invalidate, /api/vs/admin/product-weights/*
-# и /api/node/* остаются на node — попадают в общий handle{node} ниже.
-# Фаза 3 — storage.js (4 домена: ops/placement/receiving/remains) → dotnet.
-# /api/date/* целиком (все 6 путей — только чтение/сохранение агрегата,
-# весь домен storage.js), /api/shifts*, /api/analysis/employee-rates,
-# /api/stats/monthly-company, /api/stats/monthly-employees,
-# /api/stats/{placement,receiving,remains}/monthly-employees, GET
-# /api/product-weights (чтение) — на dotnet. POST /api/stats/{placement,
-# receiving,remains}/save и POST /api/save-fetched-data ОСТАЮТСЯ на node
-# (дуал-райт: Node пишет JSON-файлы как раньше — для совместимости с
-# ArticleSpeeds/WeightScan/MissingWeightRebuild/EmployeePerformance,
-# читающими только файлы — и параллельно шлёт те же raw-items напрямую в
-# dotnet:5080/api/stats/*/ingest, минуя Caddy; эти /ingest-пути НЕ проксируются
-# наружу через Caddy вообще). GET /api/analysis/article-speeds, POST/DELETE
-# /api/vs/admin/product-weights/*, /api/stats/send-{hourly,idles}-telegram
-# остаются на node — попадают в общий handle{node} ниже.
-# 2026-07-27 — /api/stats/shift-data/{count,delete} (новое): удаление/подсчёт
-# данных за смену сразу во всех 4 доменах статистики (Настройки → Система,
-# только admin/developer) — на dotnet, там же живут все 4 таблицы.
-# 2026-10-23 — спуск/пополнение/размещение из журнала stocks/changes: POST
-# /api/stats/stock-moves/save и /api/stats/{movedown,refill}/monthly-employees
-# — целиком на dotnet (без Node и JSON-файлов); саммари идут через общий
-# /api/date/*. POST /api/stats/receiving/known — какие поставки уже сохранены
-# с приёмщиком (обновление приёмки из Настроек → Система); само сохранение
-# приёмки по-прежнему POST /api/stats/receiving/save на node (дуал-райт).
+# Caddy — HTTPS для robops.ru и разводка запросов:
+#  • /api/... на dotnet — пути перечислены блоками handle ниже;
+#  • фото консолидации и РК — прямо с диска (тома node-persist, rk-photos);
+#  • всё остальное (сам сайт и оставшиеся API) — на node.
+# Новый маршрут dotnet нужно добавить сюда, иначе запрос уйдёт в node
+# (а node на неизвестный /api/... отвечает 404).
+# POST dotnet:5080/api/stats/*/ingest node вызывает напрямую по docker-сети —
+# наружу через Caddy они не проксируются.
 # (app) — общие правила сайта, подключаются через `import app` в блок
 # robops.ru внизу файла.
 (app) {
@@ -57,10 +18,9 @@
 	}
 
 	# Сжатие ответов (2026-09-13). Node сжимает сам (compression), а dotnet —
-	# нет: вся статистика (/api/date/*, /api/shifts, отчёты) шла несжатым JSON,
-	# что заметно на медленном складском интернете. Уже сжатые ответы Node
-	# Caddy повторно не трогает. Типы перечислены явно, чтобы не сжимать
-	# text/event-stream (SSE из dotnet) — сжатие может задерживать события.
+	# нет: вся статистика (/api/date/*, отчёты) шла несжатым JSON, что заметно
+	# на медленном складском интернете. Уже сжатые ответы Node Caddy повторно
+	# не трогает. Типы перечислены явно — картинки и видео не сжимаются.
 	encode zstd gzip {
 		match {
 			header Content-Type application/json*
@@ -72,9 +32,6 @@
 		}
 	}
 
-	handle /api/dotnet-status* {
-		reverse_proxy dotnet:5080
-	}
 	handle /api/rk/* {
 		reverse_proxy dotnet:5080
 	}
@@ -110,31 +67,10 @@
 	handle /api/date/* {
 		reverse_proxy dotnet:5080
 	}
-	handle /api/shifts {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/shifts/current {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/shifts/*/items {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/analysis/employee-rates {
-		reverse_proxy dotnet:5080
-	}
 	handle /api/stats/monthly-company {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/monthly-employees {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/placement/monthly-employees {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/receiving/monthly-employees {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/remains/monthly-employees {
 		reverse_proxy dotnet:5080
 	}
 	# «Поиск потеряшек» (2026-10-25) — переводы ЕО в ЗГЗ, см. ZgzEndpoints.cs
@@ -170,12 +106,6 @@
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/stock-moves/save {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/movedown/monthly-employees {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/refill/monthly-employees {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/shift-data/count* {

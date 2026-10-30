@@ -239,39 +239,6 @@ public class RouteService
             return new CfzAddress { Address = c.Address, StoreId = c.StoreId, Eos = old?.Eos ?? new List<Eo>(), RemovedEos = c.RemovedEos };
         }).ToList();
 
-    public async Task<(int Added, int Updated)> ImportRouteAsync(JsonElement json)
-    {
-        var parsed = ParseWmsRoute(json);
-        if (string.IsNullOrEmpty(parsed.RouteId)) throw new InvalidOperationException("Маршрут без ID");
-
-        var existing = await _db.Routes.FirstOrDefaultAsync(r => r.RouteId == parsed.RouteId);
-        if (existing != null)
-        {
-            existing.RouteNumber = parsed.RouteNumber;
-            existing.Date = parsed.Date;
-            existing.Driver = parsed.Driver;
-            existing.Vehicle = parsed.Vehicle;
-            existing.LogisticsCompany = parsed.LogisticsCompany;
-            existing.CfzAddresses = MergeCfz(parsed.CfzAddresses, existing.CfzAddresses);
-            await _db.SaveChangesAsync();
-            return (0, 1);
-        }
-
-        _db.Routes.Add(new RouteEntity
-        {
-            RouteId = parsed.RouteId!,
-            RouteNumber = parsed.RouteNumber,
-            Date = parsed.Date,
-            Driver = parsed.Driver,
-            Vehicle = parsed.Vehicle,
-            LogisticsCompany = parsed.LogisticsCompany,
-            CfzAddresses = parsed.CfzAddresses,
-            ImportedAt = DateTime.UtcNow,
-        });
-        await _db.SaveChangesAsync();
-        return (1, 0);
-    }
-
     public async Task<(int Added, int Updated)> ImportBulkAsync(List<JsonElement> routeJsons)
     {
         int added = 0, updated = 0;
@@ -607,41 +574,6 @@ public class RouteService
         return map.Values.OrderBy(c => c.Address, StringComparer.Create(Ru, false)).ToList();
     }
 
-    public async Task<List<DriverPendingSummary>> GetDriversWithPendingAsync(string? q)
-    {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-90));
-        var rows = await _db.Routes.AsNoTracking().Where(r => r.Shipment != null && r.Date >= cutoff).ToListAsync();
-        return AggregateDriverPending(rows, q, r => !IsPartialShipment(r) && IsPartialReceiving(r));
-    }
-
-    public async Task<List<DriverPendingSummary>> GetDriversUnshippedAsync(string? q)
-    {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-90));
-        var rows = await _db.Routes.AsNoTracking().Where(r => r.Shipment == null && r.Date >= cutoff).ToListAsync();
-        return AggregateDriverPending(rows, q, IsPartialShipment);
-    }
-
-    private static List<DriverPendingSummary> AggregateDriverPending(List<RouteEntity> rows, string? q, Func<RouteEntity, bool> extraCondition)
-    {
-        var ql = (q ?? "").Trim().ToLowerInvariant();
-        var map = new Dictionary<string, DriverPendingSummary>();
-        foreach (var route in rows)
-        {
-            if (!extraCondition(route) || route.CfzAddresses.Count == 0) continue;
-            var name = route.Driver?.Name ?? "";
-            if (!string.IsNullOrEmpty(ql) && !name.ToLowerInvariant().Contains(ql)) continue;
-            if (!map.TryGetValue(name, out var d))
-            {
-                d = new DriverPendingSummary { Name = name, Phone = route.Driver?.Phone ?? "" };
-                map[name] = d;
-            }
-            d.RouteCount++;
-            var dateStr = route.Date?.ToString("yyyy-MM-dd") ?? "";
-            if (string.CompareOrdinal(dateStr, d.LatestDate) > 0) d.LatestDate = dateStr;
-        }
-        return map.Values.OrderBy(d => d.Name, StringComparer.Create(Ru, false)).ToList();
-    }
-
     public async Task<List<RouteResponse>> GetRoutesByDriverPendingAsync(string driverName)
     {
         var rows = await _db.Routes.AsNoTracking().ToListAsync();
@@ -657,16 +589,6 @@ public class RouteService
             .Select(WithTotals).ToList();
     }
 
-    public async Task<List<string>> GetAddressesAsync()
-    {
-        var routes = await _db.Routes.AsNoTracking().ToListAsync();
-        var set = new HashSet<string>();
-        foreach (var r in routes)
-            foreach (var a in r.CfzAddresses)
-                if (!string.IsNullOrEmpty(a.Address)) set.Add(a.Address);
-        return set.OrderBy(a => a, StringComparer.Create(Ru, false)).ToList();
-    }
-
     private class ReportCell
     {
         public double Shipped;
@@ -675,71 +597,6 @@ public class RouteService
         public double? ReceivedBoxes;
         public double ShippedThermalCovers;
         public double? ReceivedThermalCovers;
-    }
-
-    public async Task<List<ReportAddressRow>> GetReportDataAsync(string dateFrom, string dateTo)
-    {
-        var routes = await _db.Routes.AsNoTracking().ToListAsync();
-        var map = new Dictionary<string, Dictionary<string, ReportCell>>();
-
-        ReportCell EnsureCell(string addr, string date)
-        {
-            if (!map.TryGetValue(addr, out var dm)) { dm = new(); map[addr] = dm; }
-            if (!dm.TryGetValue(date, out var cell)) { cell = new ReportCell(); dm[date] = cell; }
-            return cell;
-        }
-
-        foreach (var route in routes)
-        {
-            if (route.Shipment != null)
-            {
-                var shipDateFull = route.Shipment.At ?? route.Date?.ToString("yyyy-MM-dd") ?? "";
-                var shipDate = shipDateFull.Length >= 10 ? shipDateFull[..10] : shipDateFull;
-                if (string.CompareOrdinal(shipDate, dateFrom) >= 0 && string.CompareOrdinal(shipDate, dateTo) <= 0)
-                {
-                    foreach (var item in route.Shipment.Items)
-                    {
-                        var cell = EnsureCell(item.Address, shipDate);
-                        cell.Shipped += item.Rk;
-                        if (item.Boxes != 0) cell.ShippedBoxes += item.Boxes;
-                        if (item.ThermalCovers != 0) cell.ShippedThermalCovers += item.ThermalCovers;
-                    }
-                }
-            }
-            if (route.Receiving != null)
-            {
-                var recvDateFull = route.Receiving.At ?? route.Date?.ToString("yyyy-MM-dd") ?? "";
-                var recvDate = recvDateFull.Length >= 10 ? recvDateFull[..10] : recvDateFull;
-                if (string.CompareOrdinal(recvDate, dateFrom) >= 0 && string.CompareOrdinal(recvDate, dateTo) <= 0)
-                {
-                    foreach (var item in route.Receiving.Items)
-                    {
-                        var cell = EnsureCell(item.Address, recvDate);
-                        cell.Received = (cell.Received ?? 0) + item.Rk;
-                        if (item.Boxes != 0) cell.ReceivedBoxes = (cell.ReceivedBoxes ?? 0) + item.Boxes;
-                        if (item.ThermalCovers != 0) cell.ReceivedThermalCovers = (cell.ReceivedThermalCovers ?? 0) + item.ThermalCovers;
-                    }
-                }
-            }
-        }
-
-        return map.Select(kv => new ReportAddressRow
-        {
-            Address = kv.Key,
-            Records = kv.Value
-                .Where(dv => dv.Value.Shipped > 0 || dv.Value.Received != null || dv.Value.ShippedBoxes > 0 || dv.Value.ReceivedBoxes != null || dv.Value.ShippedThermalCovers > 0 || dv.Value.ReceivedThermalCovers != null)
-                .Select(dv => new ReportRecord
-                {
-                    Date = dv.Key, Shipped = dv.Value.Shipped, Received = dv.Value.Received,
-                    ShippedBoxes = dv.Value.ShippedBoxes, ReceivedBoxes = dv.Value.ReceivedBoxes,
-                    ShippedThermalCovers = dv.Value.ShippedThermalCovers, ReceivedThermalCovers = dv.Value.ReceivedThermalCovers,
-                })
-                .OrderBy(r => r.Date, StringComparer.Ordinal)
-                .ToList(),
-        })
-        .Where(e => e.Records.Count > 0)
-        .OrderBy(e => e.Address, StringComparer.Create(Ru, false))
-        .ToList();
     }
 
     public async Task<int> DeleteRoutesByIdsAsync(List<string> ids)

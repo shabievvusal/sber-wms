@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingCard } from './SettingCard'
-import { getSupervisors, saveSupervisors } from '@/pages/docs/builders'
+import { getSupervisors, saveSupervisors } from './supervisors'
 import { Avatar, Empty } from './ui'
 import { Plus, UserCog, X } from 'lucide-react'
 

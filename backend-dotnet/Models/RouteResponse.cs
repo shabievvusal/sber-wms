@@ -95,31 +95,6 @@ public class CfzAggregate
     public List<AggregateRouteRow> Routes { get; set; } = new();
 }
 
-public class DriverPendingSummary
-{
-    public string Name { get; set; } = "";
-    public string Phone { get; set; } = "";
-    public int RouteCount { get; set; }
-    public string LatestDate { get; set; } = "";
-}
-
-public class ReportAddressRow
-{
-    public string Address { get; set; } = "";
-    public List<ReportRecord> Records { get; set; } = new();
-}
-
-public class ReportRecord
-{
-    public string Date { get; set; } = "";
-    public double Shipped { get; set; }
-    public double? Received { get; set; }
-    public double ShippedBoxes { get; set; }
-    public double? ReceivedBoxes { get; set; }
-    public double ShippedThermalCovers { get; set; }
-    public double? ReceivedThermalCovers { get; set; }
-}
-
 public class DriverRokhlyaDebtResponse
 {
     public double RokhlyaDebt { get; set; }
