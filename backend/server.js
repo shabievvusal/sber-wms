@@ -25,7 +25,6 @@ const app = express();
 app.use(cookieParser());
 const PORT = process.env.PORT || 3000;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const AUTO_FETCH_SETTINGS_PATH = () => path.join(dataDir(), 'auto-fetch-settings.json');
 try {
   app.use(require('compression')());
 } catch (_) {
@@ -76,45 +75,6 @@ const DEFAULT_CONFIG = {
   telegramChats: [], // [{ chatId, threadIdConsolidation?, threadIdStats?, threadIdIdles?, label? }] — несколько чатов/пользователей
   telegramTimezone: 'Europe/Moscow', // часовой пояс для времени в уведомлениях (например Europe/Kaliningrad для UTC+2)
 };
-
-const DEFAULT_AUTO_FETCH_SETTINGS = {
-  fullRefreshTimes: ['09:10', '21:10'],
-  incrementalMinutes: 30,
-  incrementalLookbackMinutes: 40,
-};
-
-function normalizeTimeString(value) {
-  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hh = Number(match[1]);
-  const mm = Number(match[2]);
-  if (!Number.isInteger(hh) || !Number.isInteger(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
-  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-}
-
-function normalizeAutoFetchSettings(input = {}) {
-  const rawTimes = Array.isArray(input.fullRefreshTimes)
-    ? input.fullRefreshTimes
-    : String(input.fullRefreshTimes || '').split(',');
-  const fullRefreshTimes = [...new Set(rawTimes.map(normalizeTimeString).filter(Boolean))];
-  const incrementalMinutes = Math.max(5, Math.min(240, Number(input.incrementalMinutes) || DEFAULT_AUTO_FETCH_SETTINGS.incrementalMinutes));
-  const incrementalLookbackMinutes = Math.max(5, Math.min(240, Number(input.incrementalLookbackMinutes) || DEFAULT_AUTO_FETCH_SETTINGS.incrementalLookbackMinutes));
-  return {
-    ...DEFAULT_AUTO_FETCH_SETTINGS,
-    fullRefreshTimes: fullRefreshTimes.length ? fullRefreshTimes : DEFAULT_AUTO_FETCH_SETTINGS.fullRefreshTimes,
-    incrementalMinutes,
-    incrementalLookbackMinutes,
-  };
-}
-
-async function loadAutoFetchSettings() {
-  const raw = await state.get('auto-fetch-settings', { legacyFile: AUTO_FETCH_SETTINGS_PATH() });
-  return raw ? normalizeAutoFetchSettings(raw) : { ...DEFAULT_AUTO_FETCH_SETTINGS };
-}
-
-async function saveAutoFetchSettings(settings) {
-  return state.set('auto-fetch-settings', normalizeAutoFetchSettings(settings));
-}
 
 function loadConfig() {
   try {
@@ -200,24 +160,6 @@ async function wmsWarehouseOfToken(token) {
   }
 }
 
-
-const fetchRequestedBy = new Set(); // склады, где попросили обновить данные
-
-// API-маршруты регистрируем до статики, чтобы POST /api/empl и др. не отдавали index.html
-// Открыт без входа: по нему Docker проверяет, жив ли node (healthcheck).
-// Поэтому — только время обновления и флаг запроса; конфиг (там был токен
-// Telegram-бота в открытом виде) больше не отдаётся.
-app.get('/api/status', async (req, res) => {
-  try {
-    res.json({
-      lastRun: await scheduler.getLastRun(),
-      fetchRequested: fetchRequestedBy.has(currentWarehouse()),
-    });
-  } catch (err) {
-    console.error('GET /api/status', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 
 
@@ -436,8 +378,6 @@ app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
     }
     // «Обновлено» в статистике = время последней реальной выгрузки
     await scheduler.setLastRun(new Date());
-    // новые исполнители сразу видны в «Настройки → Сотрудники»
-    invalidateExecutorsCache();
     res.json({
       ok: true,
       engine: 'postgres',
@@ -489,60 +429,6 @@ function getCompanyByIdOrFioSync(idMap, executorId, executorFio) {
   }
   return null;
 }
-
-// ─── Справочник товаров WMS: прокси для «Раскладки КДК» ────────────────────
-// Единственный WMS-вызов проекта, который НЕЛЬЗЯ сделать из браузера, поэтому
-// он и здесь, а не в wmsFetch.js. Справочник products/by-id живёт только в
-// API терминала (wmsin-pdt): шлюз отвечает на CORS-preflight 403 для ЛЮБОГО
-// Origin (проверено 2026-08-24), то есть дело не в нашем домене — эндпоинт
-// закрыт для браузеров как класса. Веб-вариант того же пути (wmsin-wwh)
-// preflight проходит, но сам отвечает TECHNICAL_ERROR. С сервера же CORS не
-// действует и можно проставить user-agent приложения ТСД — браузеру этот
-// заголовок менять запрещено.
-//
-// Токена WMS у сервера своего нет (как и везде в проекте) — фронт присылает
-// свой, из текущей сессии пользователя, заголовком x-wms-token.
-const PDT_PRODUCTS_BY_ID_URL = 'https://api.samokat.ru/wmsin-pdt/inbound/products/by-id';
-// Подпись приложения ТСД: на этом пути WAF режет всё, что не похоже на
-// терминал (обычный curl-agent получает 403). Значение — из реального запроса
-// ТСД; вынесено в переменную окружения на случай, если его придётся сменить.
-const PDT_USER_AGENT = process.env.WMS_PDT_USER_AGENT || '1686f906-cccc-4caf-9dbd-fd8a2908d17a';
-const PDT_PRODUCTS_TIMEOUT_MS = 30000;
-
-app.post('/api/wms/products-by-id', vsSessionRequired, async (req, res) => {
-  const token = req.get('x-wms-token') || '';
-  const productIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
-  if (!token) return res.status(400).json({ error: 'Нет WMS-токена' });
-  if (!productIds.length) return res.status(400).json({ error: 'Пустой список productIds' });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PDT_PRODUCTS_TIMEOUT_MS);
-  try {
-    const r = await fetch(PDT_PRODUCTS_BY_ID_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json, text/plain, */*',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'User-Agent': PDT_USER_AGENT,
-      },
-      body: JSON.stringify({ productIds }),
-    });
-    const text = await r.text();
-    let data;
-    try { data = text ? JSON.parse(text) : null; } catch {
-      return res.status(502).json({ error: `WMS вернул не JSON (${r.status}): ${text.slice(0, 150)}` });
-    }
-    if (!r.ok) return res.status(r.status).json({ error: data?.error || data?.message || `WMS ${r.status}` });
-    res.json(data);
-  } catch (err) {
-    if (err.name === 'AbortError') return res.status(504).json({ error: 'WMS не ответил за 30 секунд' });
-    res.status(502).json({ error: err.message });
-  } finally {
-    clearTimeout(timer);
-  }
-});
 
 // ─── Веса товаров: загрузка Excel (только админ) ───────────────────────────
 
@@ -675,78 +561,6 @@ app.get('/api/supply-plans', vsSessionRequired, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/empl/find-unregistered — найти исполнителей из всех смен, которых нет в списке сотрудников
-//
-// Раньше на каждый запрос синхронно читались и парсились ВСЕ почасовые файлы
-// data/YYYY-MM-DD/HH.json. Node однопоточный, поэтому на накопленной истории
-// скан вешал весь сервер целиком — и тем сильнее, что «Настройки» зовут его
-// автоматически при открытии страницы (EmployeesCard.jsx), у каждого
-// пользователя. Теперь:
-//   • при USE_PG=true список исполнителей берётся одним SQL по wms_ops —
-//     файлы не читаются вообще, event loop не блокируется;
-//   • файловый фоллбэк (установка без Postgres) читает асинхронно и только
-//     изменившиеся даты: закрытые дни отдаются из кэша по stat-штампу;
-//   • параллельные запросы делят один скан (single-flight), результат живёт
-//     EXECUTORS_TTL_MS и сбрасывается после сохранения новых данных.
-// Сверка с известными ID делается заново на каждый запрос — она дешёвая, а
-// только что добавленный сотрудник должен сразу исчезать из выдачи.
-
-const EXECUTORS_TTL_MS = 5 * 60 * 1000;
-// по складу: { at, list: [{ executorId, fio }] } и Promise активного скана (single-flight)
-const executorsCacheBy = new Map();
-const executorsInflightBy = new Map();
-function invalidateExecutorsCache() {
-  executorsCacheBy.delete(currentWarehouse());
-}
-
-/** Исполнители из Postgres (wms_ops и остальные таблицы операций). */
-async function collectExecutorsFromPg() {
-  const rows = await wmsOpsPg.listExecutors();
-  const out = [];
-  for (const row of rows) {
-    const executorId = String(row.executor_id || '').trim();
-    const fio        = String(row.executor    || '').trim();
-    if (!executorId || !fio) continue;
-    out.push({ executorId, fio });
-  }
-  return out;
-}
-
-async function getAllExecutors() {
-  const wh = currentWarehouse();
-  const cached = executorsCacheBy.get(wh);
-  if (cached && Date.now() - cached.at < EXECUTORS_TTL_MS) return cached.list;
-  if (executorsInflightBy.has(wh)) return executorsInflightBy.get(wh);
-
-  const inflight = (async () => {
-    // только из базы: почасовых JSON-файлов больше нет (2026-10-31)
-    const list = await collectExecutorsFromPg();
-    executorsCacheBy.set(wh, { at: Date.now(), list });
-    return list;
-  })().finally(() => { executorsInflightBy.delete(wh); });
-  executorsInflightBy.set(wh, inflight);
-  return inflight;
-}
-
-app.get('/api/empl/find-unregistered', vsSessionRequired, async (req, res) => {
-  try {
-    // Собираем известные ID. ФИО не используется для сопоставления.
-    const knownIds = new Set();
-    const data = await emplPg.listEmployees();
-    for (const e of data.employees) {
-      if (e.executorId) knownIds.add(e.executorId);
-    }
-
-    const employees = (await getAllExecutors())
-      .filter(e => !knownIds.has(e.executorId))
-      .sort((a, b) => a.fio.localeCompare(b.fio, 'ru'));
-    res.json({ employees });
-  } catch (err) {
-    console.error('GET /api/empl/find-unregistered', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── Авторизация /vs: сессия + роли ─────────────────────────────────────────────
 
 const VS_SESSION_COOKIE = 'vs_sid';
@@ -824,41 +638,11 @@ function vsAdminRequired(req, res, next) {
   next();
 }
 
-app.post('/api/vs/request-fetch', vsSessionRequired, (req, res) => {
-  fetchRequestedBy.add(currentWarehouse());
-  res.json({ ok: true });
-});
-
-app.get('/api/vs/auto-fetch-settings', vsSessionRequired, async (_req, res) => {
-  try {
-    res.json(await loadAutoFetchSettings());
-  } catch (err) {
-    console.error('GET /api/vs/auto-fetch-settings', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put('/api/vs/admin/auto-fetch-settings', vsSessionRequired, vsAdminRequired, async (req, res) => {
-  try {
-    res.json(await saveAutoFetchSettings(req.body || {}));
-  } catch (err) {
-    console.error('PUT /api/vs/admin/auto-fetch-settings', err);
-    res.status(400).json({ error: err.message });
-  }
-});
-
 // Ручной запрос обновления ЕО (`POST /eos/request-refresh` + очередь
 // eoRefreshQueue) убран 2026-09-06 по просьбе пользователя: списки ЕО
 // обновляются фоном сами, раз в 5 минут, устройством с включённым
 // автообновлением (frontend-app/src/lib/eoAutoRefresh.jsx) — очередь
 // «попроси другое устройство сходить в WMS» стала лишней сущностью.
-
-// Корп. устройство вызывает после завершения полного runFetchForHours
-app.post('/api/vs/mark-updated', vsSessionRequired, async (req, res) => {
-  await scheduler.setLastRun(new Date());
-  fetchRequestedBy.delete(currentWarehouse());
-  res.json({ ok: true });
-});
 
 // ─── API админа /vs: пользователи, права, модули ─────────────────────────────────
 
@@ -958,8 +742,6 @@ app.post('/api/stats/remains/save', vsSessionRequired, async (req, res) => {
 // ─── Анализ: скорости сотрудников (СЗ/час) по истории ───────────────────────
 
 const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/handling-units-in-progress';
-const ROLLCALL_PATH = () => path.join(dataDir(), 'rollcall.json');
-
 
 app.get('/api/monitor/live', vsSessionRequired, async (req, res) => {
   try {
@@ -991,24 +773,6 @@ app.get('/api/monitor/live', vsSessionRequired, async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: err.message });
-  }
-});
-
-app.get('/api/rollcall', vsSessionRequired, async (req, res) => {
-  try {
-    res.json(await state.get('rollcall', { legacyFile: ROLLCALL_PATH(), fallback: { shiftKey: null, present: [] } }));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put('/api/rollcall', vsSessionRequired, async (req, res) => {
-  try {
-    const { shiftKey, present } = req.body || {};
-    await state.set('rollcall', { shiftKey: shiftKey || null, present: present || [] });
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1422,13 +1186,6 @@ app.get('/api/shipments/report', vsSessionRequired, async (req, res) => {
 
 // ─── Отгрузка РК (маршрутная модель) ─────────────────────────────────────────
 
-// Раздача фото
-// ─── SSE: уведомления для VS-вкладки ─────────────────────────────────────────
-
-// Thumbnails: генерируется при первом запросе, кешируется на диск
-const THUMB_DIR = path.join(rkStorage.PHOTO_DIR, 'thumbs');
-if (!fs.existsSync(THUMB_DIR)) fs.mkdirSync(THUMB_DIR, { recursive: true });
-
 // ─── Опрос Telegram для привязки менеджеров (код в личку боту) ───────────────
 
 let telegramPollingOffset = 0;
@@ -1471,84 +1228,6 @@ function startTelegramBindingPolling() {
   telegramBindingPollingLoop();
 }
 
-// ─── Нарушения (Violations) ─────────────────────────────────────────────────
-const VIOLATIONS_DIR   = path.join(__dirname, 'data', 'violation-videos');
-const VIOLATIONS_PATH  = () => path.join(dataDir(), 'violations.json');
-if (!fs.existsSync(VIOLATIONS_DIR)) fs.mkdirSync(VIOLATIONS_DIR, { recursive: true });
-
-const uploadViolation = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, VIOLATIONS_DIR),
-    filename:    (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || '.mp4';
-      cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
-    },
-  }),
-  limits: { fileSize: 500 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Только видео-файлы'));
-  },
-});
-
-// список нарушений — в базе (state-pg), видео — файлами в VIOLATIONS_DIR
-async function loadViolations() {
-  const list = await state.get('violations', { legacyFile: VIOLATIONS_PATH(), fallback: [] });
-  return Array.isArray(list) ? list : [];
-}
-function saveViolations(data) {
-  return state.set('violations', data);
-}
-
-// Раздача видео
-app.get('/violation-videos/:filename', vsSessionRequired, (req, res) => {
-  const file = path.join(VIOLATIONS_DIR, path.basename(req.params.filename));
-  if (!fs.existsSync(file)) return res.status(404).json({ error: 'Файл не найден' });
-  res.sendFile(file);
-});
-
-// GET /api/violations
-app.get('/api/violations', vsSessionRequired, async (_req, res) => {
-  try { res.json(await loadViolations()); } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /api/violations — создать нарушение
-app.post('/api/violations', vsSessionRequired, uploadViolation.single('video'), async (req, res) => {
-  try {
-    const { title, damage } = req.body;
-    if (!title || !req.file) return res.status(400).json({ error: 'Нужны название и видео' });
-    const violations = await loadViolations();
-    const item = {
-      id:        `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      title:     String(title).trim(),
-      damage:    damage ? Number(damage) : null,
-      videoFile: req.file.filename,
-      createdAt: new Date().toISOString(),
-    };
-    violations.unshift(item);
-    await saveViolations(violations);
-    res.json(item);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /api/violations/:id
-app.delete('/api/violations/:id', vsSessionRequired, async (req, res) => {
-  try {
-    const violations = await loadViolations();
-    const idx = violations.findIndex(v => v.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Не найдено' });
-    const [removed] = violations.splice(idx, 1);
-    await saveViolations(violations);
-    const file = path.join(VIOLATIONS_DIR, removed.videoFile);
-    if (fs.existsSync(file)) fs.unlinkSync(file);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── React SPA (после всех API-маршрутов) ────────────────────────────────────
 const DIST_DIR = path.join(__dirname, '..', 'frontend', 'app', 'dist');
 // Файлы сборки Vite в /assets/ содержат хеш в имени (index-Ab12Cd.js) и после
@@ -1559,6 +1238,9 @@ const DIST_DIR = path.join(__dirname, '..', 'frontend', 'app', 'dist');
 // имена бандлов. index: false — чтобы "/" тоже шёл через обработчик ниже.
 app.use('/assets', express.static(path.join(DIST_DIR, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }));
 app.use(express.static(DIST_DIR, { index: false }));
+// проверка Docker, что node жив (docker-compose.yml healthcheck); без входа
+app.get('/healthz', (_req, res) => res.json({ ok: true }));
+
 // неизвестный адрес API — честный 404 в JSON, а не страница сайта со статусом 200
 // (иначе ошибка в адресе или забытое правило Caddy выглядели как «пустой ответ»)
 app.all('/api/*', (req, res) => res.status(404).json({ error: `Нет такого адреса API: ${req.method} ${req.path}` }));
@@ -1566,6 +1248,25 @@ app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(DIST_DIR, 'index.html'));
 });
+
+// Разовый перенос старых JSON-файлов склада в app_state (state-pg.js), пока они
+// лежат на диске: читают эти данные уже и dotnet (перекличка, настройки,
+// «Обновлено»), а он файлы не видит. Повторно безопасно — есть запись, файл не читается.
+const LEGACY_STATE_FILES = { 'rollcall.json': 'rollcall', 'auto-fetch-settings.json': 'auto-fetch-settings', 'last-run.json': 'last-run', 'violations.json': 'violations' };
+async function migrateLegacyStateFiles() {
+  const { BASE_DATA_DIR } = require('./warehouse-context');
+  const targets = [[DEFAULT_WAREHOUSE_ID, BASE_DATA_DIR]];
+  const whRoot = path.join(BASE_DATA_DIR, 'warehouses');
+  if (fs.existsSync(whRoot)) for (const d of fs.readdirSync(whRoot)) targets.push([d, path.join(whRoot, d)]);
+  for (const [wh, dir] of targets) {
+    for (const [file, key] of Object.entries(LEGACY_STATE_FILES)) {
+      const legacyFile = path.join(dir, file);
+      if (!fs.existsSync(legacyFile)) continue;
+      try { await runWithWarehouse(wh, () => state.get(key, { legacyFile })); }
+      catch (err) { console.error('[state] перенос', legacyFile, err.message); }
+    }
+  }
+}
 
 async function startServer() {
   console.log('[pg] Инициализация PostgreSQL...');
@@ -1579,6 +1280,7 @@ async function startServer() {
   await supplyPlansPg.init();
   await consolidationPg.init();
   await state.init();
+  await migrateLegacyStateFiles();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   console.log('[pg] PostgreSQL готов');
   app.listen(PORT, '0.0.0.0', () => {

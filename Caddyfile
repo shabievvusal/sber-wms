@@ -85,6 +85,39 @@
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
+	# служебное: «Обновлено», запрос обновления, автообновление, перекличка (SystemEndpoints.cs)
+	handle /api/status {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/request-fetch {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/mark-updated {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/auto-fetch-settings {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/vs/admin/auto-fetch-settings {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/rollcall {
+		reverse_proxy dotnet:5080
+	}
+	# нарушения (видео до 500 МБ), исполнители без учётки, справочник товаров
+	# WMS для раскладки КДК — ViolationEndpoints.cs, WmsProxyEndpoints.cs
+	handle /api/violations* {
+		reverse_proxy dotnet:5080
+	}
+	handle /violation-videos/* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/empl/find-unregistered {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/wms/products-by-id {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/zgz/* {
 		reverse_proxy dotnet:5080
 	}

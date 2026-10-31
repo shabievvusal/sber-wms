@@ -71,14 +71,14 @@ services:
       # пробрасывается — сайт доступен только через caddy по домену.
       - PORT=3009
     volumes:
+      # код node — только из образа (раньше server.js подключался с диска отдельно:
+      # правка, которой нужен новый модуль, роняла node, пока образ не пересобран)
       - node-persist:/app/persist
-      - ./backend/server.js:/app/backend/server.js
-      - ./backend/vs-auth-pg.js:/app/backend/vs-auth-pg.js
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:'+process.env.PORT+'/api/status', r => process.exit(r.statusCode===200?0:1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:'+process.env.PORT+'/healthz', r => process.exit(r.statusCode===200?0:1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -104,6 +104,8 @@ services:
     volumes:
       # фото РК и превью — переживают пересборку (раньше лежали внутри контейнера)
       - rk-photos:/data/rk-photos
+      # видео «Нарушений» — в томе node (persist/data/violation-videos)
+      - node-persist:/data/node-persist
     depends_on:
       postgres:
         condition: service_healthy

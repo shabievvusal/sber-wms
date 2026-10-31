@@ -45,6 +45,8 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<WarehouseService>();
 builder.Services.AddScoped<MotivationService>();
 builder.Services.AddScoped<ZgzService>();
+builder.Services.AddScoped<AppStateService>();
+builder.Services.AddSingleton<FetchRequestService>();
 builder.Services.AddScoped<CellStoreService>();
 builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<PhotoService>();
@@ -59,6 +61,16 @@ var app = builder.Build();
 await WarehouseSchema.EnsureAsync(connString);
 // склад запроса (заголовок X-Warehouse) — до всех эндпоинтов
 app.UseWarehouseContext();
+// после записи статистики (ingest от node, сохранение перемещений) — новые
+// исполнители сразу видны в «Настройки → Сотрудники» (find-unregistered)
+app.Use(async (ctx, next) =>
+{
+    await next();
+    var p = ctx.Request.Path.Value ?? "";
+    if (HttpMethods.IsPost(ctx.Request.Method) && ctx.Response.StatusCode < 300
+        && (p.EndsWith("/ingest") || p == "/api/stats/stock-moves/save"))
+        BackendDotnet.Endpoints.WmsProxyEndpoints.InvalidateExecutors();
+});
 
 app.MapRouteEndpoints();
 app.MapShipmentEndpoints();
@@ -72,6 +84,9 @@ app.MapAuthEndpoints();
 app.MapStockConsolidationEndpoints();
 app.MapMotivationEndpoints();
 app.MapZgzEndpoints();
+app.MapSystemEndpoints();
+app.MapViolationEndpoints();
+app.MapWmsProxyEndpoints();
 app.MapCellStoreEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";

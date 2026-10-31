@@ -131,6 +131,17 @@ public static class WarehouseSchema
               PRIMARY KEY (date, shift)
             )");
 
+        // 01) небольшие данные склада «ключ → JSON» (перекличка, настройки,
+        // «Обновлено», нарушения) — общая с Node таблица (backend/state-pg.js)
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS app_state (
+              warehouse_id TEXT NOT NULL,
+              key TEXT NOT NULL,
+              value JSONB NOT NULL,
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY (warehouse_id, key)
+            )");
+
         // 0) журнал перемещений ЕО (спуск/пополнение/размещение из
         // stocks/changes) — новая таблица без бэкфилла из JSON, поэтому
         // создаётся здесь (сразу со складом; уникальность слияния — в шаге 2)

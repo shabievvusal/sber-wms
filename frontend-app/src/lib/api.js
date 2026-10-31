@@ -214,7 +214,7 @@ export async function uploadRkPhotos(files) {
   const { compressImage } = await import('@/lib/compressImage')
   const form = new FormData()
   for (const f of files) form.append('photos', await compressImage(f))
-  const r = await fetch('/api/rk/photos', { method: 'POST', credentials, body: form })
+  const r = await fetch('/api/rk/photos', { method: 'POST', credentials, headers: apiHeaders(), body: form })
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error || 'Ошибка загрузки фото')
   return data
@@ -718,7 +718,7 @@ export async function getConsolidationComplaints({ from, to } = {}) {
 // (multipart/form-data), напрямую fetch, не через req() (как и в оригинале),
 // т.к. тело — FormData, а не JSON.
 export async function createComplaint(formData) {
-  const r = await fetch('/api/consolidation/complaints', { method: 'POST', credentials, body: formData })
+  const r = await fetch('/api/consolidation/complaints', { method: 'POST', credentials, headers: apiHeaders(), body: formData })
   const data = await r.json().catch(() => null)
   if (!r.ok || !data?.ok) throw new Error(data?.error || 'Ошибка отправки')
   return data
@@ -758,7 +758,7 @@ export async function getViolations() {
 }
 
 export async function createViolation(formData) {
-  const r = await fetch('/api/violations', { method: 'POST', credentials, body: formData })
+  const r = await fetch('/api/violations', { method: 'POST', credentials, headers: apiHeaders(), body: formData })
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error || 'Ошибка загрузки')
   return data
