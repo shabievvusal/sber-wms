@@ -31,13 +31,8 @@ try {
   // compression не установлен — сервер работает без gzip
 }
 
-// Размер тела запроса: 10 МБ всем, большой лимит — только сохранению выгрузок
-// WMS (браузер присылает выгрузку за период одним запросом). Раньше было 1 ГБ
-// на всё: несколько таких запросов могли съесть память сервера (swap нет).
-const BIG_JSON_PATHS = new Set(['/api/save-fetched-data', '/api/stats/placement/save', '/api/stats/receiving/save', '/api/stats/remains/save']);
-const jsonSmall = express.json({ limit: '10mb' });
-const jsonBig = express.json({ limit: '300mb' });
-app.use((req, res, next) => (BIG_JSON_PATHS.has(req.path) ? jsonBig : jsonSmall)(req, res, next));
+// Размер тела запроса — 10 МБ (большие выгрузки WMS принимает dotnet, WmsSaveEndpoints.cs)
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Склад запроса (заголовок X-Warehouse, ставит сайт): проверяем, что он
@@ -165,30 +160,6 @@ async function wmsWarehouseOfToken(token) {
 
 
 
-
-// Новые исполнители из выгрузки WMS — те, кого нет в списке сотрудников по
-// executorId. ФИО — ровно как прислал WMS по этому ID: lastName firstName
-// middleName, без правки регистра и «дописывания» отчеств. Уже записанных
-// сотрудников система не меняет: ФИО правится только вручную в списке
-// сотрудников. (Раньше здесь вёлся реестр по «фамилия + инициал», по нему
-// переписывались ФИО в списке — чужими именами при совпадении ключа.)
-async function updateNamesRegistry(items) {
-  const itemNames = new Map(); // executorId -> fio
-  for (const item of (items || [])) {
-    const ru = item.responsibleUser || {};
-    const id = String(ru.id || '').trim();
-    const full = [ru.lastName, ru.firstName, ru.middleName].filter(Boolean).join(' ').trim();
-    if (!id || !full || itemNames.has(id)) continue;
-    itemNames.set(id, full);
-  }
-
-  const { idMap } = await getCompanyLookupMaps();
-  const newEmployees = [];
-  for (const [executorId, fio] of itemNames) {
-    if (!idMap.has(executorId)) newEmployees.push({ executorId, fio });
-  }
-  return { newEmployees };
-}
 
 // ─── Консолидация: multer + paths ──────────────────────────────────────────
 // фото жалоб — на диске сервера (папка подключена томом, её же раздаёт Caddy)
@@ -336,62 +307,6 @@ async function sendTelegramMediaGroup(botToken, chatId, caption, files, threadId
   }
 }
 
-
-// Запись в dotnet/Postgres кусками — один огромный POST упирается в лимит
-// Kestrel (MaxRequestBodySize). Дедуп в dotnet сверяет каждый кусок с уже
-// записанным, поэтому разбивка безопасна. Возвращает { added, skipped, error }.
-const ITEMS_INGEST_CHUNK_SIZE = 10000;
-
-async function ingestInChunks(url, items) {
-  let added = 0;
-  for (let i = 0; i < items.length; i += ITEMS_INGEST_CHUNK_SIZE) {
-    const chunk = items.slice(i, i + ITEMS_INGEST_CHUNK_SIZE);
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Warehouse': currentWarehouse() },
-        body: JSON.stringify({ items: chunk }),
-      });
-      if (!r.ok) return { added, skipped: 0, error: `dotnet ingest HTTP ${r.status}` };
-      const data = await r.json().catch(() => ({}));
-      added += Number(data.added) || 0;
-    } catch (err) {
-      return { added, skipped: 0, error: err.message };
-    }
-  }
-  return { added, skipped: Math.max(0, items.length - added), error: null };
-}
-
-// Комплектация и остальные операции из WMS (браузер забрал, сюда — сохранить):
-// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
-// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
-app.post('/api/save-fetched-data', vsSessionRequired, async (req, res) => {
-  try {
-    const t0 = Date.now();
-    const value = req.body?.value || req.body || {};
-    const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
-    const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/ops/ingest', items) : { added: 0, skipped: 0, error: null };
-    if (ingest.error) {
-      console.error('/api/save-fetched-data: dotnet ingest failed:', ingest.error);
-      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
-    }
-    // «Обновлено» в статистике = время последней реальной выгрузки
-    await scheduler.setLastRun(new Date());
-    res.json({
-      ok: true,
-      engine: 'postgres',
-      added: ingest.added,
-      skipped: ingest.skipped,
-      itemsCount: items.length,
-      newEmployees: regResult.newEmployees || [],
-      timings: { totalMs: Date.now() - t0 },
-    });
-  } catch (err) {
-    console.error('POST /api/save-fetched-data', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
 
 /** { fioMap, idMap } — сотрудники и их компании из базы. */
 async function getCompanyLookupMaps() {
@@ -638,108 +553,7 @@ function vsAdminRequired(req, res, next) {
   next();
 }
 
-// Ручной запрос обновления ЕО (`POST /eos/request-refresh` + очередь
-// eoRefreshQueue) убран 2026-09-06 по просьбе пользователя: списки ЕО
-// обновляются фоном сами, раз в 5 минут, устройством с включённым
-// автообновлением (frontend-app/src/lib/eoAutoRefresh.jsx) — очередь
-// «попроси другое устройство сходить в WMS» стала лишней сущностью.
-
-// ─── API админа /vs: пользователи, права, модули ─────────────────────────────────
-
-// ─── Custom roles (admin) ────────────────────────────────────────────────────
-
-// ─── Pending registration requests (admin) ───────────────────────────────────
-
-// ─── API для страницы /vs (смены, дата, мониторинг, перекличка) ─────────────────
-
-// placement из WMS (браузер забрал, сюда — сохранить):
-// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
-// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
-app.post('/api/stats/placement/save', vsSessionRequired, async (req, res) => {
-  try {
-    const t0 = Date.now();
-    const value = req.body?.value || req.body || {};
-    const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
-    const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/placement/ingest', items) : { added: 0, skipped: 0, error: null };
-    if (ingest.error) {
-      console.error('/api/stats/placement/save: dotnet ingest failed:', ingest.error);
-      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
-    }
-    res.json({
-      ok: true,
-      operation: 'placement',
-      added: ingest.added,
-      skipped: ingest.skipped,
-      itemsCount: items.length,
-      newEmployees: regResult.newEmployees || [],
-      timings: { totalMs: Date.now() - t0 },
-    });
-  } catch (err) {
-    console.error('POST /api/stats/placement/save', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// receiving из WMS (браузер забрал, сюда — сохранить):
-// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
-// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
-app.post('/api/stats/receiving/save', vsSessionRequired, async (req, res) => {
-  try {
-    const t0 = Date.now();
-    const value = req.body?.value || req.body || {};
-    const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
-    const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/receiving/ingest', items) : { added: 0, skipped: 0, error: null };
-    if (ingest.error) {
-      console.error('/api/stats/receiving/save: dotnet ingest failed:', ingest.error);
-      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
-    }
-    res.json({
-      ok: true,
-      operation: 'receiving',
-      added: ingest.added,
-      skipped: ingest.skipped,
-      itemsCount: items.length,
-      newEmployees: regResult.newEmployees || [],
-      timings: { totalMs: Date.now() - t0 },
-    });
-  } catch (err) {
-    console.error('POST /api/stats/receiving/save', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// remains из WMS (браузер забрал, сюда — сохранить):
-// только в Postgres через dotnet. Почасовые JSON-файлы и .NET-утилиты tools/*
-// больше не пишутся (2026-10-31) — их никто не читал, а диск рос на ~200 МБ в день.
-app.post('/api/stats/remains/save', vsSessionRequired, async (req, res) => {
-  try {
-    const t0 = Date.now();
-    const value = req.body?.value || req.body || {};
-    const items = Array.isArray(value?.items) ? value.items : (Array.isArray(req.body?.items) ? req.body.items : []);
-    const regResult = items.length > 0 ? await updateNamesRegistry(items) : { newEmployees: [] };
-    const ingest = items.length > 0 ? await ingestInChunks('http://dotnet:5080/api/stats/remains/ingest', items) : { added: 0, skipped: 0, error: null };
-    if (ingest.error) {
-      console.error('/api/stats/remains/save: dotnet ingest failed:', ingest.error);
-      return res.status(502).json({ ok: false, error: 'Не удалось сохранить в базу: ' + ingest.error });
-    }
-    res.json({
-      ok: true,
-      operation: 'remains',
-      added: ingest.added,
-      skipped: ingest.skipped,
-      itemsCount: items.length,
-      newEmployees: regResult.newEmployees || [],
-      timings: { totalMs: Date.now() - t0 },
-    });
-  } catch (err) {
-    console.error('POST /api/stats/remains/save', err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ─── Анализ: скорости сотрудников (СЗ/час) по истории ───────────────────────
+// ─── Мониторинг: ЕО в работе (серверный токен WMS из config.json) ───────────
 
 const LIVE_MONITOR_URL = 'https://api.samokat.ru/wmsops-wwh/activity-monitor/selection/handling-units-in-progress';
 

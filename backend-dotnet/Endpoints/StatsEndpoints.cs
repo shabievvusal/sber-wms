@@ -8,11 +8,7 @@ namespace BackendDotnet.Endpoints;
 // receiving/remains) + смены + monthly-company/monthly-employees/
 // employee-rates + product-weights (чтение). Гейтинг сессией — 1-в-1 с
 // оригиналом (vsSessionOptional/vsSessionRequired/публичные маршруты).
-//
-// /api/stats/*/ingest — НЕ проксируются через Caddy наружу (нет в
-// Caddyfile), вызываются только Node напрямую (dotnet:5080) как часть
-// дуал-райта (ops). Без гейтинга сессией: доверенный
-// server-to-server вызов внутри docker-сети, не достижим извне.
+// Запись выгрузок WMS (/api/save-fetched-data, /api/stats/*/save) — WmsSaveEndpoints.cs.
 public static class StatsEndpoints
 {
     public static void MapStatsEndpoints(this WebApplication app)
@@ -103,31 +99,7 @@ public static class StatsEndpoints
             catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
-        // ─── Ops: приём данных (внутренний, дуал-райт из Node) ─────────────
-
-        app.MapPost("/api/stats/ops/ingest", async (OpsIngestRequest body, StatsService svc) =>
-        {
-            try
-            {
-                var items = body.Items ?? (body.Value.HasValue && body.Value.Value.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array
-                    ? itemsEl.EnumerateArray().ToList() : new List<JsonElement>());
-                var added = await svc.IngestOpsAsync(items);
-                return Results.Json(new { ok = true, added });
-            }
-            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
-        });
-
         // ─── Placement ──────────────────────────────────────────────────────
-
-        app.MapPost("/api/stats/placement/ingest", async (PlacementSaveRequest body, StatsService svc) =>
-        {
-            try
-            {
-                var (added, skipped) = await svc.SavePlacementItemsAsync(body.Items ?? new());
-                return Results.Json(new { ok = true, added, skipped });
-            }
-            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
-        });
 
         app.MapGet("/api/date/{date}/placement/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
         {
@@ -154,16 +126,6 @@ public static class StatsEndpoints
         });
 
         // ─── Receiving ──────────────────────────────────────────────────────
-
-        app.MapPost("/api/stats/receiving/ingest", async (ReceivingSaveRequest body, StatsService svc) =>
-        {
-            try
-            {
-                var (added, skipped) = await svc.SaveReceivingItemsAsync(body.Items ?? new());
-                return Results.Json(new { ok = true, added, skipped });
-            }
-            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
-        });
 
         app.MapPost("/api/stats/receiving/known", async (ReceivingKnownRequest body, StatsService svc) =>
         {
@@ -330,16 +292,6 @@ public static class StatsEndpoints
 
         // ─── Remains ────────────────────────────────────────────────────────
 
-        app.MapPost("/api/stats/remains/ingest", async (RemainsSaveRequest body, StatsService svc) =>
-        {
-            try
-            {
-                var (added, skipped) = await svc.SaveRemainsItemsAsync(body.Items ?? new());
-                return Results.Json(new { ok = true, added, skipped });
-            }
-            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
-        });
-
         app.MapGet("/api/date/{date}/remains/summary", async (string date, int? fromHour, int? toHour, string? shift, HttpContext ctx, StatsService svc, SessionService sessions) =>
         {
             try
@@ -369,19 +321,6 @@ public static class StatsEndpoints
         // шлёт выгрузку stocks/changes прямо сюда (через Caddy), пишется
         // только в PG. Саммари размещения — выше (/placement/summary), оно
         // читает этот же журнал с откатом на wms_placement.
-
-        app.MapPost("/api/stats/stock-moves/save", async (StockMovesSaveRequest body, StatsService svc) =>
-        {
-            try
-            {
-                var items = body.Items ?? (body.Value.HasValue && body.Value.Value.ValueKind == JsonValueKind.Object && body.Value.Value.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array
-                    ? itemsEl.EnumerateArray().ToList() : new List<JsonElement>());
-                var (added, skipped) = await svc.SaveStockMovesAsync(items);
-                var newEmployees = await svc.FindNewEmployeesAsync(items);
-                return Results.Json(new { ok = true, operation = "stock-moves", added, skipped, itemsCount = items.Count, newEmployees });
-            }
-            catch (Exception err) { return Results.Json(new { ok = false, error = err.Message }, statusCode: 500); }
-        }).AddEndpointFilter<VsSessionRequiredFilter>();
 
         // movedown — спуск, refill — пополнение
         foreach (var (op, taskType) in new[] { ("movedown", StatsService.OpDescent), ("refill", StatsService.OpReplenishment) })

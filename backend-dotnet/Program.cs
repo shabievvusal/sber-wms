@@ -61,14 +61,14 @@ var app = builder.Build();
 await WarehouseSchema.EnsureAsync(connString);
 // склад запроса (заголовок X-Warehouse) — до всех эндпоинтов
 app.UseWarehouseContext();
-// после записи статистики (ingest от node, сохранение перемещений) — новые
+// после записи выгрузки WMS (WmsSaveEndpoints) — новые
 // исполнители сразу видны в «Настройки → Сотрудники» (find-unregistered)
 app.Use(async (ctx, next) =>
 {
     await next();
     var p = ctx.Request.Path.Value ?? "";
     if (HttpMethods.IsPost(ctx.Request.Method) && ctx.Response.StatusCode < 300
-        && (p.EndsWith("/ingest") || p == "/api/stats/stock-moves/save"))
+        && (p == "/api/save-fetched-data" || (p.StartsWith("/api/stats/") && p.EndsWith("/save"))))
         BackendDotnet.Endpoints.WmsProxyEndpoints.InvalidateExecutors();
 });
 
@@ -87,6 +87,7 @@ app.MapZgzEndpoints();
 app.MapSystemEndpoints();
 app.MapViolationEndpoints();
 app.MapWmsProxyEndpoints();
+app.MapWmsSaveEndpoints();
 app.MapCellStoreEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";

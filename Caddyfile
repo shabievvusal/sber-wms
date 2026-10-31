@@ -4,8 +4,6 @@
 #  • всё остальное (сам сайт и оставшиеся API) — на node.
 # Новый маршрут dotnet нужно добавить сюда, иначе запрос уйдёт в node
 # (а node на неизвестный /api/... отвечает 404).
-# POST dotnet:5080/api/stats/*/ingest node вызывает напрямую по docker-сети —
-# наружу через Caddy они не проксируются.
 # (app) — общие правила сайта, подключаются через `import app` в блок
 # robops.ru внизу файла.
 (app) {
@@ -138,7 +136,20 @@
 	handle /api/stats/receiving/known {
 		reverse_proxy dotnet:5080
 	}
+	# сохранение выгрузок WMS (тело до 300 МБ) — WmsSaveEndpoints.cs
+	handle /api/save-fetched-data {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/stats/stock-moves/save {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/placement/save {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/receiving/save {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/stats/remains/save {
 		reverse_proxy dotnet:5080
 	}
 	handle /api/stats/shift-data/count* {

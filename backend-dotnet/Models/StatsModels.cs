@@ -243,32 +243,3 @@ public class ShiftDataCounts
     public int StockMoves { get; set; }
     public int Total => Ops + Placement + Receiving + Remains + StockMoves;
 }
-
-public class OpsIngestRequest
-{
-    public System.Text.Json.JsonElement? Value { get; set; }
-    public List<System.Text.Json.JsonElement>? Items { get; set; }
-}
-
-public class PlacementSaveRequest
-{
-    public List<System.Text.Json.JsonElement>? Items { get; set; }
-}
-
-public class ReceivingSaveRequest
-{
-    public List<System.Text.Json.JsonElement>? Items { get; set; }
-}
-
-public class RemainsSaveRequest
-{
-    public List<System.Text.Json.JsonElement>? Items { get; set; }
-}
-
-// POST /api/stats/stock-moves/save — браузер шлёт { value: { items } }
-// (postOwnBackend в wmsFetch.js), плоский { items } тоже принимается.
-public class StockMovesSaveRequest
-{
-    public System.Text.Json.JsonElement? Value { get; set; }
-    public List<System.Text.Json.JsonElement>? Items { get; set; }
-}
