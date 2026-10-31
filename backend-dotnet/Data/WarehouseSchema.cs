@@ -247,6 +247,7 @@ public static class WarehouseSchema
         // веса, данные из WMS, коды получателей для отчёта отгрузки (раньше — Node)
         await ProductWeightsService.EnsureSchemaAsync(conn);
         await BackendDotnet.Endpoints.ShipmentReportEndpoints.EnsureSchemaAsync(conn);
+        await BackendDotnet.Endpoints.ConsolidationEndpoints.EnsureSchemaAsync(conn);
 
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))

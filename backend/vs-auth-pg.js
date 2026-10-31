@@ -10,12 +10,8 @@
 
 const pg   = require('pg');
 const { Pool } = pg;
-const crypto = require('crypto');
-
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней (скользящий)
 const SESSION_TOUCH_MIN_INTERVAL_MS = 60 * 1000; // не пишем last_active_at чаще раза в минуту
-const BIND_CODE_TTL_MS = 5 * 60 * 1000; // 5 мин
-
 const pool = new Pool({
   host:     process.env.PG_HOST     || 'postgres',
   port:     parseInt(process.env.PG_PORT || '5432', 10),
@@ -94,43 +90,6 @@ async function init() {
 
 // ─── Row ↔ object ──────────────────────────────────────────────────────────────
 
-function rowToUser(row) {
-  return {
-    login: row.login,
-    name: row.name || undefined,
-    role: row.role || undefined,
-    modules: row.modules || undefined,
-    actions: row.actions || undefined,
-    shiftType: row.shift_type || undefined,
-    companyIds: row.company_ids || undefined,
-    visibleCompanies: row.visible_companies || undefined,
-    allowWithoutToken: !!row.allow_without_token,
-    selfOnly: !!row.self_only,
-    passwordHash: row.password_hash || undefined,
-    wmsPhone: row.wms_phone || undefined,
-    telegramChatId: row.telegram_chat_id || undefined,
-  };
-}
-
-async function persistUser(u) {
-  await pool.query(`
-    INSERT INTO vs_users (login, name, role, modules, actions, shift_type, company_ids, visible_companies, allow_without_token, self_only, password_hash, wms_phone, telegram_chat_id)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-    ON CONFLICT (login) DO UPDATE SET
-      name = $2, role = $3, modules = $4, actions = $5, shift_type = $6, company_ids = $7,
-      visible_companies = $8, allow_without_token = $9, self_only = $10, password_hash = $11,
-      wms_phone = $12, telegram_chat_id = $13
-  `, [
-    u.login, u.name || null, u.role || null,
-    u.modules !== undefined ? JSON.stringify(u.modules) : null,
-    u.actions !== undefined ? JSON.stringify(u.actions) : null,
-    u.shiftType || null,
-    u.companyIds !== undefined ? JSON.stringify(u.companyIds) : null,
-    u.visibleCompanies !== undefined ? JSON.stringify(u.visibleCompanies) : null,
-    !!u.allowWithoutToken, !!u.selfOnly, u.passwordHash || null, u.wmsPhone || null, u.telegramChatId || null,
-  ]);
-}
-
 function rowToSession(row) {
   return {
     login: row.login || '',
@@ -158,16 +117,7 @@ async function deleteSessionRow(sid) {
 
 // ─── Сессии и пользователи — Postgres, без кэша ───────────────────────────────
 
-async function loadVsUsers() {
-  const res = await pool.query('SELECT * FROM vs_users');
-  return res.rows.map(rowToUser);
-}
-
 // ─── Pending users (registration requests) — Postgres (Фаза 4) ────────────────
-
-function normalizeLogin(login) {
-  return String(login || '').replace(/\D/g, '').slice(-10);
-}
 
 function isLetterLogin(login) {
   return /[a-zA-Zа-яА-ЯёЁ]/.test(String(login || '').trim());
@@ -224,66 +174,10 @@ async function applyWarehouse(session, warehouseId) {
   return { ...session, role: res.rows[0].role || session.role, warehouseId: wid }
 }
 
-function userLoginMatch(u, login, normalized, trimmedLogin) {
-  if (u.passwordHash) return trimmedLogin.toLowerCase() === String(u.login || '').trim().toLowerCase();
-  return normalizeLogin(u.login) === normalized && normalized || u.login === login;
-}
-
-async function getTelegramChatId(login) {
-  const trimmed = String(login || '').trim();
-  const normalized = normalizeLogin(login);
-  const users = await loadVsUsers();
-  for (const u of users) {
-    if (!userLoginMatch(u, login, normalized, trimmed)) continue;
-    const id = u.telegramChatId;
-    return id != null && String(id).trim() !== '' ? String(id).trim() : null;
-  }
-  return null;
-}
-
-async function setTelegramChatId(login, chatId) {
-  const trimmed = String(login || '').trim();
-  const normalized = normalizeLogin(login);
-  const users = await loadVsUsers();
-  const existing = users.find(u => userLoginMatch(u, login, normalized, trimmed));
-  if (!existing) return;
-  existing.telegramChatId = chatId != null ? String(chatId).trim() : '';
-  await persistUser(existing);
-}
-
 // ─── Коды привязки Telegram — Postgres (Фаза 4) ────────────────────────────────
-
-async function addBindingCode(code, login) {
-  const expiresAt = new Date(Date.now() + BIND_CODE_TTL_MS);
-  await pool.query(
-    `INSERT INTO vs_telegram_bind_codes (code, login, expires_at) VALUES ($1, $2, $3)
-     ON CONFLICT (code) DO UPDATE SET login = $2, expires_at = $3`,
-    [String(code).toUpperCase(), String(login || '').trim(), expiresAt]
-  );
-}
-
-async function consumeBindingCode(code) {
-  const key = String(code).trim().toUpperCase();
-  if (!key) return null;
-  const { rows } = await pool.query('SELECT login, expires_at FROM vs_telegram_bind_codes WHERE code = $1', [key]);
-  if (!rows.length) return null;
-  const entry = rows[0];
-  await pool.query('DELETE FROM vs_telegram_bind_codes WHERE code = $1', [key]);
-  if (Date.now() > entry.expires_at.getTime()) return null;
-  return entry.login;
-}
-
-function createBindingCode() {
-  return crypto.randomBytes(3).toString('hex').toUpperCase();
-}
 
 module.exports = {
   init,
   getSession,
   applyWarehouse,
-  getTelegramChatId,
-  setTelegramChatId,
-  createBindingCode,
-  addBindingCode,
-  consumeBindingCode,
 };

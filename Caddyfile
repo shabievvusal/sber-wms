@@ -83,6 +83,17 @@
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
+	# жалобы, Excel-отчёты (ConsolidationEndpoints.cs); фото — блоком выше
+	handle /api/consolidation/complaints* {
+		reverse_proxy dotnet:5080
+	}
+	handle /api/consolidation/export/* {
+		reverse_proxy dotnet:5080
+	}
+	# «ЕО в работе» серверным токеном WMS (MonitorEndpoints.cs)
+	handle /api/monitor/live {
+		reverse_proxy dotnet:5080
+	}
 	# служебное: «Обновлено», запрос обновления, автообновление, перекличка (SystemEndpoints.cs)
 	handle /api/status {
 		reverse_proxy dotnet:5080

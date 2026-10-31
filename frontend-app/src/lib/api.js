@@ -740,7 +740,7 @@ export async function exportConsolidationReport(reportNum, { dateFrom, dateTo, c
   const r = await fetch(`/api/consolidation/export/report${reportNum}`, {
     method: 'POST',
     credentials,
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ dateFrom, dateTo, companyFullNames, fineAmount }),
   })
   if (!r.ok) {

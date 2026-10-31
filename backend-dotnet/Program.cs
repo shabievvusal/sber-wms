@@ -91,6 +91,8 @@ app.MapWmsProxyEndpoints();
 app.MapWmsSaveEndpoints();
 app.MapProductWeightsAdminEndpoints();
 app.MapShipmentReportEndpoints();
+app.MapConsolidationEndpoints();
+app.MapMonitorEndpoints();
 app.MapCellStoreEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";
