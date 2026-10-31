@@ -84,8 +84,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # Фаза 0 — /api/dotnet-status. Фаза 1 — route-rk-pg.js перенесён целиком
-  # (routes/ship/receive/eo/drivers/cfz/photos/events), см. Program.cs.
+  # dotnet — основной бэкенд (маршруты перечислены в Caddyfile).
   # Фото РК — на томе rk-photos (dotnet пишет, Caddy раздаёт с диска).
   dotnet:
     build: ./backend-dotnet

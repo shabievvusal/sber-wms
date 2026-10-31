@@ -35,6 +35,7 @@ builder.Services.ConfigureHttpJsonOptions(opt =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connString));
+builder.Services.AddSingleton<ProductWeightsService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<RouteService>();
 builder.Services.AddScoped<TsdService>();
@@ -88,6 +89,8 @@ app.MapSystemEndpoints();
 app.MapViolationEndpoints();
 app.MapWmsProxyEndpoints();
 app.MapWmsSaveEndpoints();
+app.MapProductWeightsAdminEndpoints();
+app.MapShipmentReportEndpoints();
 app.MapCellStoreEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";

@@ -7,8 +7,6 @@ const scheduler = require('./scheduler');
 // склад запроса и папка его данных (см. warehouse-context.js)
 const { dataDir, currentWarehouse, runWithWarehouse, DEFAULT_WAREHOUSE_ID } = require('./warehouse-context');
 const vsAuth = require('./vs-auth-pg');
-const productWeights = require('./product-weights');
-const rkStorage = require('./route-rk-pg');
 // всё хранение — PostgreSQL (режим JSON-файлов «USE_PG=false» убран 2026-10-31)
 const emplPg = require('./empl-pg');
 const tsdPg = require('./tsd-pg');
@@ -18,7 +16,6 @@ const supplyPlansPg = require('./supply-plans-pg');
 const consolidationPg = require('./consolidation-pg');
 // небольшие данные node (перекличка, нарушения, настройки) — «склад + ключ → JSON»
 const state = require('./state-pg');
-const excelReports = require('./excel-reports');
 const consolidationReports = require('./consolidation-reports');
 
 const app = express();
@@ -181,11 +178,6 @@ const isJpeg = buf => buf && buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd
 const thumbName = name => name.replace(/\.jpg$/, '_t.jpg');
 const complaintPhotos = c => (Array.isArray(c?.photoFilenames) && c.photoFilenames.length ? c.photoFilenames : (c?.photoFilename ? [c.photoFilename] : []));
 
-const uploadExcel = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
-});
-
 function tgSafe(v) {
   return String(v == null ? '' : v).trim();
 }
@@ -345,64 +337,6 @@ function getCompanyByIdOrFioSync(idMap, executorId, executorFio) {
   return null;
 }
 
-// ─── Веса товаров: загрузка Excel (только админ) ───────────────────────────
-
-const uploadWeightsExcel = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const ok = /\.(xlsx|xls)$/i.test(file.originalname) ||
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      file.mimetype === 'application/vnd.ms-excel';
-    if (ok) cb(null, true); else cb(new Error('Только Excel-файлы (.xlsx, .xls)'));
-  },
-});
-
-const EXCEL_PATH = productWeights.EXCEL_PATH;
-
-app.get('/api/vs/admin/product-weights/info', vsSessionRequired, vsAdminRequired, (req, res) => {
-  try {
-    const exists = fs.existsSync(EXCEL_PATH);
-    if (!exists) return res.json({ exists: false, count: 0 });
-    const stat = fs.statSync(EXCEL_PATH);
-    const count = productWeights.getMap().size;
-    res.json({ exists: true, updatedAt: stat.mtime.toISOString(), sizeBytes: stat.size, count, wmsCount: productWeights.wmsWeightsCount(), barcodes: productWeights.getBarcodeMap().size });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/vs/admin/product-weights/upload', vsSessionRequired, vsAdminRequired, uploadWeightsExcel.single('file'), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
-    const map = productWeights.saveExcelBuffer(req.file.buffer);
-    res.json({ ok: true, count: map.size });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Веса, которые браузер дозапросил у WMS (stocks/overview → measurements.weight)
-// для товаров без веса в Excel: [{ article, grams, productId, name }].
-app.post('/api/vs/admin/product-weights/wms', vsSessionRequired, vsAdminRequired, (req, res) => {
-  try {
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const saved = productWeights.addWmsWeights(items);
-    res.json({ ok: true, saved, count: productWeights.getMap().size });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete('/api/vs/admin/product-weights', vsSessionRequired, vsAdminRequired, (_req, res) => {
-  try {
-    productWeights.deleteExcel();
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── График поставок (supply-plans-pg.js) ────────────────────────────────────
 // Excel из корп. почты или накопительный отчёт делопроизводителей — разбор
 // в отдельном потоке (supply-plans-worker.js), строки заменяют свои даты.
@@ -542,15 +476,6 @@ async function vsSessionRequired(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
-/** Middleware: доступ только для роли admin или developer, иначе 403. */
-function vsAdminRequired(req, res, next) {
-  const role = req.vsSession?.role;
-  if (role !== 'admin' && role !== 'developer') {
-    return res.status(403).json({ error: 'Требуются права администратора' });
-  }
-  next();
 }
 
 // ─── Мониторинг: ЕО в работе (серверный токен WMS из config.json) ───────────
@@ -875,131 +800,6 @@ app.post('/api/consolidation/telegram/send', vsSessionRequired, async (req, res)
   }
 });
 
-// ─── Кэш дневной сводки по компаниям ─────────────────────────────────────────
-
-// GET /api/shipments/missing-codes — ЦФЗ-адреса без кода получателя
-app.get('/api/shipments/missing-codes', vsSessionRequired, async (req, res) => {
-  try {
-    const allAddresses = await rkStorage.getAddresses();
-    const missing = excelReports.getMissingCodes(allAddresses);
-    res.json(missing);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const ExcelJS = require('exceljs');
-const XLSX    = require('xlsx');
-
-// GET /api/shipments/codes — все адреса с текущими кодами получателей
-app.get('/api/shipments/codes', vsSessionRequired, async (req, res) => {
-  try {
-    const allAddresses = await rkStorage.getAddresses();
-    const codes = excelReports.getAddressCodes();
-    const result = allAddresses.map(address => ({
-      address,
-      code: codes[address]?.sapCode || null,
-    }));
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/shipments/codes/export — скачать Excel с адресами без кода
-app.get('/api/shipments/codes/export', vsSessionRequired, async (req, res) => {
-  try {
-    const allAddresses = await rkStorage.getAddresses();
-    const codes = excelReports.getAddressCodes();
-    const missing = allAddresses.filter(a => !codes[a]);
-
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Коды получателей');
-    ws.columns = [
-      { header: 'Адрес ЦФЗ',       key: 'address', width: 45 },
-      { header: 'Код получателя',   key: 'code',    width: 20 },
-    ];
-    ws.getRow(1).font = { bold: true };
-    missing.forEach(a => ws.addRow({ address: a, code: '' }));
-
-    const buf = await wb.xlsx.writeBuffer();
-    const filename = encodeURIComponent('Коды получателей ЦФЗ.xlsx');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
-    res.send(buf);
-  } catch (err) {
-    console.error('GET /api/shipments/codes/export', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/shipments/codes/import — загрузить Excel с кодами получателей
-app.post('/api/shipments/codes/import', vsSessionRequired, uploadExcel.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-    let saved = 0;
-    for (const row of rows) {
-      const address = String(row['Адрес ЦФЗ'] || '').trim();
-      const code    = String(row['Код получателя'] || '').trim();
-      if (address && code) {
-        excelReports.setAddressCode(address, code);
-        saved++;
-      }
-    }
-    res.json({ ok: true, saved });
-  } catch (err) {
-    console.error('POST /api/shipments/codes/import', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/shipments/set-code — привязать ЦФЗ-адрес к коду получателя
-app.post('/api/shipments/set-code', vsSessionRequired, (req, res) => {
-  try {
-    const { address, code } = req.body;
-    if (!address || !code) return res.status(400).json({ error: 'Нужны address и code' });
-    excelReports.setAddressCode(address, code);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
-  }
-});
-
-// GET /api/shipments/report?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD — скачать Excel-отчёт
-app.get('/api/shipments/report', vsSessionRequired, async (req, res) => {
-  try {
-    const { dateFrom, dateTo } = req.query;
-    if (!dateFrom || !dateTo) return res.status(400).json({ error: 'Нужны dateFrom и dateTo' });
-
-    const [summaryData, allAddresses] = await Promise.all([
-      rkStorage.getReportData(dateFrom, dateTo),
-      rkStorage.getAddresses(),
-    ]);
-
-    const datesSet = new Set();
-    summaryData.forEach(e => e.records.forEach(r => datesSet.add(r.date)));
-    const dates = [...datesSet].sort();
-
-    const buf = await excelReports.generateReport(summaryData, dates, dateFrom, allAddresses);
-
-    const filename = encodeURIComponent('Отчет по РК, ящикам и ТЧ.xlsx');
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
-    res.send(buf);
-  } catch (err) {
-    console.error('GET /api/shipments/report', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// ─── Отгрузка РК (маршрутная модель) ─────────────────────────────────────────
-
 // ─── Опрос Telegram для привязки менеджеров (код в личку боту) ───────────────
 
 let telegramPollingOffset = 0;
@@ -1084,13 +884,11 @@ async function migrateLegacyStateFiles() {
 
 async function startServer() {
   console.log('[pg] Инициализация PostgreSQL...');
-  await rkStorage.init();
   await emplPg.init();
   await tsdPg.init();
   await motivationPg.init();
   await wmsOpsPg.init();
   await vsAuth.init();
-  await productWeights.initPg();
   await supplyPlansPg.init();
   await consolidationPg.init();
   await state.init();

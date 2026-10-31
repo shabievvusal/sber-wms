@@ -84,6 +84,16 @@ public static class WarehouseSchema
               UNIQUE (date, hour, merge_key)
             )");
         await Exec("CREATE INDEX IF NOT EXISTS wms_ops_date_idx ON wms_ops (date)");
+        // маршруты РК — раньше создавал Node (route-rk-pg.js, удалён 2026-10-31)
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS routes (
+              route_id TEXT PRIMARY KEY, route_number TEXT, date DATE, driver JSONB, vehicle JSONB,
+              logistics_company TEXT, cfz_addresses JSONB NOT NULL DEFAULT '[]', imported_at TIMESTAMPTZ,
+              shipment JSONB, receiving JSONB
+            )");
+        await Exec("CREATE INDEX IF NOT EXISTS routes_date_idx ON routes (date)");
+        await Exec("CREATE INDEX IF NOT EXISTS routes_route_number_idx ON routes (route_number)");
+        await Exec("CREATE INDEX IF NOT EXISTS routes_driver_name_idx ON routes ((driver->>'name'))");
         await Exec("CREATE INDEX IF NOT EXISTS wms_ops_executor_id_idx ON wms_ops (executor_id)");
         await Exec(@"
             CREATE TABLE IF NOT EXISTS wms_placement (
@@ -229,11 +239,14 @@ public static class WarehouseSchema
         // id ячейки в WMS (2026-10-29) — для поиска в WMS по cellIds
         await Exec("ALTER TABLE cell_stores ADD COLUMN IF NOT EXISTS cell_id TEXT NOT NULL DEFAULT ''");
 
-        // 0д) штрихкоды товаров из файла весов (2026-10-26) — заполняет Node
-        // (product-weights.js), общая для складов, как product_weights
+        // 0д) штрихкоды товаров из файла весов (2026-10-26) — заполняет
+        // ProductWeightsService, общая для складов, как product_weights
         await Exec("CREATE TABLE IF NOT EXISTS product_barcodes (barcode TEXT PRIMARY KEY, article TEXT NOT NULL)");
         // штук за один скан: 1 у штучного, вложенность у упаковки
         await Exec("ALTER TABLE product_barcodes ADD COLUMN IF NOT EXISTS qty NUMERIC NOT NULL DEFAULT 1");
+        // веса, данные из WMS, коды получателей для отчёта отгрузки (раньше — Node)
+        await ProductWeightsService.EnsureSchemaAsync(conn);
+        await BackendDotnet.Endpoints.ShipmentReportEndpoints.EnsureSchemaAsync(conn);
 
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))

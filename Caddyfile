@@ -158,6 +158,14 @@
 	handle /api/stats/shift-data/delete* {
 		reverse_proxy dotnet:5080
 	}
+	# веса товаров (админ): Excel, данные из WMS — ProductWeightsAdminEndpoints.cs
+	handle /api/vs/admin/product-weights* {
+		reverse_proxy dotnet:5080
+	}
+	# отчёт по РК, ящикам и ТЧ — ShipmentReportEndpoints.cs
+	handle /api/shipments/report {
+		reverse_proxy dotnet:5080
+	}
 	handle /api/product-weights {
 		reverse_proxy dotnet:5080
 	}
