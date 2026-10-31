@@ -36,15 +36,15 @@ crontab -e                         # и добавить строку:
 
 ## Восстановление
 
-**База** (сайт на время восстановления лучше остановить: `docker compose stop node dotnet`):
+**База** (сайт на время восстановления лучше остановить: `docker compose stop dotnet`):
 ```bash
 docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' < backups/db_<дата>.dump
-docker compose start node dotnet
+docker compose start dotnet
 ```
 
-**Файлы node** (фото консолидации, видео, `config.json`):
+**Файлы** (фото консолидации, видео, Excel весов):
 ```bash
-docker compose exec -T node sh -c 'cd /app/persist && tar -xzf -' < backups/files_<дата>.tar.gz
+docker compose exec -T dotnet sh -c 'cd /data/node-persist && tar -xzf -' < backups/files_<дата>.tar.gz
 ```
 
 **Фото РК:**

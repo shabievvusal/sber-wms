@@ -15,8 +15,8 @@ import { formatTime, getCurrentShiftInfo, getShiftStartIso, parseLiveData } from
 import { ClipboardList, RefreshCw } from 'lucide-react'
 
 // Три источника данных на каждое обновление (doRefresh), 1-в-1 с оригиналом
-// по составу шагов: (1) живой снимок «кто сейчас пикает» — getLiveMonitorViaBrowser/
-// getLiveMonitor (даёт «Обнаружены, но не в перекличке» и текущую задачу
+// по составу шагов: (1) живой снимок «кто сейчас пикает» — getLiveMonitorViaBrowser
+// (даёт «Обнаружены, но не в перекличке» и текущую задачу
 // активных); (2) сводка за смену (monitorItems, api.getDateItems — same-origin
 // статистика) — источник «СЗ» и первого приближения «когда последний раз
 // пикал»; (3) точечный WMS-поиск на КАЖДОГО сотрудника из переклички
@@ -84,13 +84,17 @@ export default function MonitorPage() {
         setMonitorItems([])
         setError(err.message || 'Не удалось загрузить данные смены')
       }
+      // живой снимок — только из браузера: WMS доступен из корп. сети и с токеном
       const token = getStoredToken()
       try {
-        const raw = token ? await getLiveMonitorViaBrowser(token) : await api.getLiveMonitor()
-        setLiveSnapshot(parseLiveData(raw))
+        if (!token) throw new TypeError('нет токена')
+        setLiveSnapshot(parseLiveData(await getLiveMonitorViaBrowser(token)))
       } catch (err) {
         setLiveSnapshot(new Map())
-        setError(err.message || 'Не удалось загрузить живой снимок')
+        // TypeError — запрос не дошёл до WMS (нет корп. сети) или нет токена
+        setError(err instanceof TypeError
+          ? 'Нет данных из WMS: нужен токен WMS и подключение к корпоративной сети'
+          : (err.message || 'Не удалось загрузить живой снимок'))
       }
 
       // Точечный поиск последней завершённой задачи на каждого сотрудника из

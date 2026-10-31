@@ -7,18 +7,19 @@ x-logging: &default-logging
     max-size: "20m"
     max-file: "5"
 
-# restart: unless-stopped у всех сервисов (2026-09-13). Раньше у caddy/node/
+# restart: unless-stopped у всех сервисов (2026-09-13). Раньше у caddy/
 # dotnet было on-failure — такой контейнер Docker НЕ поднимает после
 # перезагрузки сервера, если тот завершился штатно (caddy и dotnet выходят с
 # кодом 0 по SIGTERM). Итог: после каждой перезагрузки сайт лежал, пока
 # кто-нибудь не делал `docker compose up -d` руками (12.09 — 46 минут).
 services:
-  # Trek 2, Фаза 0 — reverse-proxy перед node и dotnet. Единственный сервис с
-  # внешним портом теперь caddy (раньше — node напрямую), см. Caddyfile.
-  # 80/443 (2026-09-13) — домен robops.ru с автоматическим HTTPS, 443/udp —
-  # HTTP/3. Старый адрес http://<IP>:3009 убран — только по домену.
+  # Caddy — HTTPS, раздача сайта и фото с диска, /api/* → dotnet (Caddyfile).
+  # Образ собирается из корневого Dockerfile: Caddy + собранный фронтенд и
+  # Caddyfile внутри (node убран 2026-10-31). Единственный сервис с внешними
+  # портами: 80/443 — домен robops.ru с автоматическим HTTPS, 443/udp — HTTP/3.
   caddy:
-    image: caddy:2-alpine
+    build: .
+    image: wms-caddy
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -26,65 +27,21 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Сертификаты Let's Encrypt и состояние Caddy. Без томов сертификат
       # выпускался бы заново при каждом пересоздании контейнера и упёрся бы
       # в лимиты Let's Encrypt.
       - caddy-data:/data
       - caddy-config:/config
-      # фото жалоб «Консолидации» лежат в томе node (persist/uploads, см.
-      # docker-entrypoint.sh) — Caddy отдаёт их прямо с диска, без Node
+      # фото жалоб «Консолидации» (uploads в томе node-persist) — Caddy
+      # отдаёт их прямо с диска
       - node-persist:/srv/node-persist:ro
       # фото РК (приёмка/отгрузка) — пишет dotnet, Caddy отдаёт с диска
       - rk-photos:/srv/rk-photos:ro
     depends_on:
-      node:
-        condition: service_healthy
       dotnet:
         condition: service_started
 
-  node:
-    build:
-      context: .
-      # Фронтенд собирается из `frontend-app/` — обычной подпапки этого же
-      # build context (см. Dockerfile, stage frontend-builder). До
-      # объединения фронтенда и бэкенда в один репозиторий (2026-07-15)
-      # здесь был доп.контекст на сиблинг-папку `new zlp` — больше не
-      # нужен, обе части проекта теперь в одном каталоге.
-    image: wms-node
-    restart: unless-stopped
-    # node запускается как PID 1 и без init игнорирует SIGTERM — Docker ждал
-    # 10 с и убивал его SIGKILL посреди возможной записи JSON-файлов в data/.
-    # init (tini) пересылает сигнал, процесс завершается сразу.
-    init: true
-    logging: *default-logging
-    expose:
-      - "3009"
-    env_file: .env
-    environment:
-      - NODE_HOST_PROJECT_PATH=${PWD}
-      # Caddyfile жёстко проксирует на node:3009, поэтому node ВСЕГДА должен
-      # слушать именно 3009 внутри контейнера. Эта строка перекрывает PORT из
-      # .env, если он там задан (Compose: explicit environment важнее
-      # env_file), иначе server.js (`process.env.PORT || 3000`) слушал бы
-      # другой порт и Caddy получал бы "connection refused". Наружу 3009 не
-      # пробрасывается — сайт доступен только через caddy по домену.
-      - PORT=3009
-    volumes:
-      # код node — только из образа (раньше server.js подключался с диска отдельно:
-      # правка, которой нужен новый модуль, роняла node, пока образ не пересобран)
-      - node-persist:/app/persist
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:'+process.env.PORT+'/healthz', r => process.exit(r.statusCode===200?0:1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  # dotnet — основной бэкенд (маршруты перечислены в Caddyfile).
+  # dotnet — бэкенд сайта (все /api/*, см. Caddyfile).
   # Фото РК — на томе rk-photos (dotnet пишет, Caddy раздаёт с диска).
   dotnet:
     build: ./backend-dotnet
@@ -103,7 +60,9 @@ services:
     volumes:
       # фото РК и превью — переживают пересборку (раньше лежали внутри контейнера)
       - rk-photos:/data/rk-photos
-      # видео «Нарушений» — в томе node (persist/data/violation-videos)
+      # том с данными, что раньше вёл node (имя осталось с тех пор): видео
+      # «Нарушений» (data/violation-videos), фото консолидации (uploads),
+      # Excel весов товаров (data/product-weights.xlsx)
       - node-persist:/data/node-persist
     depends_on:
       postgres:
@@ -153,6 +112,7 @@ services:
       start_period: 10s
 
 volumes:
+  # node-persist — имя историческое (node убран 2026-10-31), данные в нём живые
   node-persist:
     driver: local
   pg-data:

@@ -92,7 +92,10 @@ app.MapWmsSaveEndpoints();
 app.MapProductWeightsAdminEndpoints();
 app.MapShipmentReportEndpoints();
 app.MapConsolidationEndpoints();
-app.MapMonitorEndpoints();
+app.MapSupplyPlanEndpoints();
+// неизвестный адрес API — честный 404 в JSON (ошибка в адресе не выглядит как «пустой ответ»)
+app.MapFallback("/api/{**path}", (HttpContext ctx) =>
+    Results.Json(new { error = $"Нет такого адреса API: {ctx.Request.Method} {ctx.Request.Path}" }, statusCode: 404));
 app.MapCellStoreEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";

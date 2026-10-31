@@ -698,12 +698,6 @@ export async function putRollcall(shiftKey, present) {
   })
 }
 
-// Живой мониторинг через наш бэкенд (серверный токен WMS из config.json) —
-// когда в браузере нет своего токена WMS (иначе MonitorPage ходит в WMS сама).
-export async function getLiveMonitor() {
-  return req('/api/monitor/live')
-}
-
 // ─── Жалобы на нарушения («Консолидация») ───────────────────────────────────
 
 // from/to — ISO-границы даты подачи (необязательные)

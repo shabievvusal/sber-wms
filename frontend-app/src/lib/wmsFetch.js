@@ -115,8 +115,7 @@ export async function switchWmsWarehouse(token, warehouseId) {
   return true
 }
 
-// Живой снимок операций в процессе — MonitorPage.jsx использует его вместо
-// same-origin api.getLiveMonitor(), когда есть настоящий WMS-токен.
+// Живой снимок операций в процессе (MonitorPage.jsx, KdkLayoutPage.jsx).
 export async function getLiveMonitorViaBrowser(token) {
   return wmsGet(LIVE_MONITOR_URL, token)
 }

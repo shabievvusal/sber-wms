@@ -1,7 +1,7 @@
 #!/bin/sh
 # Ежедневная резервная копия сайта (запуск — cron на сервере, см. backup/README.md):
 #   db_<дата>.dump      — база PostgreSQL (pg_dump, сжатый формат, восстанавливается pg_restore)
-#   files_<дата>.tar.gz — том node-persist: фото консолидации, видео нарушений, config.json
+#   files_<дата>.tar.gz — том node-persist: фото консолидации, видео нарушений, Excel весов
 #                         (без почасовых данных data/ГГГГ-ММ-ДД — они больше не нужны)
 #   rk_<дата>.tar       — том rk-photos: фото приёмки/отгрузки (JPEG уже сжаты — без gzip)
 #   env_<дата>          — .env (пароль базы и прочие секреты)
@@ -41,8 +41,9 @@ docker compose exec -T postgres sh -c 'nice -n 19 pg_dump -U "$POSTGRES_USER" -d
 mv "$BACKUP_DIR/db_$TS.dump.part" "$BACKUP_DIR/db_$TS.dump"
 log "база: $(du -h "$BACKUP_DIR/db_$TS.dump" | cut -f1)"
 
-# 2. Файлы node (фото консолидации, видео нарушений, config.json)
-docker compose exec -T node sh -c 'cd /app/persist && nice -n 19 tar -czf - --exclude="./data/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]" --exclude=./data/raw_tmp .' > "$BACKUP_DIR/files_$TS.tar.gz.part"
+# 2. Файлы тома node-persist (фото консолидации, видео нарушений, Excel весов) —
+#    через контейнер dotnet, он подключает этот том в /data/node-persist
+docker compose exec -T dotnet sh -c 'cd /data/node-persist && nice -n 19 tar -czf - --exclude="./data/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]" --exclude=./data/raw_tmp .' > "$BACKUP_DIR/files_$TS.tar.gz.part"
 mv "$BACKUP_DIR/files_$TS.tar.gz.part" "$BACKUP_DIR/files_$TS.tar.gz"
 log "файлы: $(du -h "$BACKUP_DIR/files_$TS.tar.gz" | cut -f1)"
 

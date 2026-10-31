@@ -29,9 +29,8 @@ export function shortFio(name) {
   return last + ' ' + initials
 }
 
-// Сырой ответ /api/monitor/live — это прозрачный проброс ответа WMS Самоката
-// (наш бэкенд лишь пересылает его, не меняя форму), поэтому разбор нужен даже
-// на «настоящем» пути, не только на моках. Ключ — executorId (u.id), не ФИО.
+// Сырой ответ WMS Самоката (activity-monitor, handling-units-in-progress) —
+// разбор нужен и на настоящем пути, не только на моках. Ключ — executorId (u.id), не ФИО.
 export function parseLiveData(data) {
   const result = new Map()
   const value = data?.value || data || {}

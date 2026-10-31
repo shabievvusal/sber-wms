@@ -1,9 +1,10 @@
 # Caddy — HTTPS для robops.ru и разводка запросов:
-#  • /api/... на dotnet — пути перечислены блоками handle ниже;
+#  • /api/... и /violation-videos/... — dotnet (единственный бэкенд с 2026-10-31,
+#    node убран; неизвестный /api/... dotnet отвечает 404 в JSON);
 #  • фото консолидации и РК — прямо с диска (тома node-persist, rk-photos);
-#  • всё остальное (сам сайт и оставшиеся API) — на node.
-# Новый маршрут dotnet нужно добавить сюда, иначе запрос уйдёт в node
-# (а node на неизвестный /api/... отвечает 404).
+#  • всё остальное — сам сайт: собранный фронтенд в /srv/site (кладётся в
+#    образ Caddy при сборке, см. Dockerfile).
+# Все блоки — handle: из них срабатывает один, с самым длинным путём.
 # (app) — общие правила сайта, подключаются через `import app` в блок
 # robops.ru внизу файла.
 (app) {
@@ -15,10 +16,9 @@
 		output stdout
 	}
 
-	# Сжатие ответов (2026-09-13). Node сжимает сам (compression), а dotnet —
-	# нет: вся статистика (/api/date/*, отчёты) шла несжатым JSON, что заметно
-	# на медленном складском интернете. Уже сжатые ответы Node Caddy повторно
-	# не трогает. Типы перечислены явно — картинки и видео не сжимаются.
+	# Сжатие ответов (2026-09-13): dotnet сам не сжимает — вся статистика
+	# (/api/date/*, отчёты) шла бы несжатым JSON, что заметно на медленном
+	# складском интернете. Типы перечислены явно — картинки и видео не сжимаются.
 	encode zstd gzip {
 		match {
 			header Content-Type application/json*
@@ -30,184 +30,50 @@
 		}
 	}
 
-	handle /api/rk/* {
-		reverse_proxy dotnet:5080
-	}
-	# фото РК и превью (/rk-photos/<имя>, /rk-photos/thumb/<имя>) — прямо с
-	# диска (том rk-photos, пишет dotnet). Имена случайные — кэш на год.
-	handle_path /rk-photos/* {
-		root * /srv/rk-photos
-		header Cache-Control "public, max-age=31536000, immutable"
-		file_server
-	}
-	handle /api/tsd-assignments* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/tsd-settings* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/tsd/manual-employees* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/empl {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/empl/add-new {
-		reverse_proxy dotnet:5080
-	}
-	# Проверка учёток ТСД (вход в wmsin-pdt), см. AccountCheckService.cs
-	handle /api/empl/account-check* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/employees {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/date/* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/monthly-company {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/monthly-employees {
-		reverse_proxy dotnet:5080
-	}
-	# «Поиск потеряшек» (2026-10-25) — переводы ЕО в ЗГЗ, см. ZgzEndpoints.cs
-	# ЦФЗ по ячейкам КДК (2026-10-25), см. CellStoreEndpoints.cs
-	handle /api/cell-stores* {
-		reverse_proxy dotnet:5080
-	}
-	# фото жалоб «Консолидации» — прямо с диска (папка uploads тома node-persist),
-	# Node их не касается. Имена файлов случайные, кэш браузера — на год.
-	handle_path /api/consolidation/uploads/* {
+	# фото жалоб «Консолидации» — с диска (папка uploads тома node-persist,
+	# пишет dotnet). Имена файлов случайные — кэш браузера на год.
+	handle /api/consolidation/uploads/* {
+		uri strip_prefix /api/consolidation/uploads
 		root * /srv/node-persist/uploads
-		header Cache-Control "public, max-age=31536000, immutable"
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
-	# жалобы, Excel-отчёты (ConsolidationEndpoints.cs); фото — блоком выше
-	handle /api/consolidation/complaints* {
+	# фото РК и превью (/rk-photos/<имя>, /rk-photos/thumb/<имя>) — с диска
+	# (том rk-photos, пишет dotnet). Имена случайные — кэш на год.
+	handle /rk-photos/* {
+		uri strip_prefix /rk-photos
+		root * /srv/rk-photos
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle /api/* {
 		reverse_proxy dotnet:5080
 	}
-	handle /api/consolidation/export/* {
-		reverse_proxy dotnet:5080
-	}
-	# «ЕО в работе» серверным токеном WMS (MonitorEndpoints.cs)
-	handle /api/monitor/live {
-		reverse_proxy dotnet:5080
-	}
-	# служебное: «Обновлено», запрос обновления, автообновление, перекличка (SystemEndpoints.cs)
-	handle /api/status {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/request-fetch {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/mark-updated {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/auto-fetch-settings {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/admin/auto-fetch-settings {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/rollcall {
-		reverse_proxy dotnet:5080
-	}
-	# нарушения (видео до 500 МБ), исполнители без учётки, справочник товаров
-	# WMS для раскладки КДК — ViolationEndpoints.cs, WmsProxyEndpoints.cs
-	handle /api/violations* {
-		reverse_proxy dotnet:5080
-	}
+	# видео «Нарушений» (с перемоткой, только со входом) — ViolationEndpoints.cs
 	handle /violation-videos/* {
 		reverse_proxy dotnet:5080
 	}
-	handle /api/empl/find-unregistered {
-		reverse_proxy dotnet:5080
+
+	# Файлы сборки Vite в /assets/ содержат хеш в имени (index-Ab12Cd.js) и
+	# после сборки не меняются — кэш на год. Отсутствующий бандл — честный 404,
+	# а не index.html (иначе браузер падал на разборе HTML как JS).
+	handle /assets/* {
+		root * /srv/site
+		# годовой кэш — только существующим файлам, не ответу 404
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
 	}
-	handle /api/wms/products-by-id {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/zgz/* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/report/* {
-		reverse_proxy dotnet:5080
-	}
-	# выработка сотрудник × смена — «Итоги смены» и нормы (2026-10-29)
-	handle /api/stats/workload {
-		reverse_proxy dotnet:5080
-	}
-	# расстановка товара по оборачиваемости (2026-10-29)
-	handle /api/stats/slotting {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/receiving/period-rows {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/receiving/known {
-		reverse_proxy dotnet:5080
-	}
-	# сохранение выгрузок WMS (тело до 300 МБ) — WmsSaveEndpoints.cs
-	handle /api/save-fetched-data {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/stock-moves/save {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/placement/save {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/receiving/save {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/remains/save {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/shift-data/count* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/stats/shift-data/delete* {
-		reverse_proxy dotnet:5080
-	}
-	# веса товаров (админ): Excel, данные из WMS — ProductWeightsAdminEndpoints.cs
-	handle /api/vs/admin/product-weights* {
-		reverse_proxy dotnet:5080
-	}
-	# отчёт по РК, ящикам и ТЧ — ShipmentReportEndpoints.cs
-	handle /api/shipments/report {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/product-weights {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/product-weights/missing {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/auth/* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/admin/roles* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/admin/pending* {
-		reverse_proxy dotnet:5080
-	}
-	handle /api/vs/admin/users* {
-		reverse_proxy dotnet:5080
-	}
-	# «Объединение остатков» (2026-07-27) — сравнение выгрузки остатков по МХ
-	# (Excel) с выгрузкой задач комплектации (CSV), см.
-	# backend-dotnet/Endpoints/StockConsolidationEndpoints.cs.
-	handle /api/reports/stock-consolidation* {
-		reverse_proxy dotnet:5080
-	}
-	# Мотивация аутсорса (2026-09-25) — учётки людей из актов и расчёт
-	# часов по норме, см. backend-dotnet/Services/MotivationService.cs.
-	handle /api/motivation/* {
-		reverse_proxy dotnet:5080
-	}
+	# Остальное — сайт (одностраничное приложение): существующий файл или
+	# index.html. no-cache — после выкатки браузер сразу получает новые бандлы.
 	handle {
-		reverse_proxy node:3009
+		root * /srv/site
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
 	}
 }
 
