@@ -33,9 +33,9 @@ import ShiftSummaryPage from '@/pages/shift-summary/ShiftSummaryPage'
 import PickingGapsPage from '@/pages/picking/PickingGapsPage'
 import MotivationPage from '@/pages/motivation/MotivationPage'
 import ViolationsPage from '@/pages/violations/ViolationsPage'
-import ConsolidationFormPage from '@/pages/consolidation-form/ConsolidationFormPage'
+import ConsolidationFormPage from '@/pages/consolidation/ConsolidationFormPage'
 import StatsPage from '@/pages/stats/StatsPage'
-import StockConsolidationPage from '@/pages/stock-consolidation/StockConsolidationPage'
+import StockMergePage from '@/pages/stock-merge/StockMergePage'
 import ExtensionPage from '@/pages/extension/ExtensionPage'
 
 // Песочница дизайна без роутера — переключение между готовыми страницами
@@ -51,7 +51,7 @@ const PAGES = {
   'supply-plan': SupplyPlanPage,
   monitor: MonitorPage,
   reports: ReportsPage,
-  'stock-consolidation': StockConsolidationPage,
+  'stock-consolidation': StockMergePage,
   receive: ReceivePage,
   tsd: TsdIssuePage,
   'picking-piece': PieceSelectionPage,

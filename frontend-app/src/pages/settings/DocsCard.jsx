@@ -6,7 +6,7 @@ import { EditableCell } from '@/components/ui/editable-cell'
 import { SettingCard } from './SettingCard'
 import { Field, theadCls, thCls, trCls, tableWrapCls } from './ui'
 import { Building2, FileText } from 'lucide-react'
-import { DEFAULT_ACT_CONSTANTS, loadActConstants, saveActConstants } from '../shift-plan/actConstants'
+import { DEFAULT_ACT_CONSTANTS, loadActConstants, saveActConstants } from '../motivation/actConstants'
 
 const LS_COMPANY_FULL_NAMES = 'sz_company_full_names'
 const LS_FINE_AMOUNT = 'sz_fine_amount'

@@ -1,6 +1,15 @@
 // Мотивация аутсорса — вспомогательные функции страницы (MotivationPage.jsx).
 
-export { fmtNum, todayStr } from '../shift-plan/format'
+export function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function fmtNum(value, digits = 0) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '—'
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
 
 export const SHIFT_LABELS = { day: 'День', night: 'Ночь' }
 

@@ -589,16 +589,6 @@ public class RouteService
             .Select(WithTotals).ToList();
     }
 
-    private class ReportCell
-    {
-        public double Shipped;
-        public double? Received;
-        public double ShippedBoxes;
-        public double? ReceivedBoxes;
-        public double ShippedThermalCovers;
-        public double? ReceivedThermalCovers;
-    }
-
     public async Task<int> DeleteRoutesByIdsAsync(List<string> ids)
     {
         if (ids.Count == 0) return 0;
