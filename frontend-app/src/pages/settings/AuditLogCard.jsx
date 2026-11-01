@@ -12,7 +12,7 @@ import { History, RefreshCw, ChevronRight } from 'lucide-react'
 import { SettingCard } from './SettingCard'
 
 // Журнал действий на сайте: кто, когда и что изменил (пишет dotnet, AuditLog.cs).
-// Записи старше года удаляются. Видят админ и разработчик.
+// Записи старше года удаляются. Видит только разработчик.
 
 const mskDate = (shiftDays = 0) => new Date(Date.now() + 3 * 3600_000 + shiftDays * 86400_000).toISOString().slice(0, 10)
 const fmtAt = iso => new Date(iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })

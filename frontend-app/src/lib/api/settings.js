@@ -116,7 +116,7 @@ export async function addNewEmployees(executors) {
   })
 }
 
-// Журнал действий на сайте (Настройки → Журнал, админ): период — даты по Москве,
+// Журнал действий на сайте (Настройки → Журнал, только разработчик): период — даты по Москве,
 // login/q — фильтры, beforeId — следующая страница (записи старше этого id)
 export async function getAuditLog({ from, to, login, q, beforeId } = {}) {
   const params = new URLSearchParams({ from, to })

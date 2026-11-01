@@ -238,7 +238,7 @@ public static class AuditLog
         return text.Length > 300 ? text[..300] + "…" : text;
     }
 
-    // ─── просмотр (Настройки → Журнал, админ) ────────────────────────────────
+    // ─── просмотр (Настройки → Журнал, только разработчик) ───────────────────
 
     public static void MapAuditEndpoints(this WebApplication app)
     {
@@ -294,7 +294,10 @@ public static class AuditLog
                 while (await r.ReadAsync()) users.Add(new { login = r.GetString(0), name = r.IsDBNull(1) ? null : r.GetString(1) });
             }
             return Results.Json(new { items, hasMore, users });
-        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter<VsAdminRequiredFilter>();
+        }).AddEndpointFilter<VsSessionRequiredFilter>().AddEndpointFilter(async (fctx, next) =>
+            (fctx.HttpContext.Items["vsSession"] as VsSession)?.Role == "developer"
+                ? await next(fctx)
+                : Results.Json(new { error = "Журнал действий доступен только разработчику" }, statusCode: 403));
     }
 }
 

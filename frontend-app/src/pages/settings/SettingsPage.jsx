@@ -28,7 +28,7 @@ const TAB_DEFS = [
   { key: 'access', label: 'Доступ', Icon: Lock },
   { key: 'docs', label: 'Документы', Icon: FileText },
   { key: 'system', label: 'Система', Icon: SettingsIcon },
-  { key: 'audit', label: 'Журнал', Icon: History, adminOnly: true },
+  { key: 'audit', label: 'Журнал', Icon: History, developerOnly: true },
 ]
 
 export default function SettingsPage() {
@@ -55,8 +55,8 @@ export default function SettingsPage() {
   // Менеджеру в оригинале был доступен только раздел Telegram — после его
   // удаления (бот больше не используется) у менеджера в Настройках нет ни
   // одной секции, это отражает реальные права доступа, а не баг вёрстки.
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'developer'
-  const visibleTabs = isNonManager ? TAB_DEFS.filter(t => !t.adminOnly || isAdmin) : []
+  const isDeveloper = currentUser?.role === 'developer'
+  const visibleTabs = isNonManager ? TAB_DEFS.filter(t => !t.developerOnly || isDeveloper) : []
 
   const [activeTab, setActiveTab] = useState('employees')
   useEffect(() => {
@@ -124,7 +124,7 @@ export default function SettingsPage() {
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ZgzDataCard />}
           </TabsContent>
 
-          {isAdmin && (
+          {isDeveloper && (
             <TabsContent value="audit" className="space-y-4">
               <AuditLogCard />
             </TabsContent>
