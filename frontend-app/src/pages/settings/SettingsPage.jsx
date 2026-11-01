@@ -20,13 +20,15 @@ import { ReceivingRefreshCard } from './ReceivingRefreshCard'
 import { StatsPeriodRefreshCard } from './StatsPeriodRefreshCard'
 import { ZgzDataCard } from './ZgzDataCard'
 import { CellStoresCard } from './CellStoresCard'
-import { Users, Lock, FileText, Settings as SettingsIcon } from 'lucide-react'
+import { AuditLogCard } from './AuditLogCard'
+import { Users, Lock, FileText, History, Settings as SettingsIcon } from 'lucide-react'
 
 const TAB_DEFS = [
   { key: 'employees', label: 'Сотрудники', Icon: Users },
   { key: 'access', label: 'Доступ', Icon: Lock },
   { key: 'docs', label: 'Документы', Icon: FileText },
   { key: 'system', label: 'Система', Icon: SettingsIcon },
+  { key: 'audit', label: 'Журнал', Icon: History, adminOnly: true },
 ]
 
 export default function SettingsPage() {
@@ -53,7 +55,8 @@ export default function SettingsPage() {
   // Менеджеру в оригинале был доступен только раздел Telegram — после его
   // удаления (бот больше не используется) у менеджера в Настройках нет ни
   // одной секции, это отражает реальные права доступа, а не баг вёрстки.
-  const visibleTabs = isNonManager ? TAB_DEFS : []
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'developer'
+  const visibleTabs = isNonManager ? TAB_DEFS.filter(t => !t.adminOnly || isAdmin) : []
 
   const [activeTab, setActiveTab] = useState('employees')
   useEffect(() => {
@@ -120,6 +123,12 @@ export default function SettingsPage() {
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ZgzDataCard />}
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="audit" className="space-y-4">
+              <AuditLogCard />
+            </TabsContent>
+          )}
         </Tabs>
       )}
     </div>

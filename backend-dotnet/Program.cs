@@ -36,6 +36,7 @@ builder.Services.ConfigureHttpJsonOptions(opt =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connString));
 builder.Services.AddSingleton<ProductWeightsService>();
+builder.Services.AddHostedService<AuditCleanupService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<RouteService>();
 builder.Services.AddScoped<TsdService>();
@@ -72,6 +73,8 @@ app.Use(async (ctx, next) =>
         && (p == "/api/save-fetched-data" || (p.StartsWith("/api/stats/") && p.EndsWith("/save"))))
         BackendDotnet.Endpoints.WmsProxyEndpoints.InvalidateExecutors();
 });
+// журнал действий: кто что изменил на сайте (Настройки → Журнал)
+app.UseAuditLog();
 
 app.MapRouteEndpoints();
 app.MapShipmentEndpoints();
@@ -93,6 +96,7 @@ app.MapProductWeightsAdminEndpoints();
 app.MapShipmentReportEndpoints();
 app.MapConsolidationEndpoints();
 app.MapSupplyPlanEndpoints();
+app.MapAuditEndpoints();
 // неизвестный адрес API — честный 404 в JSON (ошибка в адресе не выглядит как «пустой ответ»)
 app.MapFallback("/api/{**path}", (HttpContext ctx) =>
     Results.Json(new { error = $"Нет такого адреса API: {ctx.Request.Method} {ctx.Request.Path}" }, statusCode: 404));

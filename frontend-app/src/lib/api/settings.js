@@ -1,4 +1,4 @@
-// Настройки: автообновление, сотрудники и проверка учёток, веса товаров, удаление данных за смену.
+// Настройки: автообновление, сотрудники и проверка учёток, веса товаров, удаление данных за смену, журнал действий.
 import { apiHeaders, req } from './core.js'
 
 export async function getAutoFetchSettings() {
@@ -114,4 +114,14 @@ export async function addNewEmployees(executors) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ executors }),
   })
+}
+
+// Журнал действий на сайте (Настройки → Журнал, админ): период — даты по Москве,
+// login/q — фильтры, beforeId — следующая страница (записи старше этого id)
+export async function getAuditLog({ from, to, login, q, beforeId } = {}) {
+  const params = new URLSearchParams({ from, to })
+  if (login) params.set('login', login)
+  if (q) params.set('q', q)
+  if (beforeId) params.set('beforeId', beforeId)
+  return req(`/api/vs/admin/audit?${params}`)
 }

@@ -320,6 +320,7 @@ public static class WarehouseSchema
         await ProductWeightsService.EnsureSchemaAsync(conn);
         await BackendDotnet.Endpoints.ShipmentReportEndpoints.EnsureSchemaAsync(conn);
         await BackendDotnet.Endpoints.ConsolidationEndpoints.EnsureSchemaAsync(conn);
+        await AuditLog.EnsureSchemaAsync(conn); // журнал действий на сайте
 
         // 0б) приёмка: SKU и штуки поставки (2026-10-23) — раньше не хранились
         if (await TableExists("wms_receiving"))
