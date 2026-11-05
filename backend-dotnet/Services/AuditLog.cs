@@ -88,7 +88,9 @@ public static class AuditLog
     private static readonly HashSet<string> Skip = new()
     {
         "POST /api/vs/auth/ping", "POST /api/vs/mark-updated",
-        "POST /api/save-fetched-data", "POST /api/stats/{op}/save", "POST /api/zgz/save",
+        "POST /api/save-fetched-data", "POST /api/zgz/save",
+        // маршруты заведены по одному на операцию (WmsSaveEndpoints), шаблона {op} нет
+        "POST /api/stats/placement/save", "POST /api/stats/receiving/save", "POST /api/stats/remains/save", "POST /api/stats/stock-moves/save",
         "POST /api/date/{date}/storage", "POST /api/rk/routes/{routeId}/eos/refresh", "POST /api/rk/photos",
         "POST /api/wms/products-by-id", "POST /api/stats/receiving/known", "POST /api/supply-plans/facts",
         "POST /api/consolidation/export/report1", "POST /api/consolidation/export/report2",

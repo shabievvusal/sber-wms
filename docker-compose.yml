@@ -57,6 +57,12 @@ services:
       - PG_USER=${PG_USER:-zlp}
       - PG_PASSWORD=${PG_PASSWORD}
       - RK_PHOTOS_DIR=/data/rk-photos
+      # без этого в лог шёл каждый SQL-запрос и каждый опрос страниц (несколько
+      # строк на запрос) — ротация вытесняла ошибки за пару часов. Запросы и
+      # так пишет Caddy; здесь — предупреждения, ошибки и свои сообщения сервера
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__Microsoft.AspNetCore=Warning
+      - Logging__LogLevel__Microsoft.EntityFrameworkCore=Warning
     volumes:
       # фото РК и превью — переживают пересборку (раньше лежали внутри контейнера)
       - rk-photos:/data/rk-photos

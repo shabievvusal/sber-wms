@@ -5,21 +5,20 @@ const SAMOKAT_STOCKS_URL = 'https://api.samokat.ru/wmsops-wwh/stocks/changes/sea
 
 export function _buildBodyForBrowser(options) {
   return {
-    productId: null,
-    parts: [],
     operationTypes: ['PICK_BY_LINE', 'PIECE_SELECTION_PICKING'],
-    sourceCellId: null,
-    targetCellId: null,
-    sourceHandlingUnitBarcode: null,
-    targetHandlingUnitBarcode: null,
-    operationStartedAtFrom: null,
-    operationStartedAtTo: null,
     operationCompletedAtFrom: options.operationCompletedAtFrom,
     operationCompletedAtTo: options.operationCompletedAtTo,
-    executorId: null,
     pageNumber: options.pageNumber || 1,
     pageSize: options.pageSize || 2000,
   }
+}
+
+// Только заданные фильтры, как шлёт сама WMS. С обновления WMS 05.11 (~13:45)
+// пустые фильтры (`parts: []`, `productId: null`, …) отсекают всё: ответ 200 с
+// пустым списком. Раньше тело было «полным шаблоном» с null — убрано.
+function _onlySetFilters(body) {
+  return Object.fromEntries(Object.entries(body).filter(([, v]) =>
+    v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)))
 }
 
 export async function _fetchOnePageFromBrowser(token, body) {
@@ -30,7 +29,7 @@ export async function _fetchOnePageFromBrowser(token, body) {
       'Content-Type': 'application/json',
       'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(_onlySetFilters(body)),
   })
   const text = await r.text()
   const trimmed = (text || '').trim().toLowerCase()

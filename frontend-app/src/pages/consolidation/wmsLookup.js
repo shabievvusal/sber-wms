@@ -161,13 +161,10 @@ export async function lookupViaBrowser(token, barcode, cell, createdAt, preScann
   const barcodeNorm = String(barcode || '').trim()
   const isZgh = String(cell || '').trim().toUpperCase().startsWith('ZGH')
   const win = lookupWindow(createdAt)
+  // только заданные фильтры: с обновления WMS 05.11 пустые (parts: [], …)
+  // отсекают всё — см. stockChanges.js
   const baseBody = {
-    productId: null, parts: [], operationTypes: [],
-    sourceCellId: null, targetCellId: null,
-    sourceHandlingUnitBarcode: null, targetHandlingUnitBarcode: null,
-    operationStartedAtFrom: null, operationStartedAtTo: null,
     operationCompletedAtFrom: win.from, operationCompletedAtTo: win.to,
-    executorId: null,
   }
 
   // ─── ЗГЗ: ЕО → кто её комплектовал ────────────────────────────────────────
