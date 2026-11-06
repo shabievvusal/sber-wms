@@ -448,6 +448,32 @@ public static class WarehouseSchema
                     ALTER TABLE wms_ops DROP COLUMN line_ids;
                   END IF;
                 END $$;");
+
+            // ключи строк комплектации — как строки детализации PowerBI
+            // (StatsService.GetMergeKeyFromLight): КДК — сотрудник + ЕО + ЕО + товар,
+            // хранение — то же + время шага. Строки, получившие один ключ, — одна
+            // строка PowerBI: остаётся первая, штуки суммируются, остальные удаляются.
+            // Удаляемые до конца запроса держат старый ключ — с новыми не столкнутся.
+            await Once("2026-11-06_wms_ops_powerbi_keys", @"
+                WITH k AS (
+                  SELECT id, warehouse_id, date, hour, quantity,
+                         CASE WHEN upper(operation_type) = 'PICK_BY_LINE' THEN 'kdk|' ELSE 'piece|' END
+                           || coalesce(executor_id, '') || '|' || coalesce(source_barcode, '') || '|' || coalesce(target_barcode, '')
+                           || '|' || coalesce(nullif(nomenclature_code, ''), product_name, '')
+                           || CASE WHEN upper(operation_type) = 'PICK_BY_LINE' THEN ''
+                                   ELSE '|' || coalesce(to_char(completed_at AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISSMS'), '') END AS nk
+                    FROM wms_ops
+                   WHERE upper(operation_type) IN ('PICK_BY_LINE', 'PIECE_SELECTION_PICKING')
+                ), r AS (
+                  SELECT id, nk,
+                         first_value(id) OVER (PARTITION BY warehouse_id, date, hour, nk ORDER BY id) AS keep,
+                         sum(quantity) OVER (PARTITION BY warehouse_id, date, hour, nk) AS q
+                    FROM k
+                ), del AS (
+                  DELETE FROM wms_ops w USING r WHERE w.id = r.id AND r.id <> r.keep
+                )
+                UPDATE wms_ops w SET merge_key = r.nk, quantity = r.q
+                  FROM r WHERE w.id = r.id AND r.id = r.keep");
         }
         catch (Exception err) { Console.WriteLine($"[schema] разовая правка данных не выполнена: {err.Message}"); }
     }

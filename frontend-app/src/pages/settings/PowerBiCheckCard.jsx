@@ -131,15 +131,49 @@ export function PowerBiCheckCard() {
     await p.save(wb, `сверка_PowerBI_${loaded.date}_${loaded.shift}_${type}.xlsx`)
   })
 
+  // сырые строки WMS смены — для поштучной сверки с детализацией PowerBI
+  const exportLines = () => runExport(`строки_WMS_${loaded.date}_${loaded.shift}.xlsx`, async p => {
+    const ExcelJS = await p.excel()
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Строки WMS')
+    ws.columns = [
+      { header: 'Сотрудник', key: 'fio', width: 32 },
+      { header: 'ID сотрудника', key: 'execId', width: 38 },
+      { header: 'Операция', key: 'type', width: 24 },
+      { header: 'ЕО-источник', key: 'srcHu', width: 16 },
+      { header: 'ЕО-получатель', key: 'tgtHu', width: 16 },
+      { header: 'Артикул', key: 'product', width: 14 },
+      { header: 'Ячейка', key: 'cell', width: 14 },
+      { header: 'Начало (UTC)', key: 'startedAt', width: 26 },
+      { header: 'Окончание (UTC)', key: 'completedAt', width: 26 },
+      { header: 'Было в ЕО', key: 'tgtOld', width: 9 },
+      { header: 'Стало в ЕО', key: 'tgtNew', width: 9 },
+      { header: 'Положено', key: 'qty', width: 9 },
+      { header: 'ID строки', key: 'id', width: 38 },
+    ]
+    const lines = loaded.lines
+    await p.stage('Заполняю строки…', lines.length)
+    for (const [i, l] of lines.entries()) {
+      ws.addRow({ ...l, qty: l.tgtNew != null && l.tgtOld != null ? l.tgtNew - l.tgtOld : null })
+      if (i % 2000 === 0) await p.step(i + 1)
+    }
+    await p.save(wb, `строки_WMS_${loaded.date}_${loaded.shift}.xlsx`)
+  })
+
   return (
     <SettingCard
       icon={Scale}
       title="Сверка комплектации с PowerBI"
       subtitle="Одна смена из WMS, посчитанная разными способами, и цифры нашего сайта. Красным — где сайт расходится со строкой PowerBI («ЕО-источник + ЕО-получатель + товар») или штуками «положено»."
       actions={result && (
-        <Button size="sm" variant="secondary" onClick={() => exportXlsx().catch(err => toast.error(err.message))}>
-          <Download className="size-3.5" /> Excel
-        </Button>
+        <>
+          <Button size="sm" variant="secondary" onClick={() => exportXlsx().catch(err => toast.error(err.message))}>
+            <Download className="size-3.5" /> Excel
+          </Button>
+          <Button size="sm" variant="secondary" title="Все строки журнала WMS за смену (с часом запаса) — для поштучной сверки" onClick={() => exportLines().catch(err => toast.error(err.message))}>
+            <Download className="size-3.5" /> Строки WMS
+          </Button>
+        </>
       )}
     >
       <div className="flex flex-wrap items-center gap-2">

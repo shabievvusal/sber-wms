@@ -73,8 +73,18 @@ public partial class StatsService
         return a != "" && weightMap.TryGetValue(a, out var g) ? g : 0;
     }
 
-    // ─── Merge-key (аналог getMergeKeyFromLight из storage.js) ─────────────────
+    // ─── Merge-key: строка комплектации = строка детализации PowerBI ───────────
     //
+    // С 06.11.2026 — как PowerBI (сверка 05.11, 113 сотрудников):
+    //  КДК — сотрудник + ЕО-источник + ЕО-получатель + товар: строки WMS одного
+    //    ключа — одна строка, штуки суммируются (раньше — ячейка + товар: две
+    //    строки PowerBI с разными ЕО сливались в одну);
+    //  хранение — каждый шаг: тот же ключ + время завершения (PowerBI повторы
+    //    «ЕО + ЕО + товар» не склеивает; время шага стабильно между выгрузками,
+    //    ID строки WMS — нет, см. ниже).
+    // Старые строки переводятся на эти ключи разово (WarehouseSchema.RunDataFixesAsync).
+    //
+    // Прежнее описание (до 06.11.2026):
     // PICK_BY_LINE (КДК) — составной ключ исполнитель+ячейка+товар: одна и та
     // же раскладка может прийти несколькими сырыми записями, их нужно
     // схлопнуть в одну. PIECE_SELECTION_PICKING (Хранение) — тоже составной
@@ -89,37 +99,29 @@ public partial class StatsService
     // что id уникален на каждую под-запись одного и того же отбора, а не на
     // сам отбор, из-за чего счётчик СЗ устойчиво завышался в разы и
     // продолжал расти дальше.)
-    private static string GetMergeKeyFromLight(string? operationType, string? type, string? executor, string? cell, string? nomenclatureCode, string? productName, string? itemId, string? targetBarcode = null)
+    // время шага в ключе (UTC, до миллисекунд) — так же его строит SQL разового
+    // перевода ключей: to_char(completed_at AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISSMS')
+    public const string StepTimeFormat = "yyyyMMddHHmmssfff";
+
+    private static string GetMergeKeyFromLight(string? operationType, string? type, string? executorId, string? sourceBarcode, string? targetBarcode, string? nomenclatureCode, string? productName, string? itemId, DateTime? completedAtUtc)
     {
         var t = (operationType ?? type ?? "").ToUpperInvariant();
-        if (t == "PICK_BY_LINE")
-        {
-            var exec = executor ?? "";
-            var c = cell ?? "";
-            var product = !string.IsNullOrEmpty(nomenclatureCode) ? nomenclatureCode : (productName ?? "");
-            return $"task|{exec}|{c}|{product}";
-        }
+        var product = !string.IsNullOrEmpty(nomenclatureCode) ? nomenclatureCode : (productName ?? "");
+        var hus = $"{executorId ?? ""}|{sourceBarcode ?? ""}|{targetBarcode ?? ""}|{product}";
+        if (t == "PICK_BY_LINE") return $"kdk|{hus}";
         if (t == "PIECE_SELECTION_PICKING")
-        {
-            var exec = executor ?? "";
-            var c = cell ?? "";
-            var product = !string.IsNullOrEmpty(nomenclatureCode) ? nomenclatureCode : (productName ?? "");
-            var tb = targetBarcode ?? "";
-            return $"piece|{exec}|{c}|{product}|{tb}";
-        }
+            return $"piece|{hus}|{completedAtUtc?.ToString(StepTimeFormat, CultureInfo.InvariantCulture) ?? ""}";
         return $"id|{itemId ?? ""}";
     }
 
+    // СЗ комплектации — одна строка (ключ строки уже включает сотрудника; у
+    // строк, записанных до перевода ключей, — тоже). Везде, где считаются СЗ
+    // комплектации, — только через эту функцию.
     private static string GetTaskKeySummary(WmsOpEntity item)
     {
         var type = (item.OperationType ?? "").ToUpperInvariant();
-        if (type == "PICK_BY_LINE")
-        {
-            var exec = item.ExecutorId ?? "";
-            var cell = item.Cell ?? "";
-            var product = !string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode : (item.ProductName ?? "");
-            return $"kdk|{exec}|{cell}|{product}";
-        }
+        if ((type == "PICK_BY_LINE" || type == "PIECE_SELECTION_PICKING") && !string.IsNullOrEmpty(item.MergeKey))
+            return $"{item.ExecutorId ?? ""}|{item.MergeKey}";
         if (!string.IsNullOrEmpty(item.ItemId)) return $"op|{item.ItemId}";
         var ts = item.CompletedAt ?? item.StartedAt;
         var tsStr = ts.HasValue ? ts.Value.ToString("o", CultureInfo.InvariantCulture) : "";

@@ -32,6 +32,8 @@ export function normalize(it) {
     tgtHu: it.targetAddress?.handlingUnitBarcode || '',
     product: it.product?.nomenclatureCode || it.product?.name || '',
     at: Date.parse(it.operationCompletedAt),
+    startedAt: it.operationStartedAt || '',
+    completedAt: it.operationCompletedAt || '',
     tgtOld: num(tq.oldQuantity), tgtNew: num(tq.newQuantity),
     srcOld: num(sq.oldQuantity), srcNew: num(sq.newQuantity),
     raw: it,
@@ -64,7 +66,8 @@ const getPath = (obj, path) => path.split('.').reduce((o, k) => (o == null ? und
 export function buildVariants(idFields = []) {
   return [
     { key: 'lines', group: 'СЗ', label: 'Строк журнала', hint: 'каждая строка WMS — одно СЗ', unique: null },
-    { key: 'ours', group: 'СЗ', label: 'Как у нас сейчас', hint: 'хранение — по ID строки; КДК — сотрудник + ячейка + товар', unique: l => (l.type === 'PICK_BY_LINE' ? `kdk|${l.cell}|${l.product}` : `op|${l.id}`) },
+    // правило сайта с 06.11.2026 (StatsService.GetMergeKeyFromLight)
+    { key: 'ours', group: 'СЗ', label: 'Как у нас сейчас', hint: 'КДК — ЕО + ЕО + товар; хранение — то же + время шага', unique: l => (l.type === 'PICK_BY_LINE' ? `kdk|${l.srcHu}|${l.tgtHu}|${l.product}` : `piece|${l.srcHu}|${l.tgtHu}|${l.product}|${l.at}`) },
     // строка детализации PowerBI = «ЕО 1 + ЕО 2 + артикул» (сверка 05.11.2026)
     { key: 'srcTgtProduct', group: 'СЗ', label: 'ЕО-источник + ЕО-получатель + товар', hint: 'как строка детализации PowerBI', unique: l => `${l.srcHu}|${l.tgtHu}|${l.product}` },
     { key: 'hu', group: 'СЗ', label: 'ЕО-получателей', hint: 'уникальные ЕО, куда собирали', unique: l => l.tgtHu || `nohu|${l.id}` },

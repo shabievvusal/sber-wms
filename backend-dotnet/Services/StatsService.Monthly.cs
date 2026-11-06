@@ -32,9 +32,8 @@ public partial class StatsService
                 if (!isKdk && !isPallet && !isStorage) continue;
 
                 var company = ResolveCompany(idMap, item.ExecutorId) ?? "—";
-                var taskKey = isKdk
-                    ? $"task|{item.Executor ?? ""}|{item.Cell ?? ""}|{(!string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode : item.ProductName) ?? ""}"
-                    : $"id|{item.ItemId ?? ""}";
+                // СЗ — по ключу строки, как во всей статистике (= строки детализации PowerBI)
+                var taskKey = isPallet ? $"id|{item.ItemId ?? ""}" : GetTaskKeySummary(item);
 
                 if (!dayByCompany.TryGetValue(company, out var dc))
                     dc = (new HashSet<string>(), 0, 0, 0, 0, 0, new HashSet<string>());

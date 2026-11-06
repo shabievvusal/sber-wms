@@ -54,7 +54,9 @@ public static class WmsSaveEndpoints
                 var t0 = DateTime.UtcNow;
                 var items = await ReadItemsAsync(ctx);
                 var newEmployees = await svc.FindNewEmployeesAsync(items);
-                var (added, _) = await InChunks(items, async c => { var a = await svc.IngestOpsAsync(c); return (a, 0); });
+                // одним заходом, не кусками: штуки строк WMS с одним ключом суммируются
+                // в пределах захода — разнесённые по кускам, они дали бы неполные суммы
+                var added = await svc.IngestOpsAsync(items);
                 await state.SetAsync("last-run", new JsonObject { ["lastRun"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") });
                 return Results.Json(new
                 {

@@ -334,12 +334,7 @@ public partial class StatsService
                 }
                 var type = (item.OperationType ?? "").ToUpperInvariant();
                 if (type == "PIECE_SELECTION_PICKING") cell.Item1++;
-                else if (type == "PICK_BY_LINE")
-                {
-                    var productId = !string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode : (!string.IsNullOrEmpty(item.ProductName) ? item.ProductName : "no-product");
-                    var targetCell = !string.IsNullOrEmpty(item.Cell) ? item.Cell : "no-target-cell";
-                    cell.Item2.Add($"{productId}||{targetCell}");
-                }
+                else if (type == "PICK_BY_LINE") cell.Item2.Add(GetTaskKeySummary(item));
                 if (type == "PIECE_SELECTION_PICKING" || type == "PICK_BY_LINE")
                 {
                     var zoneKey = (item.Cell ?? "").Split('-')[0].ToUpperInvariant();
@@ -350,7 +345,7 @@ public partial class StatsService
                         var zk2 = (col, zoneKey);
                         var e = zt.TryGetValue(zk2, out var ex) ? ex : (0, new HashSet<string>());
                         if (type == "PIECE_SELECTION_PICKING") e.Item1++;
-                        else e.Item2.Add($"{(!string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode : (!string.IsNullOrEmpty(item.ProductName) ? item.ProductName : "no-product"))}||{(!string.IsNullOrEmpty(item.Cell) ? item.Cell : "no-target-cell")}");
+                        else e.Item2.Add(GetTaskKeySummary(item));
                         zt[zk2] = e;
                     }
                     var productName = item.ProductName;
@@ -670,8 +665,9 @@ public partial class StatsService
             var cell = (targetAddr != null ? GetStr(targetAddr.Value, "cellAddress") : null)
                 ?? (sourceAddr != null ? GetStr(sourceAddr.Value, "cellAddress") : null) ?? "";
 
-            var targetBarcodeForKey = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
-            var mergeKey = GetMergeKeyFromLight(operationType, type, executor, cell, nomenclatureCode, productName, GetStr(raw, "id"), targetBarcodeForKey);
+            var sourceBarcode = sourceAddr != null ? (GetStr(sourceAddr.Value, "handlingUnitBarcode") ?? "") : "";
+            var targetBarcode = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
+            var mergeKey = GetMergeKeyFromLight(operationType, type, executorId, sourceBarcode, targetBarcode, nomenclatureCode, productName, GetStr(raw, "id"), completedAtUtc);
 
             var sourceQty = GetObj(raw, "sourceQuantity");
             var targetQty = GetObj(raw, "targetQuantity");
