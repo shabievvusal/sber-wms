@@ -430,9 +430,25 @@ public partial class StatsService
                 if (zoneTasksByEmp.TryGetValue(executorId, out var ztRow))
                     foreach (var ((zcol, zone), v) in ztRow)
                         if (order.Contains(zcol)) zoneTasks[zone] = zoneTasks.GetValueOrDefault(zone) + v.Pieces + v.Kdk.Count;
+                // по часам × зонам — для выбора зон в таблице (сумма по выбранным)
+                var byHourZoneTasks = new Dictionary<string, Dictionary<string, int>>();
+                if (ztRow != null)
+                    foreach (var ((zcol, zone), v) in ztRow)
+                    {
+                        if (!order.Contains(zcol)) continue;
+                        var hk = zcol.ToString();
+                        if (!byHourZoneTasks.TryGetValue(hk, out var m)) byHourZoneTasks[hk] = m = new();
+                        m[zone] = m.GetValueOrDefault(zone) + v.Pieces + v.Kdk.Count;
+                    }
+                var byHourZoneWeight = new Dictionary<string, Dictionary<string, decimal>>();
+                foreach (var col in order)
+                    if (hourMap.TryGetValue(col, out var hc) && hc.Item5.Count > 0)
+                        byHourZoneWeight[col.ToString()] = new Dictionary<string, decimal>(hc.Item5);
                 heRows.Add(new Dictionary<string, object?>
                 {
                     ["zoneTasks"] = zoneTasks,
+                    ["byHourZoneTasks"] = byHourZoneTasks,
+                    ["byHourZoneWeight"] = byHourZoneWeight,
                     ["name"] = name,
                     ["executorId"] = executorId,
                     ["company"] = ResolveCompanyForRow(executorId),

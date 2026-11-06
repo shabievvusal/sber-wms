@@ -6,6 +6,9 @@ import {
   getElapsedShiftMinutes, hourRangeLabel, isKdkZoneKey, shortFio, zoneColor, zoneLabel,
 } from './format'
 import { Select } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ChevronDown } from 'lucide-react'
 
 const thCls = 'h-8 border px-2 text-center text-[11px] whitespace-nowrap'
 const tdCls = 'border px-2 py-1.5 text-center text-[13px] whitespace-nowrap'
@@ -115,7 +118,9 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
   // компании rows (см. StatsPage.jsx: mergedEmployeeRows), поэтому фильтр по
   // компании учитывается сам по себе, без отдельной проводки.
   const [filterHour, setFilterHour] = useState('')
-  const [filterZone, setFilterZone] = useState('')
+  // Выбранные зоны (несколько): все числа таблицы — только по ним (часы, «Итого»,
+  // вес, строки «Итого»/«Среднее»); сотрудники без операций в них скрыты.
+  const [zones, setZones] = useState([])
 
   const shiftMinutes = useMemo(() => getElapsedShiftMinutes(dateStr, shift), [dateStr, shift])
   const isReceiving = operation === 'receiving'
@@ -124,9 +129,10 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
   // Итоги по зонам (комплектация): столбец на каждую зону, где за смену были
   // задачи. zoneTasks — задачи тем же счётом, что «Итого» (сумма по зонам =
   // итог); вес — из byZone { зона: { count, weightGrams } }.
+  const zonesActive = zones.length > 0 && !isReceiving
   const zoneCols = useMemo(
-    () => isOperationStats ? [] : zoneCatalog.filter(z => rows.some(r => zoneTaskCount(r, z.key) > 0)),
-    [zoneCatalog, rows, isOperationStats]
+    () => isOperationStats ? [] : zoneCatalog.filter(z => rows.some(r => zoneTaskCount(r, z.key) > 0) && (!zonesActive || zones.includes(z.key))),
+    [zoneCatalog, rows, isOperationStats, zonesActive, zones]
   )
 
   const enriched = useMemo(() => rows.map(r => {
@@ -143,15 +149,38 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
   }
   const sortArrow = col => sortCol === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ' ↕'
 
+  // строки по выбранным зонам: СЗ и вес по часам — сумма по этим зонам
+  // (byHourZoneTasks / byHourZoneWeight: час → зона → значение)
+  const zoned = useMemo(() => {
+    if (!zonesActive) return enriched
+    return enriched.map(r => {
+      const byHour = {}, weightByHour = {}
+      let total = 0, storage = 0, kdk = 0
+      for (const h of hours) {
+        const t = r.byHourZoneTasks?.[h] || {}, w = r.byHourZoneWeight?.[h] || {}
+        let v = 0, g = 0
+        for (const z of zones) {
+          v += t[z] || 0
+          const gz = Number(w[z]) || 0
+          g += gz
+          if (isKdkZoneKey(z)) kdk += gz; else storage += gz
+        }
+        byHour[h] = v; weightByHour[h] = g; total += v
+      }
+      return { ...r, byHour, weightByHour, total, _weight: { storage, kdk, total: storage + kdk } }
+    }).filter(r => r.total > 0)
+  }, [enriched, zonesActive, zones, hours])
+
   const hourOnlyActive = !showIdlesCol && filterHour !== ''
-  const hourZoneActive = hourOnlyActive && filterZone !== ''
+  // час + зоны: только те, у кого в этот час были операции в выбранных зонах
+  const hourZoneActive = hourOnlyActive && zonesActive
   // Выбран час — показываем только его колонку (остальные 23 часа скрыты),
   // запрос пользователя 2026-07-15: «сделай отображение именно этого часа».
   // Не завязано на зону — зона доп. фильтрует СТРОКИ (ниже), а не колонки.
   const displayHours = hourOnlyActive ? [filterHour] : hours
   const visible = useMemo(
-    () => hourZoneActive ? enriched.filter(r => r.byHourZone?.[filterHour] === filterZone) : enriched,
-    [enriched, hourZoneActive, filterHour, filterZone]
+    () => hourZoneActive ? zoned.filter(r => (r.byHour?.[filterHour] || 0) > 0) : zoned,
+    [zoned, hourZoneActive, filterHour]
   )
 
   const sorted = useMemo(() => [...visible].sort((a, b) => {
@@ -227,21 +256,42 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
             <option value="">Все часы</option>
             {hours.map(h => <option key={h} value={h}>{hourRangeLabel(h)}</option>)}
           </Select>
-          <Select
-            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-            value={filterZone}
-            onChange={e => setFilterZone(e.target.value)}
-          >
-            <option value="">Все зоны</option>
-            {zoneCatalog.map(z => <option key={z.key} value={z.key}>{z.label}</option>)}
-          </Select>
-          {hourOnlyActive && (
-            <button type="button" className="text-xs font-medium text-primary" onClick={() => { setFilterHour(''); setFilterZone('') }}>
+          {!isReceiving && zoneCatalog.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-transparent px-3 text-sm">
+                  {zones.length === 0 ? 'Все зоны' : zones.length <= 3 ? zones.map(zoneLabel).join(', ') : `Зон: ${zones.length}`}
+                  <ChevronDown className="size-3.5 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 p-2">
+                <div className="max-h-72 space-y-0.5 overflow-auto">
+                  {zoneCatalog.map(z => (
+                    <label key={z.key} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                      <Checkbox
+                        checked={zones.includes(z.key)}
+                        onCheckedChange={on => setZones(prev => (on ? [...prev, z.key] : prev.filter(k => k !== z.key)))}
+                      />
+                      <span className="size-2.5 rounded-full" style={{ backgroundColor: z.light }} />
+                      {z.label}
+                    </label>
+                  ))}
+                </div>
+                {zones.length > 0 && (
+                  <button type="button" className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-muted" onClick={() => setZones([])}>
+                    Все зоны
+                  </button>
+                )}
+              </PopoverContent>
+            </Popover>
+          )}
+          {(hourOnlyActive || zonesActive) && (
+            <button type="button" className="text-xs font-medium text-primary" onClick={() => { setFilterHour(''); setZones([]) }}>
               Сбросить
             </button>
           )}
-          {hourZoneActive && (
-            <span className="text-xs text-muted-foreground">Найдено: {visible.length}</span>
+          {(hourZoneActive || zonesActive) && (
+            <span className="text-xs text-muted-foreground">Сотрудников: {visible.length}</span>
           )}
           {isReceiving && (
             <>
@@ -319,10 +369,10 @@ export function HourlyEmployeeTable({ mode, hours, rows, isOperationStats, opera
             )}
           </TableHeader>
           <TableBody>
-            {hourZoneActive && !sorted.length && (
+            {zonesActive && !sorted.length && (
               <TableRow>
                 <TableCell colSpan={displayHours.length + 8 + zoneCols.length} className="p-6 text-center text-muted-foreground">
-                  Никто не работал в выбранной зоне в этот час
+                  {hourZoneActive ? 'В этот час в выбранных зонах операций нет' : 'В выбранных зонах операций нет'}
                 </TableCell>
               </TableRow>
             )}
