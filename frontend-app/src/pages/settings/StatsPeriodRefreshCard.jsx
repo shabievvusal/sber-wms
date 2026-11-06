@@ -37,7 +37,7 @@ const DOMAINS = [
   {
     key: 'selection', label: 'Комплектация', defaultOn: true,
     run: async (token, r) => {
-      const res = await fetchDataViaBrowser(token, { operationCompletedAtFrom: r.from, operationCompletedAtTo: r.to })
+      const res = await fetchDataViaBrowser(token, { operationCompletedAtFrom: r.from, operationCompletedAtTo: r.to, replace: true })
       return { text: `${res.fetched}/+${res.added}`, newEmployees: res.newEmployees }
     },
   },

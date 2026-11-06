@@ -474,6 +474,26 @@ public static class WarehouseSchema
                 )
                 UPDATE wms_ops w SET merge_key = r.nk, quantity = r.q
                   FROM r WHERE w.id = r.id AND r.id = r.keep");
+
+            // ещё два правила PowerBI (сверка 05.11): строки «ЕО-источник = ЕО-получатель»
+            // (служебные, КДК, HH-1-1) не считаются; строки без количеств склеиваются —
+            // ключ хранения без времени шага (StatsService.Ops: IngestOpsAsync)
+            await Once("2026-11-06_wms_ops_powerbi_rules_2", @"
+                DELETE FROM wms_ops
+                 WHERE upper(operation_type) IN ('PICK_BY_LINE', 'PIECE_SELECTION_PICKING')
+                   AND coalesce(source_barcode, '') <> '' AND source_barcode = target_barcode;
+                WITH k AS (
+                  SELECT id, warehouse_id, date, hour,
+                         'piece|' || coalesce(executor_id, '') || '|' || coalesce(source_barcode, '') || '|' || coalesce(target_barcode, '')
+                           || '|' || coalesce(nullif(nomenclature_code, ''), product_name, '') || '|' AS nk
+                    FROM wms_ops
+                   WHERE upper(operation_type) = 'PIECE_SELECTION_PICKING' AND quantity IS NULL
+                ), r AS (
+                  SELECT id, nk, first_value(id) OVER (PARTITION BY warehouse_id, date, hour, nk ORDER BY id) AS keep FROM k
+                ), del AS (
+                  DELETE FROM wms_ops w USING r WHERE w.id = r.id AND r.id <> r.keep
+                )
+                UPDATE wms_ops w SET merge_key = r.nk FROM r WHERE w.id = r.id AND r.id = r.keep;");
         }
         catch (Exception err) { Console.WriteLine($"[schema] разовая правка данных не выполнена: {err.Message}"); }
     }

@@ -27,7 +27,8 @@ export async function fetchDataViaBrowser(token, options = {}) {
   // не на объём данных); на дневную смену (9-21, до 12 часов) это давало
   // много лишних секунд ожидания без единой пользы — .NET-инструмент и так
   // умеет разложить один большой батч по часам сам.
-  const saveRes = await postOwnBackend('/api/save-fetched-data', { items: allItems, total: allItems.length }, token)
+  // replace — выгрузка за полный период: сервер заменяет штуки суммой, а не берёт большее
+  const saveRes = await postOwnBackend('/api/save-fetched-data', { items: allItems, total: allItems.length, replace: !!options.replace }, token)
   if (saveRes.ok !== true) throw new Error(saveRes.error || 'Ошибка сохранения')
 
   return {

@@ -232,6 +232,7 @@ public partial class StatsService
             lastAt = e.LastAt,
         }).OrderByDescending(e => e.ops).ToList();
 
+        var taskHours = TaskHours(items);
         var byHour = new Dictionary<int, (HashSet<string> TaskKeys, HashSet<string> KdkTaskKeys, HashSet<string> Employees, HashSet<string> KomplEmployees, Dictionary<string, (int KdkNonFreezer, int KdkFreezer, int Storage, int StorageFreezer)> EmployeeOpCounts, int StorageOps)>();
         foreach (var item in items)
         {
@@ -246,9 +247,13 @@ public partial class StatsService
             var isKdk = type == "PICK_BY_LINE";
             var isStor = type == "PIECE_SELECTION_PICKING";
             var tk = GetTaskKeySummary(item);
-            hh.TaskKeys.Add(tk);
-            if (isKdk) hh.KdkTaskKeys.Add(tk);
-            else if (isStor) hh.StorageOps++;
+            // СЗ — только в своём часе (первой строки), см. TaskHours
+            if (taskHours.GetValueOrDefault(tk, h) == h)
+            {
+                hh.TaskKeys.Add(tk);
+                if (isKdk) hh.KdkTaskKeys.Add(tk);
+                else if (isStor) hh.StorageOps++;
+            }
             var exec = item.ExecutorId;
             if (!string.IsNullOrEmpty(exec))
             {
@@ -333,8 +338,10 @@ public partial class StatsService
                     cell = (0, new HashSet<string>(), 0, new Dictionary<string, int>(), new Dictionary<string, decimal>());
                 }
                 var type = (item.OperationType ?? "").ToUpperInvariant();
-                if (type == "PIECE_SELECTION_PICKING") cell.Item1++;
-                else if (type == "PICK_BY_LINE") cell.Item2.Add(GetTaskKeySummary(item));
+                // СЗ — только в своём часе (первой строки), см. TaskHours
+                var ownHour = taskHours.GetValueOrDefault(GetTaskKeySummary(item), h) == h;
+                if (ownHour && type == "PIECE_SELECTION_PICKING") cell.Item1++;
+                else if (ownHour && type == "PICK_BY_LINE") cell.Item2.Add(GetTaskKeySummary(item));
                 if (type == "PIECE_SELECTION_PICKING" || type == "PICK_BY_LINE")
                 {
                     var zoneKey = (item.Cell ?? "").Split('-')[0].ToUpperInvariant();
@@ -344,8 +351,8 @@ public partial class StatsService
                         if (!zoneTasksByEmp.TryGetValue(executorId, out var zt)) zoneTasksByEmp[executorId] = zt = new();
                         var zk2 = (col, zoneKey);
                         var e = zt.TryGetValue(zk2, out var ex) ? ex : (0, new HashSet<string>());
-                        if (type == "PIECE_SELECTION_PICKING") e.Item1++;
-                        else e.Item2.Add(GetTaskKeySummary(item));
+                        if (ownHour && type == "PIECE_SELECTION_PICKING") e.Item1++;
+                        else if (ownHour) e.Item2.Add(GetTaskKeySummary(item));
                         zt[zk2] = e;
                     }
                     var productName = item.ProductName;
@@ -598,7 +605,10 @@ public partial class StatsService
     // пересылает сюда сырые item'ы кусками. Почасовые JSON-файлы и утилиты
     // tools/* убраны 2026-10-31.
 
-    public async Task<int> IngestOpsAsync(List<System.Text.Json.JsonElement> rawItems)
+    // replace — выгрузка за полный период (перезагрузка дней, «Обновить данные»):
+    // штуки записанных строк заменяются суммой по выгрузке. Без него (автообновление
+    // за последний час) — только увеличиваются: неполная выгрузка не уменьшит сумму.
+    public async Task<int> IngestOpsAsync(List<System.Text.Json.JsonElement> rawItems, bool replace = false)
     {
         // Проход 1 — только распарсить (Date,Hour) каждого элемента (дёшево, без
         // обращений к БД), чтобы заранее собрать все уникальные пары и одним
@@ -667,7 +677,9 @@ public partial class StatsService
 
             var sourceBarcode = sourceAddr != null ? (GetStr(sourceAddr.Value, "handlingUnitBarcode") ?? "") : "";
             var targetBarcode = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
-            var mergeKey = GetMergeKeyFromLight(operationType, type, executorId, sourceBarcode, targetBarcode, nomenclatureCode, productName, GetStr(raw, "id"), completedAtUtc);
+            // ЕО-источник = ЕО-получатель — служебная операция внутри одной ЕО (КДК,
+            // ячейка HH-1-1, длится часами), не отбор: PowerBI её не считает
+            if (sourceBarcode != "" && sourceBarcode == targetBarcode) continue;
 
             var sourceQty = GetObj(raw, "sourceQuantity");
             var targetQty = GetObj(raw, "targetQuantity");
@@ -676,6 +688,9 @@ public partial class StatsService
             // завышало штуки, если в ЕО уже что-то лежало
             var qty = GetNum(targetQty, "newQuantity") - GetNum(targetQty, "oldQuantity")
                 ?? GetNum(sourceQty, "oldQuantity") - GetNum(sourceQty, "newQuantity");
+            // строки без количеств (товар без учёта штук) PowerBI склеивает в одну —
+            // для них шаг без времени
+            var mergeKey = GetMergeKeyFromLight(operationType, type, executorId, sourceBarcode, targetBarcode, nomenclatureCode, productName, GetStr(raw, "id"), qty == null ? null : completedAtUtc);
 
             // строка с таким ключом уже записана — копим сумму штук по выгрузке
             if (existingByDateHour[(date, hourShort)].TryGetValue(mergeKey, out var existingId))
@@ -728,15 +743,16 @@ public partial class StatsService
         }
         await _db.SaveChangesAsync();
 
-        // записанным строкам — большее из «записано» и «сумма по выгрузке»; меняются
-        // только те, где сумма больше (одним запросом на кусок)
+        // записанным строкам — сумма по выгрузке (replace) или большее из «записано» и
+        // «сумма»; меняются только строки, где число другое (одним запросом на кусок)
         var raised = 0;
+        var cond = replace ? "w.quantity IS DISTINCT FROM u.sum" : "COALESCE(w.quantity, 0) < u.sum";
         foreach (var chunk in sums.Chunk(5000))
         {
             raised += await _db.Database.ExecuteSqlRawAsync(@"
                 UPDATE wms_ops w SET quantity = u.sum
                   FROM unnest(@ids, @sums) AS u(id, sum)
-                 WHERE w.id = u.id AND COALESCE(w.quantity, 0) < u.sum",
+                 WHERE w.id = u.id AND " + cond,
                 new Npgsql.NpgsqlParameter("ids", chunk.Select(c => c.Key).ToArray()),
                 new Npgsql.NpgsqlParameter("sums", chunk.Select(c => c.Value).ToArray()));
         }

@@ -16,6 +16,9 @@ public static class WmsSaveEndpoints
     private const long MaxBodyBytes = 300L * 1024 * 1024;
     private const int ChunkSize = 10000;
 
+    // флаг replace из тела ({ value: { items, replace } }) — выгрузка за полный период
+    private static bool ReadReplace(HttpContext ctx) => ctx.Items["wmsReplace"] is true;
+
     private static async Task<List<JsonElement>> ReadItemsAsync(HttpContext ctx)
     {
         var sizeFeature = ctx.Features.Get<IHttpMaxRequestBodySizeFeature>();
@@ -30,6 +33,8 @@ public static class WmsSaveEndpoints
             && ((root.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Object && v.TryGetProperty("items", out items))
                 || root.TryGetProperty("items", out items))
             && items.ValueKind == JsonValueKind.Array;
+        var holder = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("value", out var vv) && vv.ValueKind == JsonValueKind.Object ? vv : root;
+        ctx.Items["wmsReplace"] = holder.ValueKind == JsonValueKind.Object && holder.TryGetProperty("replace", out var rp) && rp.ValueKind == JsonValueKind.True;
         return found ? items.EnumerateArray().ToList() : new();
     }
 
@@ -56,7 +61,7 @@ public static class WmsSaveEndpoints
                 var newEmployees = await svc.FindNewEmployeesAsync(items);
                 // одним заходом, не кусками: штуки строк WMS с одним ключом суммируются
                 // в пределах захода — разнесённые по кускам, они дали бы неполные суммы
-                var added = await svc.IngestOpsAsync(items);
+                var added = await svc.IngestOpsAsync(items, ReadReplace(ctx));
                 await state.SetAsync("last-run", new JsonObject { ["lastRun"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") });
                 return Results.Json(new
                 {

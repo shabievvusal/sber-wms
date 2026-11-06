@@ -67,7 +67,7 @@ export function buildVariants(idFields = []) {
   return [
     { key: 'lines', group: 'СЗ', label: 'Строк журнала', hint: 'каждая строка WMS — одно СЗ', unique: null },
     // правило сайта с 06.11.2026 (StatsService.GetMergeKeyFromLight)
-    { key: 'ours', group: 'СЗ', label: 'Как у нас сейчас', hint: 'КДК — ЕО + ЕО + товар; хранение — то же + время шага', unique: l => (l.type === 'PICK_BY_LINE' ? `kdk|${l.srcHu}|${l.tgtHu}|${l.product}` : `piece|${l.srcHu}|${l.tgtHu}|${l.product}|${l.at}`) },
+    { key: 'ours', group: 'СЗ', label: 'Как у нас сейчас', hint: 'КДК — ЕО + ЕО + товар; хранение — то же + время шага (строки без количеств — без времени)', unique: l => (l.type === 'PICK_BY_LINE' ? `kdk|${l.srcHu}|${l.tgtHu}|${l.product}` : `piece|${l.srcHu}|${l.tgtHu}|${l.product}|${l.tgtNew == null && l.srcOld == null ? '' : l.at}`) },
     // строка детализации PowerBI = «ЕО 1 + ЕО 2 + артикул» (сверка 05.11.2026)
     { key: 'srcTgtProduct', group: 'СЗ', label: 'ЕО-источник + ЕО-получатель + товар', hint: 'как строка детализации PowerBI', unique: l => `${l.srcHu}|${l.tgtHu}|${l.product}` },
     { key: 'hu', group: 'СЗ', label: 'ЕО-получателей', hint: 'уникальные ЕО, куда собирали', unique: l => l.tgtHu || `nohu|${l.id}` },
@@ -84,7 +84,8 @@ export function buildVariants(idFields = []) {
 /** Строки в окне смены и нужного типа → итог и по сотрудникам. */
 export function computeCheck(lines, { date, shift, shiftHours = 0, type = 'all', variants, companyById = new Map() }) {
   const { from, to } = shiftWindow(date, shift, shiftHours)
-  const inWindow = lines.filter(l => l.at >= from && l.at < to
+  // ЕО-источник = ЕО-получатель — служебные операции, PowerBI их не считает (как и сайт)
+  const inWindow = lines.filter(l => l.at >= from && l.at < to && !(l.srcHu && l.srcHu === l.tgtHu)
     && (type === 'all' || (type === 'storage' ? l.type === 'PIECE_SELECTION_PICKING' : l.type === 'PICK_BY_LINE')))
 
   const blank = () => Object.fromEntries(variants.map(v => [v.key, v.unique ? new Set() : 0]))

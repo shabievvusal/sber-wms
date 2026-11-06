@@ -236,11 +236,13 @@ export default function StatsPage() {
           }
         }
         const opts = { operationCompletedAtFrom: fromDate.toISOString(), operationCompletedAtTo: toDate.toISOString() }
+        // полный период смены (кнопка, полный автосбор) — штуки заменяются; скользящее окно — только растут
+        const selectionOpts = { ...opts, replace: !rangeOverride }
 
         // Размещение (с 2026-10-23) приходит в общей выгрузке журнала вместе
         // со спуском и пополнением — отдельный placement/tasks больше не нужен.
         const [selectionRes, remainsRes, movesRes] = await Promise.all([
-          fetchDataViaBrowser(token, opts),
+          fetchDataViaBrowser(token, selectionOpts),
           fetchRemainsViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
           fetchStockMovesViaBrowser(token, { dateFrom: opts.operationCompletedAtFrom, dateTo: opts.operationCompletedAtTo }).catch(err => ({ __error: err })),
         ])

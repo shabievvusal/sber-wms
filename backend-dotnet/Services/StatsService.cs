@@ -128,6 +128,21 @@ public partial class StatsService
         return $"op|{tsStr}|{item.Executor ?? ""}|{item.Cell ?? ""}";
     }
 
+    // Час СЗ — час завершения его первой строки. Строка КДК, чьи части попали в
+    // разные часы, в разбивке по часам считается один раз — сумма СЗ по часам
+    // равна итогу смены. Штуки и вес остаются в часах, где их положили.
+    private static Dictionary<string, int> TaskHours(IEnumerable<WmsOpEntity> items)
+    {
+        var first = new Dictionary<string, DateTime>();
+        foreach (var it in items)
+        {
+            if (it.CompletedAt == null) continue;
+            var k = GetTaskKeySummary(it);
+            if (!first.TryGetValue(k, out var at) || it.CompletedAt.Value < at) first[k] = it.CompletedAt.Value;
+        }
+        return first.ToDictionary(kv => kv.Key, kv => ToMoscow(kv.Value).Hour);
+    }
+
     private static void AddWeight(Dictionary<string, (decimal Storage, decimal Kdk, decimal Total)> map, string key, decimal grams, bool isKdk)
     {
         if (string.IsNullOrEmpty(key) || grams <= 0) return;

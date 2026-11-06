@@ -183,10 +183,14 @@ public partial class StatsService
         public string Name = "";
         public string Company = "—";
 
-        public void Add(WmsOpEntity item, string taskKey, bool isKdk, decimal grams, string shiftDate)
+        // taskKey = null — строка без своего СЗ (СЗ посчитан в другом часе): только штуки и вес
+        public void Add(WmsOpEntity item, string? taskKey, bool isKdk, decimal grams, string shiftDate)
         {
-            Tasks.Add(taskKey);
-            if (isKdk) KdkTasks.Add(taskKey);
+            if (taskKey != null)
+            {
+                Tasks.Add(taskKey);
+                if (isKdk) KdkTasks.Add(taskKey);
+            }
             Qty += item.Quantity ?? 0;
             Grams += grams;
             if (!string.IsNullOrEmpty(item.ExecutorId)) Executors.Add(item.ExecutorId);
@@ -246,6 +250,7 @@ public partial class StatsService
         foreach (var (dateStr, s) in ShiftSlices(dateFrom, dateTo, shift))
         {
             var items = await GetDateItemsAsync(dateStr, null, null, s);
+            var taskHours = TaskHours(items);
             foreach (var item in items)
             {
                 var type = (item.OperationType ?? "").ToUpperInvariant();
@@ -277,10 +282,12 @@ public partial class StatsService
                 Get(byDay, dateStr).Add(item, taskKey, isKdk, grams, dateStr);
                 if (hour >= 0)
                 {
-                    Get(byHour, hour).Add(item, taskKey, isKdk, grams, dateStr);
+                    // СЗ — только в своём часе (первой строки), см. TaskHours
+                    var ownHour = taskHours.GetValueOrDefault(taskKey, hour) == hour;
+                    Get(byHour, hour).Add(item, ownHour ? taskKey : null, isKdk, grams, dateStr);
                     var mkey = (string.IsNullOrEmpty(item.ExecutorId) ? (item.Executor ?? "—") : item.ExecutorId, hour);
                     if (!matrix.TryGetValue(mkey, out var set)) matrix[mkey] = set = new HashSet<string>();
-                    set.Add(taskKey);
+                    if (ownHour) set.Add(taskKey);
                 }
                 var pkey = article != "" ? article : (item.ProductName ?? "—");
                 var pa = Get(byProduct, pkey);
