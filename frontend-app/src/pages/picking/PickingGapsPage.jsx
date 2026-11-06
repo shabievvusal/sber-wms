@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { TEMP_OPTIONS, TEMP_LABELS, SHIPMENT_ORDER_STATUS_LABELS } from './constants'
 import { fmtNum, fmtDay, userName, dateToApiFrom, dateToApiTo } from './format'
 import { RefreshCw, Download, TriangleAlert, ChevronDown, ChevronRight } from 'lucide-react'
+import { runExport } from '@/lib/exportProgress'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 const DETAIL_BATCH = 5
@@ -207,40 +208,35 @@ export default function PickingGapsPage() {
     if (!report.length) { toast.info('Нет данных для экспорта'); return }
     setExporting(true)
     try {
-      const ExcelJS = (await import('exceljs')).default
-      const wb = new ExcelJS.Workbook()
-      wb.creator = 'ВС'; wb.created = new Date()
-      const ws = wb.addWorksheet('Пропуски в отборе')
+      const fileName = `Пропуски_в_отборе_${dateRange.from}_${dateRange.to}.xlsx`
+      await runExport(fileName, async p => {
+        const ExcelJS = await p.excel()
+        const wb = new ExcelJS.Workbook()
+        wb.creator = 'ВС'; wb.created = new Date()
+        const ws = wb.addWorksheet('Пропуски в отборе')
 
-      const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-      const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
-      const ALIGN = { horizontal: 'center', vertical: 'middle' }
+        const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+        const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+        const ALIGN = { horizontal: 'center', vertical: 'middle' }
 
-      const hdrRow = ws.addRow(['ФИО сотрудника', 'Компания', 'ЦФЗ', '№ отгрузки', 'Пропущенный товар'])
-      hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
-      ws.views = [{ state: 'frozen', ySplit: 1 }]
+        const hdrRow = ws.addRow(['ФИО сотрудника', 'Компания', 'ЦФЗ', '№ отгрузки', 'Пропущенный товар'])
+        hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
+        ws.views = [{ state: 'frozen', ySplit: 1 }]
 
-      for (const emp of report) {
-        for (const c of emp.cases) {
-          for (const productName of c.missed) {
-            const row = ws.addRow([emp.name, emp.company, c.address, c.shipmentNumber, productName])
-            row.eachCell({ includeEmpty: true }, cell => { cell.style = { border: BORDER, alignment: { vertical: 'middle', wrapText: true } } })
+        for (const emp of report) {
+          for (const c of emp.cases) {
+            for (const productName of c.missed) {
+              const row = ws.addRow([emp.name, emp.company, c.address, c.shipmentNumber, productName])
+              row.eachCell({ includeEmpty: true }, cell => { cell.style = { border: BORDER, alignment: { vertical: 'middle', wrapText: true } } })
+            }
           }
         }
-      }
 
-      ws.getColumn(1).width = 32; ws.getColumn(2).width = 20
-      ws.getColumn(3).width = 34; ws.getColumn(4).width = 16; ws.getColumn(5).width = 50
+        ws.getColumn(1).width = 32; ws.getColumn(2).width = 20
+        ws.getColumn(3).width = 34; ws.getColumn(4).width = 16; ws.getColumn(5).width = 50
 
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Пропуски_в_отборе_${dateRange.from}_${dateRange.to}.xlsx`
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-      toast.success('Файл .xlsx загружен')
+        await p.save(wb, fileName)
+      })
     } catch (err) {
       toast.error('Ошибка экспорта: ' + err.message)
     } finally {

@@ -13,6 +13,7 @@ import { Copy, Download, FileSpreadsheet, Image } from 'lucide-react'
 import { NUM, DEC1, PCT, addTable, titleRows } from '@/pages/stats/receivingExport'
 import { METRICS, OPS, compareToNorm, mainLabelOf, mainOf, opMeta, shiftSummary } from './workloadCalc'
 import { copyShiftPng, downloadShiftPng } from './shiftImage'
+import { runExport } from '@/lib/exportProgress'
 
 const WEEKDAY_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
 const SHIFT_GEN = { day: 'дневной', night: 'ночной' }
@@ -23,16 +24,6 @@ const fmtPct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 const fmtTrend = v => (v == null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`)
 const mskNow = () => new Date(Date.now() + 3 * 3600_000)
 const shiftDay = (d, k) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10) }
-
-async function saveWb(wb, fileName) {
-  const buf = await wb.xlsx.writeBuffer()
-  const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 function Segmented({ value, onChange, options }) {
   return (
@@ -123,42 +114,45 @@ function ShiftTab() {
   const fileBase = head ? head.file + (companyLabel ? `_${companyLabel.replace(/\s+/g, '_')}` : '') : 'итог'
 
   const exportXlsx = async () => {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'
-    const sub = [head.title, companyLabel].filter(Boolean).join(' · ')
-    {
-      const ws = wb.addWorksheet('Итог')
-      const cols = [
-        { header: 'Операция', key: 'label', width: 20 },
-        { header: 'Главный показатель', key: 'mainLabel', width: 13 },
-        { header: 'Значение', key: 'main', numFmt: NUM, width: 12 },
-        { header: 'Операций', key: 'units', numFmt: NUM, width: 11 },
-        { header: 'Штук', key: 'qty', numFmt: NUM, width: 12 },
-        { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 12 },
-        { header: 'Сотрудников', key: 'people', numFmt: NUM, width: 12 },
-        { header: 'В час на чел.', key: 'perHour', numFmt: DEC1, width: 12 },
-      ]
-      titleRows(ws, 'Итог смены', sub, cols.length)
-      addTable(ws, cols, blocks.map(b => ({ label: b.label, mainLabel: b.mainLabel, ...b.summary })))
-    }
-    for (const b of blocks) {
-      const ws = wb.addWorksheet(b.label)
-      const isRecv = b.key === 'receiving'
-      const cols = [
-        { header: 'Сотрудник', key: 'name', width: 34 },
-        { header: 'Компания', key: 'company', width: 18 },
-        ...(isRecv ? [{ header: 'SKU', key: 'sku', numFmt: NUM, width: 10 }] : []),
-        { header: b.unit[0].toUpperCase() + b.unit.slice(1), key: 'units', numFmt: NUM, width: 11 },
-        { header: 'Штук', key: 'qty', numFmt: NUM, width: 11 },
-        { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 11 },
-        { header: `${b.mainLabel} в час`, key: 'perHour', numFmt: DEC1, width: 11 },
-      ]
-      titleRows(ws, `${b.label} — ${sub}`, '«в час» — на отработанный час (часы, в которые были завершённые операции)', cols.length)
-      const main = mainOf(b)
-      addTable(ws, cols, b.summary.all.map(p => ({ ...p, kg: p.grams / 1000, perHour: p.hours ? p[main] / p.hours : null })), { freezeCols: 1, total: { name: 'Итого', sku: b.summary.sku, units: b.summary.units, qty: b.summary.qty, kg: b.summary.kg, perHour: b.summary.perHour } })
-    }
-    await saveWb(wb, `${fileBase}.xlsx`)
+    const fileName = `${fileBase}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'
+      const sub = [head.title, companyLabel].filter(Boolean).join(' · ')
+      {
+        const ws = wb.addWorksheet('Итог')
+        const cols = [
+          { header: 'Операция', key: 'label', width: 20 },
+          { header: 'Главный показатель', key: 'mainLabel', width: 13 },
+          { header: 'Значение', key: 'main', numFmt: NUM, width: 12 },
+          { header: 'Операций', key: 'units', numFmt: NUM, width: 11 },
+          { header: 'Штук', key: 'qty', numFmt: NUM, width: 12 },
+          { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 12 },
+          { header: 'Сотрудников', key: 'people', numFmt: NUM, width: 12 },
+          { header: 'В час на чел.', key: 'perHour', numFmt: DEC1, width: 12 },
+        ]
+        titleRows(ws, 'Итог смены', sub, cols.length)
+        addTable(ws, cols, blocks.map(b => ({ label: b.label, mainLabel: b.mainLabel, ...b.summary })))
+      }
+      for (const b of blocks) {
+        const ws = wb.addWorksheet(b.label)
+        const isRecv = b.key === 'receiving'
+        const cols = [
+          { header: 'Сотрудник', key: 'name', width: 34 },
+          { header: 'Компания', key: 'company', width: 18 },
+          ...(isRecv ? [{ header: 'SKU', key: 'sku', numFmt: NUM, width: 10 }] : []),
+          { header: b.unit[0].toUpperCase() + b.unit.slice(1), key: 'units', numFmt: NUM, width: 11 },
+          { header: 'Штук', key: 'qty', numFmt: NUM, width: 11 },
+          { header: 'Вес, кг', key: 'kg', numFmt: NUM, width: 11 },
+          { header: `${b.mainLabel} в час`, key: 'perHour', numFmt: DEC1, width: 11 },
+        ]
+        titleRows(ws, `${b.label} — ${sub}`, '«в час» — на отработанный час (часы, в которые были завершённые операции)', cols.length)
+        const main = mainOf(b)
+        addTable(ws, cols, b.summary.all.map(p => ({ ...p, kg: p.grams / 1000, perHour: p.hours ? p[main] / p.hours : null })), { freezeCols: 1, total: { name: 'Итого', sku: b.summary.sku, units: b.summary.units, qty: b.summary.qty, kg: b.summary.kg, perHour: b.summary.perHour } })
+      }
+      await p.save(wb, fileName)
+    })
   }
 
   return (
@@ -282,25 +276,28 @@ function NormTab() {
   const above = result ? result.people.filter(p => p.enough && p.toNorm != null && p.toNorm >= 1.2).length : 0
 
   const exportXlsx = async () => {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'
-    const ws = wb.addWorksheet('К норме')
-    const cols = [
-      { header: 'Сотрудник', key: 'name', width: 34 },
-      { header: 'Компания', key: 'company', width: 18 },
-      { header: 'Смен', key: 'shifts', numFmt: NUM, width: 8 },
-      { header: `Всего, ${mLabel}`, key: 'value', numFmt: NUM, width: 12 },
-      { header: `За смену, ${mLabel}`, key: 'perShift', numFmt: DEC1, width: 12 },
-      { header: `В час, ${mLabel}`, key: 'rate', numFmt: DEC1, width: 11 },
-      { header: 'К норме', key: 'toNorm', numFmt: PCT, width: 10 },
-      { header: 'Динамика', key: 'trend', numFmt: PCT, width: 10 },
-      { header: 'Мало данных', key: 'few', width: 10 },
-    ]
-    titleRows(ws, `${meta.label}: выработка к норме — ${fmtD(range.from)} — ${fmtD(range.to)}${shift ? ` (${SHIFT_GEN[shift]} смены)` : ''}`,
-      `норма — медиана выработки в час: ${fmtDec(result.norm)} ${mLabel}/ч (по ${result.counted} сотрудникам, у кого от ${minHours} часов). Динамика — вторая половина периода к первой.`, cols.length)
-    addTable(ws, cols, list.map(p => ({ ...p, few: p.enough ? '' : 'да' })), { freezeCols: 1 })
-    await saveWb(wb, `норма_${meta.label.replace(/\s+/g, '_')}_${range.from}_${range.to}.xlsx`)
+    const fileName = `норма_${meta.label.replace(/\s+/g, '_')}_${range.from}_${range.to}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'
+      const ws = wb.addWorksheet('К норме')
+      const cols = [
+        { header: 'Сотрудник', key: 'name', width: 34 },
+        { header: 'Компания', key: 'company', width: 18 },
+        { header: 'Смен', key: 'shifts', numFmt: NUM, width: 8 },
+        { header: `Всего, ${mLabel}`, key: 'value', numFmt: NUM, width: 12 },
+        { header: `За смену, ${mLabel}`, key: 'perShift', numFmt: DEC1, width: 12 },
+        { header: `В час, ${mLabel}`, key: 'rate', numFmt: DEC1, width: 11 },
+        { header: 'К норме', key: 'toNorm', numFmt: PCT, width: 10 },
+        { header: 'Динамика', key: 'trend', numFmt: PCT, width: 10 },
+        { header: 'Мало данных', key: 'few', width: 10 },
+      ]
+      titleRows(ws, `${meta.label}: выработка к норме — ${fmtD(range.from)} — ${fmtD(range.to)}${shift ? ` (${SHIFT_GEN[shift]} смены)` : ''}`,
+        `норма — медиана выработки в час: ${fmtDec(result.norm)} ${mLabel}/ч (по ${result.counted} сотрудникам, у кого от ${minHours} часов). Динамика — вторая половина периода к первой.`, cols.length)
+      addTable(ws, cols, list.map(p => ({ ...p, few: p.enough ? '' : 'да' })), { freezeCols: 1 })
+      await p.save(wb, fileName)
+    })
   }
 
   return (

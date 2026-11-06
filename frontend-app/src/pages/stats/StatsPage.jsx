@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
+import { runExport } from '@/lib/exportProgress'
 import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -439,251 +440,252 @@ export default function StatsPage() {
   const handleExportHourly = async () => {
     if (!mergedEmployeeRows.length) { toast.info('Нет данных для экспорта'); return }
     if (effectiveHeMode === 'idles') { toast.info('Переключитесь в режим «По СЗ» или «По часам» для экспорта'); return }
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'; wb.created = new Date()
-    const ws = wb.addWorksheet('Сотрудники по часам')
+    const fileName = `сотрудники_по_часам_${dateStr || 'дата'}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'; wb.created = new Date()
+      const ws = wb.addWorksheet('Сотрудники по часам')
 
-    const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-    const SUBHDR_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1D5DB' } }
-    const TOTAL_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
-    const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
-    const ALIGN = { horizontal: 'center', vertical: 'middle' }
+      const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+      const SUBHDR_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1D5DB' } }
+      const TOTAL_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+      const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+      const ALIGN = { horizontal: 'center', vertical: 'middle' }
 
-    const shiftLbl = shift === 'night' ? 'Ночная смена' : 'Дневная смена'
-    const modeLbl = effectiveHeMode === 'sz' ? 'По СЗ' : 'По часам'
-    const dateLbl = dateStr ? dateStr.split('-').reverse().join('.') : ''
+      const shiftLbl = shift === 'night' ? 'Ночная смена' : 'Дневная смена'
+      const modeLbl = effectiveHeMode === 'sz' ? 'По СЗ' : 'По часам'
+      const dateLbl = dateStr ? dateStr.split('-').reverse().join('.') : ''
 
-    const C_CO = 1, C_NAME = 2
-    const C_H0 = 3, C_HN = 2 + hours.length
-    // итоги по зонам (только комплектация) — столбцы сразу после «Итого»
-    const zoneCols = isOperationStats ? [] : buildZoneCatalog(mergedEmployeeRows).filter(z => mergedEmployeeRows.some(r => zoneTaskCount(r, z.key) > 0))
-    const C_TOT = C_HN + 1, C_Z0 = C_TOT + 1, C_ZN = C_TOT + zoneCols.length
-    const C_WORK = C_ZN + 1, C_SP = C_WORK + 1
-    const C_WS = C_SP + 1, C_WK = C_WS + 1, C_WT = C_WK + 1
-    const NCOLS = C_WT
+      const C_CO = 1, C_NAME = 2
+      const C_H0 = 3, C_HN = 2 + hours.length
+      // итоги по зонам (только комплектация) — столбцы сразу после «Итого»
+      const zoneCols = isOperationStats ? [] : buildZoneCatalog(mergedEmployeeRows).filter(z => mergedEmployeeRows.some(r => zoneTaskCount(r, z.key) > 0))
+      const C_TOT = C_HN + 1, C_Z0 = C_TOT + 1, C_ZN = C_TOT + zoneCols.length
+      const C_WORK = C_ZN + 1, C_SP = C_WORK + 1
+      const C_WS = C_SP + 1, C_WK = C_WS + 1, C_WT = C_WK + 1
+      const NCOLS = C_WT
 
-    ws.addRow([`Сотрудники по часам • ${modeLbl} • ${dateLbl} • ${shiftLbl}`])
-    if (NCOLS > 1) ws.mergeCells(1, 1, 1, NCOLS)
-    ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
-    ws.getRow(1).height = 26
+      ws.addRow([`Сотрудники по часам • ${modeLbl} • ${dateLbl} • ${shiftLbl}`])
+      if (NCOLS > 1) ws.mergeCells(1, 1, 1, NCOLS)
+      ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
+      ws.getRow(1).height = 26
 
-    const addLT = text => {
-      ws.addRow(new Array(NCOLS).fill(null))
-      const rn = ws.lastRow.number
-      if (NCOLS > 1) ws.mergeCells(rn, 1, rn, NCOLS)
-      ws.getRow(rn).getCell(1).value = text
-      ws.getRow(rn).getCell(1).style = { font: { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
-      ws.getRow(rn).height = 18; ws.getRow(rn).outlineLevel = 1
-    }
-    const addLR = (argb, name, desc) => {
-      ws.addRow(new Array(NCOLS).fill(null))
-      const rn = ws.lastRow.number
-      if (NCOLS > 3) ws.mergeCells(rn, 3, rn, NCOLS)
-      const r = ws.getRow(rn)
-      if (argb) r.getCell(1).style = { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb } }, border: BORDER, alignment: { vertical: 'middle', horizontal: 'center' } }
-      r.getCell(2).value = name; r.getCell(2).style = { font: { bold: true }, alignment: { vertical: 'middle' } }
-      r.getCell(3).value = desc; r.getCell(3).style = { alignment: { vertical: 'middle', wrapText: true } }
-      r.height = Math.max(18, Math.ceil((desc || '').length / 70) * 16); r.outlineLevel = 1
-    }
-    const addLS = () => { ws.addRow(new Array(NCOLS).fill(null)); ws.getRow(ws.lastRow.number).height = 6; ws.getRow(ws.lastRow.number).outlineLevel = 1 }
+      const addLT = text => {
+        ws.addRow(new Array(NCOLS).fill(null))
+        const rn = ws.lastRow.number
+        if (NCOLS > 1) ws.mergeCells(rn, 1, rn, NCOLS)
+        ws.getRow(rn).getCell(1).value = text
+        ws.getRow(rn).getCell(1).style = { font: { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
+        ws.getRow(rn).height = 18; ws.getRow(rn).outlineLevel = 1
+      }
+      const addLR = (argb, name, desc) => {
+        ws.addRow(new Array(NCOLS).fill(null))
+        const rn = ws.lastRow.number
+        if (NCOLS > 3) ws.mergeCells(rn, 3, rn, NCOLS)
+        const r = ws.getRow(rn)
+        if (argb) r.getCell(1).style = { fill: { type: 'pattern', pattern: 'solid', fgColor: { argb } }, border: BORDER, alignment: { vertical: 'middle', horizontal: 'center' } }
+        r.getCell(2).value = name; r.getCell(2).style = { font: { bold: true }, alignment: { vertical: 'middle' } }
+        r.getCell(3).value = desc; r.getCell(3).style = { alignment: { vertical: 'middle', wrapText: true } }
+        r.height = Math.max(18, Math.ceil((desc || '').length / 70) * 16); r.outlineLevel = 1
+      }
+      const addLS = () => { ws.addRow(new Array(NCOLS).fill(null)); ws.getRow(ws.lastRow.number).height = 6; ws.getRow(ws.lastRow.number).outlineLevel = 1 }
 
-    if (effectiveHeMode === 'sz') {
-      addLT('Легенда — цвета ячеек (режим «По СЗ»)')
-      addLR('FFFECACA', '< 50 задач/час', 'Низкая производительность')
-      addLR('FFFEF08A', '50–75 задач/час', 'Средняя производительность')
-      addLR('FFFFFFFF', '> 75 задач/час', 'Высокая производительность')
-    } else {
-      addLT('Легенда — цвета ячеек (режим «По часам», доминирующая зона)')
-      for (const z of buildZoneCatalog(mergedEmployeeRows)) addLR(hexToArgb(z.light), z.label, '')
-    }
-    addLS(); addLT('Описание колонок')
-    addLR(null, 'Компания', 'Название компании-подрядчика сотрудника')
-    addLR(null, 'Сотрудник', 'ФИО исполнителя')
-    addLR(null, 'ЧЧ', 'Кол-во задач за данный час смены; под числом — вес (кг)')
-    addLR(null, 'Итого', 'Суммарное кол-во задач за смену')
-    if (zoneCols.length) addLR(null, 'Итого по зонам', 'Кол-во задач сотрудника в каждой зоне за смену (в сумме = «Итого»); под числом — вес (кг)')
-    addLR(null, 'В работе', 'Время в работе: длительность смены − суммарные простои (ЧЧ:ММ)')
-    addLR(null, 'Старт/Пик', 'Верхняя строка — первая операция смены; нижняя — последняя')
-    addLR(null, 'Вес ХР', 'Суммарный вес в зоне хранения (кг)')
-    addLR(null, 'Вес КДК', 'Суммарный вес в зоне КДК (кг)')
-    addLR(null, 'Вес итог', 'Общий суммарный вес (хранение + КДК, кг)')
-    addLS()
+      if (effectiveHeMode === 'sz') {
+        addLT('Легенда — цвета ячеек (режим «По СЗ»)')
+        addLR('FFFECACA', '< 50 задач/час', 'Низкая производительность')
+        addLR('FFFEF08A', '50–75 задач/час', 'Средняя производительность')
+        addLR('FFFFFFFF', '> 75 задач/час', 'Высокая производительность')
+      } else {
+        addLT('Легенда — цвета ячеек (режим «По часам», доминирующая зона)')
+        for (const z of buildZoneCatalog(mergedEmployeeRows)) addLR(hexToArgb(z.light), z.label, '')
+      }
+      addLS(); addLT('Описание колонок')
+      addLR(null, 'Компания', 'Название компании-подрядчика сотрудника')
+      addLR(null, 'Сотрудник', 'ФИО исполнителя')
+      addLR(null, 'ЧЧ', 'Кол-во задач за данный час смены; под числом — вес (кг)')
+      addLR(null, 'Итого', 'Суммарное кол-во задач за смену')
+      if (zoneCols.length) addLR(null, 'Итого по зонам', 'Кол-во задач сотрудника в каждой зоне за смену (в сумме = «Итого»); под числом — вес (кг)')
+      addLR(null, 'В работе', 'Время в работе: длительность смены − суммарные простои (ЧЧ:ММ)')
+      addLR(null, 'Старт/Пик', 'Верхняя строка — первая операция смены; нижняя — последняя')
+      addLR(null, 'Вес ХР', 'Суммарный вес в зоне хранения (кг)')
+      addLR(null, 'Вес КДК', 'Суммарный вес в зоне КДК (кг)')
+      addLR(null, 'Вес итог', 'Общий суммарный вес (хранение + КДК, кг)')
+      addLS()
 
-    ws.addRow(new Array(NCOLS).fill(null)); ws.getRow(ws.lastRow.number).height = 4
+      ws.addRow(new Array(NCOLS).fill(null)); ws.getRow(ws.lastRow.number).height = 4
 
-    const grpRN = ws.lastRow.number + 1
-    const grpRow = ws.addRow(new Array(NCOLS).fill(''))
-    const subRN = ws.lastRow.number + 1
-    const subRow = ws.addRow(new Array(NCOLS).fill(''))
+      const grpRN = ws.lastRow.number + 1
+      const grpRow = ws.addRow(new Array(NCOLS).fill(''))
+      const subRN = ws.lastRow.number + 1
+      const subRow = ws.addRow(new Array(NCOLS).fill(''))
 
-    const gHdr = (argb = 'FF374151') => ({ font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb } }, border: BORDER, alignment: ALIGN })
-    const sHdr = { font: { bold: true }, fill: SUBHDR_FILL, border: BORDER, alignment: ALIGN }
+      const gHdr = (argb = 'FF374151') => ({ font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb } }, border: BORDER, alignment: ALIGN })
+      const sHdr = { font: { bold: true }, fill: SUBHDR_FILL, border: BORDER, alignment: ALIGN }
 
-    for (const [col, label] of [[C_CO, 'Компания'], [C_NAME, 'Сотрудник'], [C_TOT, 'Итого'], [C_WORK, 'В работе'], [C_SP, 'Старт/Пик'], [C_WS, 'Вес ХР'], [C_WK, 'Вес КДК'], [C_WT, 'Вес итог']]) {
-      ws.mergeCells(grpRN, col, subRN, col)
-      grpRow.getCell(col).value = label; grpRow.getCell(col).style = gHdr()
-    }
-    if (hours.length > 0) {
-      if (hours.length > 1) ws.mergeCells(grpRN, C_H0, grpRN, C_HN)
-      grpRow.getCell(C_H0).value = 'Задачи по часам'; grpRow.getCell(C_H0).style = gHdr('FF1E3A5F')
-      hours.forEach((col, i) => {
-        const s = (col + 23) % 24
-        subRow.getCell(C_H0 + i).value = `${String(s).padStart(2, '0')}–${String(col % 24).padStart(2, '0')}`
-        subRow.getCell(C_H0 + i).style = sHdr
-      })
-    }
-    if (zoneCols.length) {
-      if (zoneCols.length > 1) ws.mergeCells(grpRN, C_Z0, grpRN, C_ZN)
-      grpRow.getCell(C_Z0).value = 'Итого по зонам'; grpRow.getCell(C_Z0).style = gHdr('FF1E3A5F')
-      zoneCols.forEach((z, i) => {
-        subRow.getCell(C_Z0 + i).value = z.label
-        subRow.getCell(C_Z0 + i).style = { ...sHdr, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(z.light) } } }
-      })
-    }
-    grpRow.height = 20; subRow.height = 18
-    ws.views = [{ state: 'frozen', ySplit: subRN }]
+      for (const [col, label] of [[C_CO, 'Компания'], [C_NAME, 'Сотрудник'], [C_TOT, 'Итого'], [C_WORK, 'В работе'], [C_SP, 'Старт/Пик'], [C_WS, 'Вес ХР'], [C_WK, 'Вес КДК'], [C_WT, 'Вес итог']]) {
+        ws.mergeCells(grpRN, col, subRN, col)
+        grpRow.getCell(col).value = label; grpRow.getCell(col).style = gHdr()
+      }
+      if (hours.length > 0) {
+        if (hours.length > 1) ws.mergeCells(grpRN, C_H0, grpRN, C_HN)
+        grpRow.getCell(C_H0).value = 'Задачи по часам'; grpRow.getCell(C_H0).style = gHdr('FF1E3A5F')
+        hours.forEach((col, i) => {
+          const s = (col + 23) % 24
+          subRow.getCell(C_H0 + i).value = `${String(s).padStart(2, '0')}–${String(col % 24).padStart(2, '0')}`
+          subRow.getCell(C_H0 + i).style = sHdr
+        })
+      }
+      if (zoneCols.length) {
+        if (zoneCols.length > 1) ws.mergeCells(grpRN, C_Z0, grpRN, C_ZN)
+        grpRow.getCell(C_Z0).value = 'Итого по зонам'; grpRow.getCell(C_Z0).style = gHdr('FF1E3A5F')
+        zoneCols.forEach((z, i) => {
+          subRow.getCell(C_Z0 + i).value = z.label
+          subRow.getCell(C_Z0 + i).style = { ...sHdr, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(z.light) } } }
+        })
+      }
+      grpRow.height = 20; subRow.height = 18
+      ws.views = [{ state: 'frozen', ySplit: subRN }]
 
-    const wgKg = g => { const v = Number(g) || 0; return v > 0 ? +(v / 1000).toFixed(1) : '' }
-    const szFill = v => v < 50 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFECACA' } }
-      : v <= 75 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } : null
-    const zFill = k => k ? { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(zoneColor(k).light) } } : null
+      const wgKg = g => { const v = Number(g) || 0; return v > 0 ? +(v / 1000).toFixed(1) : '' }
+      const szFill = v => v < 50 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFECACA' } }
+        : v <= 75 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } : null
+      const zFill = k => k ? { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(zoneColor(k).light) } } : null
 
-    const shiftMinutes = getElapsedShiftMinutes(dateStr, shift)
-    const sortedRows = [...mergedEmployeeRows].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'ru') || b.total - a.total)
-    for (const r of sortedRows) {
-      const workedMin = computeWorkedMinutesInShift(r._idleTotalMinutes || 0, allowedIdleMinutes, shiftMinutes)
-      const fmt2 = n => String(Math.floor(n || 0)).padStart(2, '0')
-      const fmtT = iso => iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'
+      const shiftMinutes = getElapsedShiftMinutes(dateStr, shift)
+      const sortedRows = [...mergedEmployeeRows].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'ru') || b.total - a.total)
+      await p.stage('Заполняю таблицу…', sortedRows.length)
+      for (const [i, r] of sortedRows.entries()) {
+        await p.step(i + 1)
+        const workedMin = computeWorkedMinutesInShift(r._idleTotalMinutes || 0, allowedIdleMinutes, shiftMinutes)
+        const fmt2 = n => String(Math.floor(n || 0)).padStart(2, '0')
+        const fmtT = iso => iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'
 
-      const rowData = new Array(NCOLS).fill('')
-      rowData[C_CO - 1] = r.company || '—'
-      rowData[C_NAME - 1] = r.name
-      hours.forEach((col, i) => {
-        const v = r.byHour?.[col] || 0
-        const wg = r.weightByHour?.[col] || 0
-        if (v > 0) rowData[C_H0 - 1 + i] = wg > 0 ? `${v}\n${+(wg / 1000).toFixed(1)} кг` : v
-      })
-      rowData[C_TOT - 1] = r.total || 0
-      zoneCols.forEach((z, i) => {
-        const c = zoneTaskCount(r, z.key)
-        const g = Number(r.byZone?.[z.key]?.weightGrams) || 0
-        rowData[C_Z0 - 1 + i] = c > 0 ? (g > 0 ? `${c}\n${+(g / 1000).toFixed(1)} кг` : c) : ''
-      })
-      rowData[C_WORK - 1] = workedMin > 0 ? `${fmt2(workedMin / 60)}:${fmt2(workedMin % 60)}` : '—'
-      rowData[C_SP - 1] = `${fmtT(r.firstAt)}\n${fmtT(r.lastAt)}`
-      rowData[C_WS - 1] = wgKg(r._weightStorage) || '—'
-      rowData[C_WK - 1] = wgKg(r._weightKdk) || '—'
-      rowData[C_WT - 1] = wgKg((r._weightStorage || 0) + (r._weightKdk || 0)) || '—'
+        const rowData = new Array(NCOLS).fill('')
+        rowData[C_CO - 1] = r.company || '—'
+        rowData[C_NAME - 1] = r.name
+        hours.forEach((col, i) => {
+          const v = r.byHour?.[col] || 0
+          const wg = r.weightByHour?.[col] || 0
+          if (v > 0) rowData[C_H0 - 1 + i] = wg > 0 ? `${v}\n${+(wg / 1000).toFixed(1)} кг` : v
+        })
+        rowData[C_TOT - 1] = r.total || 0
+        zoneCols.forEach((z, i) => {
+          const c = zoneTaskCount(r, z.key)
+          const g = Number(r.byZone?.[z.key]?.weightGrams) || 0
+          rowData[C_Z0 - 1 + i] = c > 0 ? (g > 0 ? `${c}\n${+(g / 1000).toFixed(1)} кг` : c) : ''
+        })
+        rowData[C_WORK - 1] = workedMin > 0 ? `${fmt2(workedMin / 60)}:${fmt2(workedMin % 60)}` : '—'
+        rowData[C_SP - 1] = `${fmtT(r.firstAt)}\n${fmtT(r.lastAt)}`
+        rowData[C_WS - 1] = wgKg(r._weightStorage) || '—'
+        rowData[C_WK - 1] = wgKg(r._weightKdk) || '—'
+        rowData[C_WT - 1] = wgKg((r._weightStorage || 0) + (r._weightKdk || 0)) || '—'
 
-      const row = ws.addRow(rowData); row.height = 30
-      row.eachCell({ includeEmpty: true }, (cell, cn) => {
-        const hasNL = typeof cell.value === 'string' && cell.value.includes('\n')
-        const isTotCol = [C_TOT, C_WORK, C_WS, C_WK, C_WT].includes(cn) || (cn >= C_Z0 && cn <= C_ZN)
-        let fill = isTotCol ? TOTAL_FILL : undefined
-        if (cn >= C_H0 && cn <= C_HN) {
-          const v = r.byHour?.[hours[cn - C_H0]] || 0
-          if (v > 0) fill = (effectiveHeMode === 'hourly' ? zFill(r.byHourZone?.[hours[cn - C_H0]]) : szFill(v)) || undefined
-        }
-        cell.style = { border: BORDER, alignment: { ...ALIGN, wrapText: hasNL }, ...(fill ? { fill } : {}) }
-      })
-    }
+        const row = ws.addRow(rowData); row.height = 30
+        row.eachCell({ includeEmpty: true }, (cell, cn) => {
+          const hasNL = typeof cell.value === 'string' && cell.value.includes('\n')
+          const isTotCol = [C_TOT, C_WORK, C_WS, C_WK, C_WT].includes(cn) || (cn >= C_Z0 && cn <= C_ZN)
+          let fill = isTotCol ? TOTAL_FILL : undefined
+          if (cn >= C_H0 && cn <= C_HN) {
+            const v = r.byHour?.[hours[cn - C_H0]] || 0
+            if (v > 0) fill = (effectiveHeMode === 'hourly' ? zFill(r.byHourZone?.[hours[cn - C_H0]]) : szFill(v)) || undefined
+          }
+          cell.style = { border: BORDER, alignment: { ...ALIGN, wrapText: hasNL }, ...(fill ? { fill } : {}) }
+        })
+      }
 
-    ws.getColumn(C_CO).width = 18; ws.getColumn(C_NAME).width = 30
-    hours.forEach((_, i) => { ws.getColumn(C_H0 + i).width = 8 })
-    ws.getColumn(C_TOT).width = 8; ws.getColumn(C_WORK).width = 10; ws.getColumn(C_SP).width = 13
-    zoneCols.forEach((_, i) => { ws.getColumn(C_Z0 + i).width = 10 })
-    ws.getColumn(C_WS).width = 11; ws.getColumn(C_WK).width = 11; ws.getColumn(C_WT).width = 11
+      ws.getColumn(C_CO).width = 18; ws.getColumn(C_NAME).width = 30
+      hours.forEach((_, i) => { ws.getColumn(C_H0 + i).width = 8 })
+      ws.getColumn(C_TOT).width = 8; ws.getColumn(C_WORK).width = 10; ws.getColumn(C_SP).width = 13
+      zoneCols.forEach((_, i) => { ws.getColumn(C_Z0 + i).width = 10 })
+      ws.getColumn(C_WS).width = 11; ws.getColumn(C_WK).width = 11; ws.getColumn(C_WT).width = 11
 
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `сотрудники_по_часам_${dateStr || 'дата'}.xlsx`; a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-    toast.success('Файл .xlsx загружен')
+      await p.save(wb, fileName)
+    })
   }
 
   const handleExportIdles = async () => {
     if (!mergedEmployeeRows.length) { toast.info('Нет данных для экспорта'); return }
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'; wb.created = new Date()
-    const ws = wb.addWorksheet('Простои')
+    const fileName = `простои_${dateStr || 'дата'}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'; wb.created = new Date()
+      const ws = wb.addWorksheet('Простои')
 
-    const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-    const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
-    const ALIGN = { horizontal: 'center', vertical: 'middle' }
+      const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+      const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+      const ALIGN = { horizontal: 'center', vertical: 'middle' }
 
-    const shiftLbl = shift === 'night' ? 'Ночная смена' : 'Дневная смена'
-    const dateLbl = dateStr ? dateStr.split('-').reverse().join('.') : ''
+      const shiftLbl = shift === 'night' ? 'Ночная смена' : 'Дневная смена'
+      const dateLbl = dateStr ? dateStr.split('-').reverse().join('.') : ''
 
-    const NCOLS = 11
-    ws.addRow([`Простои • ${dateLbl} • ${shiftLbl}`])
-    ws.mergeCells(1, 1, 1, NCOLS)
-    ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
-    ws.getRow(1).height = 26
+      const NCOLS = 11
+      ws.addRow([`Простои • ${dateLbl} • ${shiftLbl}`])
+      ws.mergeCells(1, 1, 1, NCOLS)
+      ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
+      ws.getRow(1).height = 26
 
-    const hdrRow = ws.addRow(['Компания', 'Сотрудник', 'Простои, мин', 'Интервалы', 'Отработано', 'Итого СЗ', 'Старт', 'Пик', 'Вес ХР, кг', 'Вес КДК, кг', 'Вес итог, кг'])
-    hdrRow.height = 20
-    hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
-    ws.views = [{ state: 'frozen', ySplit: 2 }]
+      const hdrRow = ws.addRow(['Компания', 'Сотрудник', 'Простои, мин', 'Интервалы', 'Отработано', 'Итого СЗ', 'Старт', 'Пик', 'Вес ХР, кг', 'Вес КДК, кг', 'Вес итог, кг'])
+      hdrRow.height = 20
+      hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
+      ws.views = [{ state: 'frozen', ySplit: 2 }]
 
-    const fmtT = iso => iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'
-    const fmtMm = m => { const mm = Math.round(m || 0); return `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}` }
-    const wgKg = g => { const v = Number(g) || 0; return v > 0 ? +(v / 1000).toFixed(1) : '' }
+      const fmtT = iso => iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—'
+      const fmtMm = m => { const mm = Math.round(m || 0); return `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}` }
+      const wgKg = g => { const v = Number(g) || 0; return v > 0 ? +(v / 1000).toFixed(1) : '' }
 
-    const shiftMinutes = getElapsedShiftMinutes(dateStr, shift)
-    const sortedRows = [...mergedEmployeeRows].sort((a, b) => (b._idleTotalMinutes || 0) - (a._idleTotalMinutes || 0))
-    for (const r of sortedRows) {
-      const idleMin = r._idleTotalMinutes || 0
-      const hasIdle = !!r._idleIntervals
-      const workedMin = hasIdle ? computeWorkedMinutesInShift(idleMin, allowedIdleMinutes, shiftMinutes) : null
+      const shiftMinutes = getElapsedShiftMinutes(dateStr, shift)
+      const sortedRows = [...mergedEmployeeRows].sort((a, b) => (b._idleTotalMinutes || 0) - (a._idleTotalMinutes || 0))
+      await p.stage('Заполняю таблицу…', sortedRows.length)
+      for (const [i, r] of sortedRows.entries()) {
+        await p.step(i + 1)
+        const idleMin = r._idleTotalMinutes || 0
+        const hasIdle = !!r._idleIntervals
+        const workedMin = hasIdle ? computeWorkedMinutesInShift(idleMin, allowedIdleMinutes, shiftMinutes) : null
 
-      const row = ws.addRow([
-        r.company || '—', r.name, idleMin > 0 ? idleMin : '', r._idleIntervals || '',
-        workedMin != null ? fmtMm(workedMin) : '—', r.total || 0, fmtT(r.firstAt), fmtT(r.lastAt),
-        wgKg(r._weightStorage) || '', wgKg(r._weightKdk) || '', wgKg((r._weightStorage || 0) + (r._weightKdk || 0)) || '',
-      ])
-      row.height = 18
-      row.eachCell({ includeEmpty: true }, (cell, cn) => { cell.style = { border: BORDER, alignment: { ...ALIGN, wrapText: cn === 4 } } })
-      if (idleMin >= 60) row.getCell(3).style = { ...row.getCell(3).style, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFECACA' } } }
-      else if (idleMin >= 30) row.getCell(3).style = { ...row.getCell(3).style, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } }
-    }
+        const row = ws.addRow([
+          r.company || '—', r.name, idleMin > 0 ? idleMin : '', r._idleIntervals || '',
+          workedMin != null ? fmtMm(workedMin) : '—', r.total || 0, fmtT(r.firstAt), fmtT(r.lastAt),
+          wgKg(r._weightStorage) || '', wgKg(r._weightKdk) || '', wgKg((r._weightStorage || 0) + (r._weightKdk || 0)) || '',
+        ])
+        row.height = 18
+        row.eachCell({ includeEmpty: true }, (cell, cn) => { cell.style = { border: BORDER, alignment: { ...ALIGN, wrapText: cn === 4 } } })
+        if (idleMin >= 60) row.getCell(3).style = { ...row.getCell(3).style, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFECACA' } } }
+        else if (idleMin >= 30) row.getCell(3).style = { ...row.getCell(3).style, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } } }
+      }
 
-    ws.getColumn(1).width = 20; ws.getColumn(2).width = 32; ws.getColumn(3).width = 14
-    ws.getColumn(4).width = 42; ws.getColumn(5).width = 12; ws.getColumn(6).width = 10
-    ws.getColumn(7).width = 10; ws.getColumn(8).width = 10
-    ws.getColumn(9).width = 12; ws.getColumn(10).width = 12; ws.getColumn(11).width = 12
+      ws.getColumn(1).width = 20; ws.getColumn(2).width = 32; ws.getColumn(3).width = 14
+      ws.getColumn(4).width = 42; ws.getColumn(5).width = 12; ws.getColumn(6).width = 10
+      ws.getColumn(7).width = 10; ws.getColumn(8).width = 10
+      ws.getColumn(9).width = 12; ws.getColumn(10).width = 12; ws.getColumn(11).width = 12
 
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `простои_${dateStr || 'дата'}.xlsx`; a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-    toast.success('Файл .xlsx загружен')
+      await p.save(wb, fileName)
+    })
   }
 
   // Приёмка — свой многолистовой отчёт (receivingExport.js) по списку поставок
   // за ту же дату/смену или интервал «Дата завершения», с фильтром компании.
   const handleExportReceiving = async () => {
     try {
-      const res = await api.getReceivingRows(dateStr, { shift, ...(receivingRangeIso || {}) })
-      let rows = res?.rows || []
-      if (filterCompany === '__none__') rows = rows.filter(r => !r.company || r.company === '—')
-      else if (filterCompany !== '__all__') rows = rows.filter(r => r.company === filterCompany)
-      if (!rows.length) { toast.info('Нет данных для экспорта'); return }
-      const fmtMsk = s => s.replace('T', ' ').split(' ').map((p, i) => i === 0 ? p.split('-').reverse().join('.') : p).join(' ')
-      const periodLabel = receivingRange.from && receivingRange.to
-        ? `Завершены ${fmtMsk(receivingRange.from)} – ${fmtMsk(receivingRange.to)} (МСК)`
-        : `${dateStr.split('-').reverse().join('.')} · ${shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'}`
-      const suffix = receivingRange.from && receivingRange.to
-        ? `${receivingRange.from.replace(':', '-')}_${receivingRange.to.replace(':', '-')}`
-        : `${dateStr}_${shift}`
-      await exportReceivingXlsx(rows, {
-        periodLabel: filterCompany === '__all__' ? periodLabel : `${periodLabel} · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`,
-        fileName: `приемка_${suffix}.xlsx`,
+      await runExport('Приёмка — отчёт', async p => {
+        await p.stage('Загружаю данные с сервера…')
+        const res = await api.getReceivingRows(dateStr, { shift, ...(receivingRangeIso || {}) })
+        let rows = res?.rows || []
+        if (filterCompany === '__none__') rows = rows.filter(r => !r.company || r.company === '—')
+        else if (filterCompany !== '__all__') rows = rows.filter(r => r.company === filterCompany)
+        if (!rows.length) { toast.info('Нет данных для экспорта'); return }
+        const fmtMsk = s => s.replace('T', ' ').split(' ').map((p, i) => i === 0 ? p.split('-').reverse().join('.') : p).join(' ')
+        const periodLabel = receivingRange.from && receivingRange.to
+          ? `Завершены ${fmtMsk(receivingRange.from)} – ${fmtMsk(receivingRange.to)} (МСК)`
+          : `${dateStr.split('-').reverse().join('.')} · ${shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'}`
+        const suffix = receivingRange.from && receivingRange.to
+          ? `${receivingRange.from.replace(':', '-')}_${receivingRange.to.replace(':', '-')}`
+          : `${dateStr}_${shift}`
+        await exportReceivingXlsx(rows, {
+          periodLabel: filterCompany === '__all__' ? periodLabel : `${periodLabel} · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`,
+          fileName: `приемка_${suffix}.xlsx`,
+        }, p)
       })
     } catch (err) {
       toast.error('Не удалось выгрузить приёмку: ' + (err.message || err))
@@ -693,16 +695,20 @@ export default function StatsPage() {
   // Спуск/пополнение/размещение/остатки за смену — полный отчёт (opsExport.js).
   const handleExportOps = async () => {
     try {
-      const res = await api.getOpReport(operation, dateStr, dateStr, shift)
-      let ops = operation === 'remains' ? remainsOps(res?.rows || []) : groupMoves(res?.rows || [])
-      if (filterCompany === '__none__') ops = ops.filter(o => !o.company || o.company === '—')
-      else if (filterCompany !== '__all__') ops = ops.filter(o => o.company === filterCompany)
-      if (!ops.length) { toast.info('Нет данных для экспорта'); return }
-      const shiftLbl = shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'
-      const companyLbl = filterCompany === '__all__' ? '' : ` · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`
-      await exportMovesXlsx(operation, ops, {
-        periodLabel: `${dateStr.split('-').reverse().join('.')} · ${shiftLbl}${companyLbl}`,
-        fileName: `${OP_META[operation].file}_${dateStr}_${shift}.xlsx`,
+      await runExport(`${OP_META[operation].title} — отчёт`, async p => {
+        await p.stage('Загружаю данные с сервера…')
+        const res = await api.getOpReport(operation, dateStr, dateStr, shift)
+        await p.stage('Группирую операции…')
+        let ops = operation === 'remains' ? remainsOps(res?.rows || []) : groupMoves(res?.rows || [])
+        if (filterCompany === '__none__') ops = ops.filter(o => !o.company || o.company === '—')
+        else if (filterCompany !== '__all__') ops = ops.filter(o => o.company === filterCompany)
+        if (!ops.length) { toast.info('Нет данных для экспорта'); return }
+        const shiftLbl = shift === 'night' ? 'ночная смена 21:00–09:00' : 'дневная смена 09:00–21:00'
+        const companyLbl = filterCompany === '__all__' ? '' : ` · ${filterCompany === '__none__' ? 'без компании' : filterCompany}`
+        await exportMovesXlsx(operation, ops, {
+          periodLabel: `${dateStr.split('-').reverse().join('.')} · ${shiftLbl}${companyLbl}`,
+          fileName: `${OP_META[operation].file}_${dateStr}_${shift}.xlsx`,
+        }, p)
       })
     } catch (err) {
       toast.error('Не удалось выгрузить отчёт: ' + (err.message || err))
@@ -720,13 +726,16 @@ export default function StatsPage() {
     const sh = range ? (range.shift || undefined) : shift
     setSelectionReportBusy(true)
     try {
-      const report = await api.getOpReport('selection', from, to, sh)
-      if (!report?.totals?.tasks) { toast.info('Нет данных для отчёта'); return }
-      const shiftLbl = sh === 'day' ? 'дневная смена' : sh === 'night' ? 'ночная смена' : 'все смены'
-      const fmt = d => d.split('-').reverse().join('.')
-      await exportSelectionXlsx(report, {
-        periodLabel: from === to ? `${fmt(from)} · ${shiftLbl}` : `${fmt(from)} — ${fmt(to)} · ${shiftLbl}`,
-        fileName: `комплектация_${from === to ? from : from + '_' + to}${sh ? '_' + sh : ''}.xlsx`,
+      await runExport('Комплектация — отчёт', async p => {
+        await p.stage('Загружаю данные с сервера…')
+        const report = await api.getOpReport('selection', from, to, sh)
+        if (!report?.totals?.tasks) { toast.info('Нет данных для отчёта'); return }
+        const shiftLbl = sh === 'day' ? 'дневная смена' : sh === 'night' ? 'ночная смена' : 'все смены'
+        const fmt = d => d.split('-').reverse().join('.')
+        await exportSelectionXlsx(report, {
+          periodLabel: from === to ? `${fmt(from)} · ${shiftLbl}` : `${fmt(from)} — ${fmt(to)} · ${shiftLbl}`,
+          fileName: `комплектация_${from === to ? from : from + '_' + to}${sh ? '_' + sh : ''}.xlsx`,
+        }, p)
       })
     } catch (err) {
       toast.error('Не удалось выгрузить отчёт: ' + (err.message || err))

@@ -8,6 +8,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { SortableHead } from '@/components/ui/sortable-head'
 import { Download, Trash2 } from 'lucide-react'
 import { DT, NUM, PCT, addTable, excelDate, titleRows } from '@/pages/stats/receivingExport'
+import { runExport } from '@/lib/exportProgress'
 
 const mskDate = (shiftDays = 0) => new Date(Date.now() + 3 * 3600_000 + shiftDays * 86400_000).toISOString().slice(0, 10)
 const fmtD = d => (d ? d.split('-').reverse().join('.') : '')
@@ -76,29 +77,26 @@ export function LostEoJournal() {
   }
 
   const exportXlsx = async () => {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'
-    const period = `${fmtD(range.from)} — ${fmtD(range.to)}`
-    {
-      const ws = wb.addWorksheet('Найденные ЕО')
-      const cols = COLS.map(c => ({ header: c.label, key: c.key, width: c.key === 'note' ? 30 : c.key === 'pickers' ? 34 : c.key === 'hu' ? 16 : 18, ...(c.num ? { numFmt: NUM } : {}), ...(['foundAt', 'movedAt'].includes(c.key) ? { numFmt: DT } : {}) }))
-      titleRows(ws, `Журнал найденных ЕО — ${period}`, 'отмечены «Нашли» в поиске потеряшек', cols.length)
-      addTable(ws, cols, sorted.map(r => ({ ...r, foundAt: excelDate(r.foundAt), movedAt: excelDate(r.movedAt) })), { freezeCols: 2 })
-    }
-    for (const s of summary) {
-      const ws = wb.addWorksheet(s.title)
-      const cols = [{ header: s.title, key: 'name', width: 36 }, { header: 'Найдено ЕО', key: 'count', numFmt: NUM, width: 12 }, { header: 'Доля', key: 'share', numFmt: PCT, width: 10 }]
-      titleRows(ws, `${s.title}: найденные ЕО — ${period}`, `всего найдено ЕО: ${(rows || []).length}`, cols.length)
-      addTable(ws, cols, s.items, { freezeCols: 1 })
-    }
-    const buf = await wb.xlsx.writeBuffer()
-    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `найденные_ЕО_${range.from}_${range.to}.xlsx`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    const fileName = `найденные_ЕО_${range.from}_${range.to}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'
+      const period = `${fmtD(range.from)} — ${fmtD(range.to)}`
+      {
+        const ws = wb.addWorksheet('Найденные ЕО')
+        const cols = COLS.map(c => ({ header: c.label, key: c.key, width: c.key === 'note' ? 30 : c.key === 'pickers' ? 34 : c.key === 'hu' ? 16 : 18, ...(c.num ? { numFmt: NUM } : {}), ...(['foundAt', 'movedAt'].includes(c.key) ? { numFmt: DT } : {}) }))
+        titleRows(ws, `Журнал найденных ЕО — ${period}`, 'отмечены «Нашли» в поиске потеряшек', cols.length)
+        addTable(ws, cols, sorted.map(r => ({ ...r, foundAt: excelDate(r.foundAt), movedAt: excelDate(r.movedAt) })), { freezeCols: 2 })
+      }
+      for (const s of summary) {
+        const ws = wb.addWorksheet(s.title)
+        const cols = [{ header: s.title, key: 'name', width: 36 }, { header: 'Найдено ЕО', key: 'count', numFmt: NUM, width: 12 }, { header: 'Доля', key: 'share', numFmt: PCT, width: 10 }]
+        titleRows(ws, `${s.title}: найденные ЕО — ${period}`, `всего найдено ЕО: ${(rows || []).length}`, cols.length)
+        addTable(ws, cols, s.items, { freezeCols: 1 })
+      }
+      await p.save(wb, fileName)
+    })
   }
 
   return (

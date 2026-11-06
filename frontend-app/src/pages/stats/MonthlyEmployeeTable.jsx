@@ -7,6 +7,7 @@ import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { RefreshCw } from 'lucide-react'
 import { Select } from '@/components/ui/select'
+import { runExport } from '@/lib/exportProgress'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 const thCls = 'h-8 px-2 text-[11px]'
@@ -123,66 +124,65 @@ export function MonthlyEmployeeTable({ exportRef, rangeRef, zoneCatalog = [] }) 
 
   const handleExport = async () => {
     if (!sorted?.length) return
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'; wb.created = new Date()
-    const ws = wb.addWorksheet('Производительность')
+    const fileName = `производительность_${loadedRange?.from}_${loadedRange?.to}${zone ? '_' + zone : ''}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'; wb.created = new Date()
+      const ws = wb.addWorksheet('Производительность')
 
-    const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-    const TOTAL_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
-    const AVG_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }
-    const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
-    const ALIGN = { horizontal: 'center', vertical: 'middle' }
+      const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+      const TOTAL_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } }
+      const AVG_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }
+      const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+      const ALIGN = { horizontal: 'center', vertical: 'middle' }
 
-    const zoneLbl = selectedZone ? ` • ${selectedZone.label}` : ''
-    const shiftLbl = shift === 'night' ? ' • Ночь' : shift === 'day' ? ' • День' : ''
-    const title = `Производительность • ${fmtDate(loadedRange?.from)} — ${fmtDate(loadedRange?.to)}${zoneLbl}${shiftLbl}`
+      const zoneLbl = selectedZone ? ` • ${selectedZone.label}` : ''
+      const shiftLbl = shift === 'night' ? ' • Ночь' : shift === 'day' ? ' • День' : ''
+      const title = `Производительность • ${fmtDate(loadedRange?.from)} — ${fmtDate(loadedRange?.to)}${zoneLbl}${shiftLbl}`
 
-    const NCOLS = 7
-    ws.addRow([title])
-    ws.mergeCells(1, 1, 1, NCOLS)
-    ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
-    ws.getRow(1).height = 26
+      const NCOLS = 7
+      ws.addRow([title])
+      ws.mergeCells(1, 1, 1, NCOLS)
+      ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
+      ws.getRow(1).height = 26
 
-    const avgLabels = ['Ср. СЗ', rateHourLabel, rateMinLabel]
-    const avgValues = [avg?.avgTotal ?? '', avg?.avgSzPerHour ?? '', avg?.avgSzPerMin ?? '']
-    avgLabels.forEach((lbl, i) => {
-      const labelCell = ws.getRow(1).getCell(9 + i * 2)
-      labelCell.value = lbl
-      labelCell.style = { font: { bold: true, size: 11 }, fill: AVG_FILL, border: BORDER, alignment: ALIGN }
-      const valCell = ws.getRow(1).getCell(10 + i * 2)
-      valCell.value = avgValues[i]
-      valCell.style = { font: { bold: true, size: 13 }, fill: AVG_FILL, border: BORDER, alignment: ALIGN }
-    })
-
-    const headers = ['Дата', 'Компания', 'ФИО', totalLabel, 'В работе', rateHourLabel, rateMinLabel]
-    const hdrRow = ws.addRow(headers)
-    hdrRow.height = 20
-    hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
-    ws.views = [{ state: 'frozen', ySplit: 2 }]
-
-    ws.getColumn(9).width = 12; ws.getColumn(10).width = 10
-    ws.getColumn(11).width = 12; ws.getColumn(12).width = 10
-    ws.getColumn(13).width = 14; ws.getColumn(14).width = 10
-
-    for (const r of sorted) {
-      const row = ws.addRow([fmtDate(r.date), r.company || '—', r.name, r.total, fmtWorked(r.workedMinutes), r.szPerHour ?? '', r.szPerMin ?? ''])
-      row.height = 18
-      row.eachCell({ includeEmpty: true }, (cell, cn) => {
-        cell.style = { border: BORDER, alignment: ALIGN, ...(cn >= 4 ? { fill: TOTAL_FILL } : {}) }
+      const avgLabels = ['Ср. СЗ', rateHourLabel, rateMinLabel]
+      const avgValues = [avg?.avgTotal ?? '', avg?.avgSzPerHour ?? '', avg?.avgSzPerMin ?? '']
+      avgLabels.forEach((lbl, i) => {
+        const labelCell = ws.getRow(1).getCell(9 + i * 2)
+        labelCell.value = lbl
+        labelCell.style = { font: { bold: true, size: 11 }, fill: AVG_FILL, border: BORDER, alignment: ALIGN }
+        const valCell = ws.getRow(1).getCell(10 + i * 2)
+        valCell.value = avgValues[i]
+        valCell.style = { font: { bold: true, size: 13 }, fill: AVG_FILL, border: BORDER, alignment: ALIGN }
       })
-    }
 
-    ws.getColumn(1).width = 12; ws.getColumn(2).width = 22; ws.getColumn(3).width = 34
-    ws.getColumn(4).width = 12; ws.getColumn(5).width = 11; ws.getColumn(6).width = 10; ws.getColumn(7).width = 10
+      const headers = ['Дата', 'Компания', 'ФИО', totalLabel, 'В работе', rateHourLabel, rateMinLabel]
+      const hdrRow = ws.addRow(headers)
+      hdrRow.height = 20
+      hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
+      ws.views = [{ state: 'frozen', ySplit: 2 }]
 
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `производительность_${loadedRange?.from}_${loadedRange?.to}${zone ? '_' + zone : ''}.xlsx`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+      ws.getColumn(9).width = 12; ws.getColumn(10).width = 10
+      ws.getColumn(11).width = 12; ws.getColumn(12).width = 10
+      ws.getColumn(13).width = 14; ws.getColumn(14).width = 10
+
+      await p.stage('Заполняю таблицу…', sorted.length)
+      for (const [i, r] of sorted.entries()) {
+        await p.step(i + 1)
+        const row = ws.addRow([fmtDate(r.date), r.company || '—', r.name, r.total, fmtWorked(r.workedMinutes), r.szPerHour ?? '', r.szPerMin ?? ''])
+        row.height = 18
+        row.eachCell({ includeEmpty: true }, (cell, cn) => {
+          cell.style = { border: BORDER, alignment: ALIGN, ...(cn >= 4 ? { fill: TOTAL_FILL } : {}) }
+        })
+      }
+
+      ws.getColumn(1).width = 12; ws.getColumn(2).width = 22; ws.getColumn(3).width = 34
+      ws.getColumn(4).width = 12; ws.getColumn(5).width = 11; ws.getColumn(6).width = 10; ws.getColumn(7).width = 10
+
+      await p.save(wb, fileName)
+    })
   }
 
   useEffect(() => { if (exportRef) exportRef.current = handleExport })

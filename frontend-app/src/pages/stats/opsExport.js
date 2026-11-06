@@ -10,6 +10,7 @@ import {
   BORDER, DEC1, DT, KG, NUM, PCT, SUBHDR_FILL, TM,
   addTable, avg, durationMin, excelDate, hourLabel, kg, mskHour, round1, titleRows,
 } from './receivingExport'
+import { withExport } from '@/lib/exportProgress'
 
 export const OP_META = {
   movedown: { title: 'Спуск', file: 'спуск', keyCell: 'sourceCell', keyCellLabel: 'Ячейка хранения (откуда спускают)', unit: 'операций' },
@@ -88,17 +89,6 @@ export function aggregateOps(ops, keyFn) {
   return [...map.values()]
 }
 
-async function download(wb, fileName) {
-  const buf = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 function kpiSheet(wb, title, sub, kpi) {
   const ws = wb.addWorksheet('Сводка')
   titleRows(ws, title, sub, 3)
@@ -148,10 +138,15 @@ function matrixSheet(wb, title, sub, hourOrder, executors, valueOf) {
 
 // ── спуск / пополнение / размещение / остатки ───────────────────────────────
 
-export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
+// p — прогресс выгрузки (lib/exportProgress), если вызвано изнутри другой
+export function exportMovesXlsx(op, ops, { periodLabel, fileName }, p) {
+  return withExport(p, fileName, p => buildMovesXlsx(op, ops, { periodLabel, fileName }, p))
+}
+
+async function buildMovesXlsx(op, ops, { periodLabel, fileName }, p) {
   const meta = OP_META[op]
   const isRemains = op === 'remains'
-  const ExcelJS = (await import('exceljs')).default
+  const ExcelJS = await p.excel()
   const wb = new ExcelJS.Workbook()
   wb.creator = 'ВС'
   wb.created = new Date()
@@ -161,8 +156,14 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   const days = [...new Set(ops.map(o => o.shiftDate).filter(Boolean))].sort()
   const multiDay = days.length > 1
   const keyCell = o => o[meta.keyCell]
+  // прогресс — по листам книги
+  const sheetCount = 8 + (multiDay ? 1 : 0) + (isRemains ? 0 : 1) + (meta.sources ? 1 : 0)
+  let sheetNo = 0
+  const sheet = name => p.step(++sheetNo, sheetCount, `Лист «${name}»`)
+  await p.stage('Собираю листы…', sheetCount)
 
   // 1. Сводка
+  await sheet('Сводка')
   kpiSheet(wb, `${meta.title} — сводка`, sub, [
     ['Операций (ЕО)', T.ops, NUM],
     ['Позиций (товаров в ЕО)', T.positions, NUM],
@@ -176,6 +177,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   ])
 
   // 2. Сотрудники
+  await sheet('Сотрудники')
   const byExec = aggregateOps(ops, o => o.executorId || o.executor || '—')
     .map(a => ({
       company: a.sample.company || '—', name: a.sample.executor || '—', days: a.days.size,
@@ -213,6 +215,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 3. Компании
+  await sheet('Компании')
   {
     const ws = wb.addWorksheet('Компании')
     const data = aggregateOps(ops, o => o.company || '—')
@@ -234,6 +237,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
 
   // 4. По дням (период)
   if (multiDay) {
+    await sheet('По дням')
     const ws = wb.addWorksheet('По дням')
     const byDay = new Map(aggregateOps(ops, o => o.shiftDate).map(a => [a.key, a]))
     const data = days.map(d => {
@@ -255,6 +259,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 5. По часам
+  await sheet('По часам')
   const hourOrder = [...new Set(ops.filter(o => o.completedAt).map(o => mskHour(o.completedAt)))].sort((a, b) => ((a - 9 + 24) % 24) - ((b - 9 + 24) % 24))
   {
     const ws = wb.addWorksheet('По часам')
@@ -277,6 +282,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 6. Сотрудник × час
+  await sheet('Сотрудник × час')
   {
     const cnt = new Map()
     for (const o of ops) {
@@ -289,6 +295,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 7. Зоны и ряды (по ключевой ячейке)
+  await sheet('Зоны и ряды')
   {
     const ws = wb.addWorksheet('Зоны и ряды')
     const cellsByRow = new Map()
@@ -316,6 +323,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 8. Ячейки — где операций больше всего (для пополнения: мало места в ячейке отбора)
+  await sheet('Ячейки')
   {
     const ws = wb.addWorksheet('Ячейки')
     const data = aggregateOps(ops, o => keyCell(o) || '—')
@@ -342,6 +350,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
 
   // 9. Товары
   if (!isRemains) {
+    await sheet('Товары')
     const ws = wb.addWorksheet('Товары')
     const map = new Map()
     for (const o of ops) {
@@ -371,6 +380,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
 
   // 10. Размещение — откуда (ворота/зона приёмки)
   if (meta.sources) {
+    await sheet('Источники')
     const ws = wb.addWorksheet('Источники')
     const data = aggregateOps(ops, o => o.sourceCell || '—')
       .map(a => ({ source: a.key, ops: a.ops, positions: a.positions, qty: a.qty, weight: kg(a.grams), executors: a.executors.size, avgDuration: round1(avg(a.durations)) }))
@@ -389,6 +399,7 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
   }
 
   // 11. Операции построчно
+  await sheet('Операции')
   {
     const ws = wb.addWorksheet('Операции')
     const data = ops.map(o => ({
@@ -415,13 +426,18 @@ export async function exportMovesXlsx(op, ops, { periodLabel, fileName }) {
     addTable(ws, cols, data, { freezeCols: 1, total: { completedAt: 'Итого', positions: T.positions, qty: T.qty, weight: kg(T.grams) } })
   }
 
-  await download(wb, fileName)
+  await p.save(wb, fileName)
 }
 
 // ── комплектация (агрегаты с сервера) ───────────────────────────────────────
 
-export async function exportSelectionXlsx(report, { periodLabel, fileName }) {
-  const ExcelJS = (await import('exceljs')).default
+export function exportSelectionXlsx(report, { periodLabel, fileName }, p) {
+  return withExport(p, fileName, p => buildSelectionXlsx(report, { periodLabel, fileName }, p))
+}
+
+async function buildSelectionXlsx(report, { periodLabel, fileName }, p) {
+  const ExcelJS = await p.excel()
+  await p.stage('Собираю листы…')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'ВС'
   wb.created = new Date()
@@ -546,5 +562,5 @@ export async function exportSelectionXlsx(report, { periodLabel, fileName }) {
     addTable(ws, cols, report.missingWeight, { freezeCols: 2 })
   }
 
-  await download(wb, fileName)
+  await p.save(wb, fileName)
 }

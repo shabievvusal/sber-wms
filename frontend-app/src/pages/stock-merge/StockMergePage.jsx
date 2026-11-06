@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { Upload, Download, ChevronDown, ChevronRight, TriangleAlert, ArrowRight } from 'lucide-react'
 import { Select } from '@/components/ui/select'
+import { runExport } from '@/lib/exportProgress'
 
 const PAGE_SIZE = 25
 
@@ -102,64 +103,61 @@ export default function StockMergePage() {
     if (!filteredCells.length) { toast.info('Нет данных для экспорта'); return }
     setExporting(true)
     try {
-      const ExcelJS = (await import('exceljs')).default
-      const wb = new ExcelJS.Workbook()
-      wb.creator = 'ВС'; wb.created = new Date()
-      const ws = wb.addWorksheet('Объединение остатков')
+      const fileName = `объединение_остатков_${temperature}_${todayStr()}.xlsx`
+      await runExport(fileName, async p => {
+        const ExcelJS = await p.excel()
+        const wb = new ExcelJS.Workbook()
+        wb.creator = 'ВС'; wb.created = new Date()
+        const ws = wb.addWorksheet('Объединение остатков')
 
-      const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
-      const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
-      const ALIGN = { horizontal: 'center', vertical: 'middle' }
+        const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+        const BORDER = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+        const ALIGN = { horizontal: 'center', vertical: 'middle' }
 
-      const NCOLS = 9
-      const rowsSuffix = rowFilter.size > 0 ? ` • ряды: ${[...rowFilter].sort().join(', ')}` : ''
-      const singleItemSuffix = onlySingleItem ? ' • только 1 товар в ячейке' : ''
-      ws.addRow([`Объединение остатков • ${temperatureLabel} • ярус 1${rowsSuffix}${singleItemSuffix}`])
-      ws.mergeCells(1, 1, 1, NCOLS)
-      ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
-      ws.getRow(1).height = 26
+        const NCOLS = 9
+        const rowsSuffix = rowFilter.size > 0 ? ` • ряды: ${[...rowFilter].sort().join(', ')}` : ''
+        const singleItemSuffix = onlySingleItem ? ' • только 1 товар в ячейке' : ''
+        ws.addRow([`Объединение остатков • ${temperatureLabel} • ярус 1${rowsSuffix}${singleItemSuffix}`])
+        ws.mergeCells(1, 1, 1, NCOLS)
+        ws.getRow(1).getCell(1).style = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, alignment: { horizontal: 'left', vertical: 'middle' } }
+        ws.getRow(1).height = 26
 
-      const hdrRow = ws.addRow([
-        'Ряд', 'Адрес МХ (откуда)', 'Товар', 'Кол-во, шт', 'Вес, кг', 'Объём, л',
-        'Куда перенести', 'Уже в ячейке-получателе', 'Комментарий',
-      ])
-      hdrRow.height = 20
-      hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
-      ws.views = [{ state: 'frozen', ySplit: 2 }]
+        const hdrRow = ws.addRow([
+          'Ряд', 'Адрес МХ (откуда)', 'Товар', 'Кол-во, шт', 'Вес, кг', 'Объём, л',
+          'Куда перенести', 'Уже в ячейке-получателе', 'Комментарий',
+        ])
+        hdrRow.height = 20
+        hdrRow.eachCell(cell => { cell.style = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: HEADER_FILL, border: BORDER, alignment: ALIGN } })
+        ws.views = [{ state: 'frozen', ySplit: 2 }]
 
-      for (const cell of filteredCells) {
-        const t = onlySingleItem ? cell.suggestedTargetSingleItem : cell.suggestedTarget
-        const comment = t?.address
-          ? [t.isActive ? 'ячейка активна' : 'ячейка простаивает', t.sameProductAlreadyThere ? 'товар уже там' : null].filter(Boolean).join('; ')
-          : (t?.reason || '')
-        const existing = (t?.existingItems || [])
-          .map(ei => `${ei.product} (${fmt(ei.qtySku)} шт, ${fmt(ei.weightKg)} кг, ${fmt(ei.volumeL)} л)`)
-          .join('; ')
-        // Вся ячейка переносится одним получателем (WMS объединяет только
-        // 1-в-1) — «Куда перенести»/«Уже там»/«Комментарий» одинаковы для
-        // всех товаров этой ячейки, поэтому повторяются в каждой строке.
-        for (const item of cell.items) {
-          const row = ws.addRow([
-            cell.row, cell.address, item.product,
-            item.qtySku, +item.weightKg.toFixed(2), +item.volumeL.toFixed(2),
-            t?.address || '—', existing, comment,
-          ])
-          row.height = 18
-          row.eachCell({ includeEmpty: true }, (c, cn) => { c.style = { border: BORDER, alignment: { ...ALIGN, wrapText: cn === 3 || cn === 8 || cn === 9 } } })
+        for (const cell of filteredCells) {
+          const t = onlySingleItem ? cell.suggestedTargetSingleItem : cell.suggestedTarget
+          const comment = t?.address
+            ? [t.isActive ? 'ячейка активна' : 'ячейка простаивает', t.sameProductAlreadyThere ? 'товар уже там' : null].filter(Boolean).join('; ')
+            : (t?.reason || '')
+          const existing = (t?.existingItems || [])
+            .map(ei => `${ei.product} (${fmt(ei.qtySku)} шт, ${fmt(ei.weightKg)} кг, ${fmt(ei.volumeL)} л)`)
+            .join('; ')
+          // Вся ячейка переносится одним получателем (WMS объединяет только
+          // 1-в-1) — «Куда перенести»/«Уже там»/«Комментарий» одинаковы для
+          // всех товаров этой ячейки, поэтому повторяются в каждой строке.
+          for (const item of cell.items) {
+            const row = ws.addRow([
+              cell.row, cell.address, item.product,
+              item.qtySku, +item.weightKg.toFixed(2), +item.volumeL.toFixed(2),
+              t?.address || '—', existing, comment,
+            ])
+            row.height = 18
+            row.eachCell({ includeEmpty: true }, (c, cn) => { c.style = { border: BORDER, alignment: { ...ALIGN, wrapText: cn === 3 || cn === 8 || cn === 9 } } })
+          }
         }
-      }
 
-      ws.getColumn(1).width = 8; ws.getColumn(2).width = 18; ws.getColumn(3).width = 40
-      ws.getColumn(4).width = 11; ws.getColumn(5).width = 11; ws.getColumn(6).width = 11
-      ws.getColumn(7).width = 18; ws.getColumn(8).width = 40; ws.getColumn(9).width = 28
+        ws.getColumn(1).width = 8; ws.getColumn(2).width = 18; ws.getColumn(3).width = 40
+        ws.getColumn(4).width = 11; ws.getColumn(5).width = 11; ws.getColumn(6).width = 11
+        ws.getColumn(7).width = 18; ws.getColumn(8).width = 40; ws.getColumn(9).width = 28
 
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url
-      a.download = `объединение_остатков_${temperature}_${todayStr()}.xlsx`; a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-      toast.success('Файл .xlsx загружен')
+        await p.save(wb, fileName)
+      })
     } catch (err) {
       toast.error('Ошибка экспорта: ' + err.message)
     } finally {

@@ -13,6 +13,7 @@ import { ShiftTable } from './ShiftTable'
 import { SettingsPanel } from './SettingsPanel'
 import { buildAccountIndex, currentShift, fmtHours, fmtTime, SHIFT_LABELS, STATUS_META, todayStr } from './format'
 import { Select } from '@/components/ui/select'
+import { runExport } from '@/lib/exportProgress'
 
 const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text-sm'
 
@@ -105,20 +106,22 @@ export default function MotivationPage() {
     if (!rows.length) return
     setGenerating(true)
     try {
-      const ExcelJS = (await import('exceljs')).default
-      const JSZip = (await import('jszip')).default
-      const zip = new JSZip()
-      for (const [company, list] of byCompany) {
-        const [fileName, wb] = buildFile(ExcelJS, company, list)
-        zip.file(fileName, await wb.xlsx.writeBuffer())
-      }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = zipName
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      await runExport(zipName, async p => {
+        const ExcelJS = await p.excel()
+        const JSZip = (await import('jszip')).default
+        const zip = new JSZip()
+        const companies = [...byCompany]
+        await p.stage('Файлы по компаниям…', companies.length)
+        for (const [i, [company, list]] of companies.entries()) {
+          await p.step(i, undefined, `Файл «${company || 'без компании'}»`)
+          const [fileName, wb] = buildFile(ExcelJS, company, list)
+          zip.file(fileName, await wb.xlsx.writeBuffer())
+          await p.step(i + 1)
+        }
+        await p.stage('Упаковываю архив…', 100)
+        const blob = await zip.generateAsync({ type: 'blob' }, meta => { p.step(Math.round(meta.percent)) })
+        p.download(blob, zipName)
+      })
     } catch (err) {
       toast.error(err.message || 'Не удалось сформировать файлы')
     }

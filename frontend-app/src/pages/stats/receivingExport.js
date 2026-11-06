@@ -5,6 +5,7 @@
 // Приёмщик × час · Поставщики · Поставки.
 
 import { STATUS_LABELS, TYPE_LABELS } from '@/pages/supplies/constants'
+import { withExport } from '@/lib/exportProgress'
 
 export const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
 export const SUBHDR_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1D5DB' } }
@@ -109,8 +110,13 @@ export const TM = 'hh:mm'
 
 // ── отчёт ────────────────────────────────────────────────────────────────────
 
-export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
-  const ExcelJS = (await import('exceljs')).default
+// p — прогресс выгрузки (lib/exportProgress), если вызвано изнутри другой
+export function exportReceivingXlsx(rows, { periodLabel, fileName }, p) {
+  return withExport(p, fileName, p => buildReceivingXlsx(rows, { periodLabel, fileName }, p))
+}
+
+async function buildReceivingXlsx(rows, { periodLabel, fileName }, p) {
+  const ExcelJS = await p.excel()
   const wb = new ExcelJS.Workbook()
   wb.creator = 'ВС'
   wb.created = new Date()
@@ -121,9 +127,15 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
   // Выгрузка за период (у строк есть shiftDate — дата смены) — плюс разрез по дням.
   const days = [...new Set(rows.map(r => r.shiftDate).filter(Boolean))].sort()
   const multiDay = days.length > 1
+  // прогресс — по листам книги
+  const sheetCount = 7 + (multiDay ? 1 : 0)
+  let sheetNo = 0
+  const sheet = name => p.step(++sheetNo, sheetCount, `Лист «${name}»`)
+  await p.stage('Собираю листы…', sheetCount)
 
   // 1. Сводка
   {
+    await sheet('Сводка')
     const ws = wb.addWorksheet('Сводка')
     titleRows(ws, 'Приёмка — сводка', sub, 4)
     const kpi = [
@@ -199,6 +211,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
     })
     .sort((a, b) => b.deliveries - a.deliveries || b.weight - a.weight)
   {
+    await sheet('Приёмщики')
     const ws = wb.addWorksheet('Приёмщики')
     const cols = [
       { header: 'Компания', key: 'company', width: 18 },
@@ -232,6 +245,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   // 3. Компании
   {
+    await sheet('Компании')
     const ws = wb.addWorksheet('Компании')
     const data = aggregate(rows, r => r.company || '—')
       .map(a => ({
@@ -259,6 +273,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   // 3б. По дням — только для выгрузки за период
   if (multiDay) {
+    await sheet('По дням')
     const ws = wb.addWorksheet('По дням')
     const byDay = new Map(aggregate(rows, r => r.shiftDate).map(a => [a.key, a]))
     const data = days.map(d => {
@@ -291,6 +306,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
   // сумма по часу суток)
   const hourOrder = [...new Set(rows.filter(r => r.completedAt).sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt)).map(r => mskHour(r.completedAt)))]
   {
+    await sheet('По часам')
     const ws = wb.addWorksheet('По часам')
     const byHour = new Map(aggregate(rows.filter(r => r.completedAt), r => mskHour(r.completedAt)).map(a => [a.key, a]))
     const data = hourOrder.map(h => {
@@ -316,6 +332,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   // 5. Приёмщик × час — поставки и ЕО
   {
+    await sheet('Приёмщик × час')
     const ws = wb.addWorksheet('Приёмщик × час')
     const ncols = 2 + hourOrder.length + 1
     titleRows(ws, 'Приёмка — приёмщик × час', `${sub} · в ячейке: поставок (ЕО)`, ncols)
@@ -357,6 +374,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   // 6. Поставщики
   {
+    await sheet('Поставщики')
     const ws = wb.addWorksheet('Поставщики')
     const data = aggregate(rows, r => r.supplierName || '—')
       .map(a => ({
@@ -381,6 +399,7 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
 
   // 7. Поставки — построчно
   {
+    await sheet('Поставки')
     const ws = wb.addWorksheet('Поставки')
     const data = [...rows]
       .sort((a, b) => new Date(a.completedAt || 0) - new Date(b.completedAt || 0))
@@ -413,12 +432,5 @@ export async function exportReceivingXlsx(rows, { periodLabel, fileName }) {
     })
   }
 
-  const buf = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  URL.revokeObjectURL(url)
+  await p.save(wb, fileName)
 }

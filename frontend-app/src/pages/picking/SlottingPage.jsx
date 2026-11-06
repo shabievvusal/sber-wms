@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { ArrowLeftRight, Download } from 'lucide-react'
 import { NUM, PCT, addTable, titleRows } from '@/pages/stats/receivingExport'
 import { analyzeSlotting } from './slottingCalc'
+import { runExport } from '@/lib/exportProgress'
 
 const LS_DIRS = 'slotting_dirs'
 const shiftDay = (d, k) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10) }
@@ -73,69 +74,66 @@ export default function SlottingPage() {
   const maxRowLines = z ? Math.max(1, ...z.rows.map(r => r.lines)) : 1
 
   const exportXlsx = async () => {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'
-    const period = `${fmtD(range.from)} — ${fmtD(range.to)}`
-    {
-      const ws = wb.addWorksheet('Зоны')
-      const cols = [
-        { header: 'Зона', key: 'zone', width: 10 },
-        { header: 'Ячеек', key: 'cells', numFmt: NUM, width: 10 },
-        { header: 'Ячеек в ближней зоне', key: 'goldenN', numFmt: NUM, width: 13 },
-        { header: 'Товаров с отборами', key: 'products', numFmt: NUM, width: 12 },
-        { header: 'Строк отбора', key: 'totalLines', numFmt: NUM, width: 12 },
-        { header: 'Отборов в ближней зоне сейчас', key: 'goldenShare', numFmt: PCT, width: 15 },
-        { header: 'Можно', key: 'idealShare', numFmt: PCT, width: 10 },
-        { header: 'Перестановок', key: 'movesN', numFmt: NUM, width: 12 },
-      ]
-      titleRows(ws, `Расстановка товара — ${period}`, `штучный отбор; ближняя зона — первые ${goldenPct}% ячеек зоны по маршруту`, cols.length)
-      addTable(ws, cols, zones.map(x => ({ ...x, movesN: x.moves.length })))
-    }
-    {
-      const ws = wb.addWorksheet('Перестановки')
-      const cols = [
-        { header: 'Зона', key: 'zone', width: 8 },
-        { header: 'Частый товар', key: 'fastName', width: 40 },
-        { header: 'Код', key: 'fastCode', width: 12 },
-        { header: 'Строк отбора', key: 'fastLines', numFmt: NUM, width: 11 },
-        { header: 'Сейчас в ячейке', key: 'fastCell', width: 16 },
-        { header: 'Перенести в ячейку', key: 'slowCell', width: 16 },
-        { header: 'Редкий товар оттуда', key: 'slowName', width: 40 },
-        { header: 'Код', key: 'slowCode', width: 12 },
-        { header: 'Строк отбора', key: 'slowLines', numFmt: NUM, width: 11 },
-        { header: 'Выигрыш, обращений ближе', key: 'gain', numFmt: NUM, width: 13 },
-      ]
-      titleRows(ws, `Перестановки — ${period}`, 'частый товар из дальней ячейки ⇄ редкий из ближней; проверьте габариты ячеек перед перестановкой', cols.length)
-      addTable(ws, cols, zones.flatMap(x => x.moves).map(m => ({
-        zone: m.zone, fastName: m.fast.name, fastCode: m.fast.code, fastLines: m.fast.lines, fastCell: m.fastCell,
-        slowCell: m.slowCell, slowName: m.slow?.name || 'нет отборов за период', slowCode: m.slow?.code || '', slowLines: m.slow?.lines || 0, gain: m.gain,
-      })), { freezeCols: 2 })
-    }
-    {
-      const ws = wb.addWorksheet('Ячейки')
-      const cols = [
-        { header: 'Ячейка', key: 'cell', width: 16 },
-        { header: 'Зона', key: 'zone', width: 8 },
-        { header: 'Порядок по маршруту', key: 'order', numFmt: NUM, width: 11 },
-        { header: 'Ближняя зона', key: 'golden', width: 10 },
-        { header: 'Товар', key: 'name', width: 40 },
-        { header: 'Код', key: 'code', width: 12 },
-        { header: 'Строк отбора товара', key: 'lines', numFmt: NUM, width: 12 },
-        { header: 'Класс', key: 'cls', width: 8 },
-      ]
-      titleRows(ws, `Ячейки штучного отбора — ${period}`, 'класс A — самые частые товары зоны, C — нижняя половина по частоте', cols.length)
-      addTable(ws, cols, zones.flatMap(x => x.slots).map(s => ({
-        cell: s.cell, zone: s.zone, order: s.rank + 1, golden: s.golden ? 'да' : '', name: s.product?.name || '', code: s.product?.code || '', lines: s.product?.lines ?? null, cls: s.cls || '',
-      })), { freezeCols: 1 })
-    }
-    const buf = await wb.xlsx.writeBuffer()
-    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `расстановка_${range.from}_${range.to}.xlsx`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    const fileName = `расстановка_${range.from}_${range.to}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'
+      const period = `${fmtD(range.from)} — ${fmtD(range.to)}`
+      {
+        const ws = wb.addWorksheet('Зоны')
+        const cols = [
+          { header: 'Зона', key: 'zone', width: 10 },
+          { header: 'Ячеек', key: 'cells', numFmt: NUM, width: 10 },
+          { header: 'Ячеек в ближней зоне', key: 'goldenN', numFmt: NUM, width: 13 },
+          { header: 'Товаров с отборами', key: 'products', numFmt: NUM, width: 12 },
+          { header: 'Строк отбора', key: 'totalLines', numFmt: NUM, width: 12 },
+          { header: 'Отборов в ближней зоне сейчас', key: 'goldenShare', numFmt: PCT, width: 15 },
+          { header: 'Можно', key: 'idealShare', numFmt: PCT, width: 10 },
+          { header: 'Перестановок', key: 'movesN', numFmt: NUM, width: 12 },
+        ]
+        titleRows(ws, `Расстановка товара — ${period}`, `штучный отбор; ближняя зона — первые ${goldenPct}% ячеек зоны по маршруту`, cols.length)
+        addTable(ws, cols, zones.map(x => ({ ...x, movesN: x.moves.length })))
+      }
+      {
+        const ws = wb.addWorksheet('Перестановки')
+        const cols = [
+          { header: 'Зона', key: 'zone', width: 8 },
+          { header: 'Частый товар', key: 'fastName', width: 40 },
+          { header: 'Код', key: 'fastCode', width: 12 },
+          { header: 'Строк отбора', key: 'fastLines', numFmt: NUM, width: 11 },
+          { header: 'Сейчас в ячейке', key: 'fastCell', width: 16 },
+          { header: 'Перенести в ячейку', key: 'slowCell', width: 16 },
+          { header: 'Редкий товар оттуда', key: 'slowName', width: 40 },
+          { header: 'Код', key: 'slowCode', width: 12 },
+          { header: 'Строк отбора', key: 'slowLines', numFmt: NUM, width: 11 },
+          { header: 'Выигрыш, обращений ближе', key: 'gain', numFmt: NUM, width: 13 },
+        ]
+        titleRows(ws, `Перестановки — ${period}`, 'частый товар из дальней ячейки ⇄ редкий из ближней; проверьте габариты ячеек перед перестановкой', cols.length)
+        addTable(ws, cols, zones.flatMap(x => x.moves).map(m => ({
+          zone: m.zone, fastName: m.fast.name, fastCode: m.fast.code, fastLines: m.fast.lines, fastCell: m.fastCell,
+          slowCell: m.slowCell, slowName: m.slow?.name || 'нет отборов за период', slowCode: m.slow?.code || '', slowLines: m.slow?.lines || 0, gain: m.gain,
+        })), { freezeCols: 2 })
+      }
+      {
+        const ws = wb.addWorksheet('Ячейки')
+        const cols = [
+          { header: 'Ячейка', key: 'cell', width: 16 },
+          { header: 'Зона', key: 'zone', width: 8 },
+          { header: 'Порядок по маршруту', key: 'order', numFmt: NUM, width: 11 },
+          { header: 'Ближняя зона', key: 'golden', width: 10 },
+          { header: 'Товар', key: 'name', width: 40 },
+          { header: 'Код', key: 'code', width: 12 },
+          { header: 'Строк отбора товара', key: 'lines', numFmt: NUM, width: 12 },
+          { header: 'Класс', key: 'cls', width: 8 },
+        ]
+        titleRows(ws, `Ячейки штучного отбора — ${period}`, 'класс A — самые частые товары зоны, C — нижняя половина по частоте', cols.length)
+        addTable(ws, cols, zones.flatMap(x => x.slots).map(s => ({
+          cell: s.cell, zone: s.zone, order: s.rank + 1, golden: s.golden ? 'да' : '', name: s.product?.name || '', code: s.product?.code || '', lines: s.product?.lines ?? null, cls: s.cls || '',
+        })), { freezeCols: 1 })
+      }
+      await p.save(wb, fileName)
+    })
   }
 
   return (

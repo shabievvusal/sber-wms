@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Download, Trash2, Loader2 } from 'lucide-react'
 import { confirmDialog } from '@/components/ui/confirm'
+import { runExport } from '@/lib/exportProgress'
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
 function monthStartIso() {
@@ -25,15 +26,11 @@ export default function ReportModal({ open, onOpenChange }) {
     if (!dateFrom || !dateTo) { toast.error('Выберите период'); return }
     setDownloading(true)
     try {
-      const r = await fetch(`/api/shipments/report?dateFrom=${dateFrom}&dateTo=${dateTo}`, { credentials: 'include', headers: api.apiHeaders() })
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Ошибка') }
-      const blob = await r.blob()
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'Отчет по РК, ящикам, ТЧ.xlsx'
-      a.click()
-      URL.revokeObjectURL(a.href)
-      toast.success('Отчёт скачан')
+      const fileName = 'Отчет по РК, ящикам, ТЧ.xlsx'
+      await runExport(fileName, async p => {
+        const blob = await p.fetchBlob(`/api/shipments/report?dateFrom=${dateFrom}&dateTo=${dateTo}`, { headers: api.apiHeaders() })
+        p.download(blob, fileName)
+      })
     } catch (err) { toast.error('Ошибка: ' + err.message) }
     finally { setDownloading(false) }
   }

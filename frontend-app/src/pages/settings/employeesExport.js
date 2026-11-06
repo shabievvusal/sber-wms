@@ -5,6 +5,8 @@
 // из WMS вроде «=Ракеш» или «-»), он принимал за формулы и показывал #ИМЯ?.
 // Здесь каждая ячейка явно текстовая — что в списке, то и в файле.
 
+import { runExport } from '@/lib/exportProgress'
+
 const NO_COMPANY = 'Без компании'
 
 const BRAND = 'FF2563EB'
@@ -17,12 +19,21 @@ const border = { top: thin, left: thin, bottom: thin, right: thin }
 
 const text = v => String(v ?? '').replace(/[\r\n]+/g, ' ').trim()
 
+// пометка фильтра в имени файла: символы, недопустимые в имени файла Windows, — пробелом
+const fileTag = fileSuffix => (fileSuffix ? '_' + fileSuffix.replace(/[\\/:*?"<>|]+/g, ' ').trim().replace(/\s+/g, '_') : '')
+const today = () => new Date().toISOString().slice(0, 10)
+
 /**
  * @param {{ fio: string, company: string, phone?: string, password?: string }[]} rows
  * @param {{ fileSuffix?: string }} [opts] — пометка в имени файла (выбранный фильтр)
  */
-export async function exportEmployeesXlsx(rows, { fileSuffix = '' } = {}) {
-  const ExcelJS = (await import('exceljs')).default
+export function exportEmployeesXlsx(rows, { fileSuffix = '' } = {}) {
+  const fileName = `сотрудники${fileTag(fileSuffix)}_${today()}.xlsx`
+  return runExport(fileName, p => buildEmployeesXlsx(rows, fileName, p))
+}
+
+async function buildEmployeesXlsx(rows, fileName, p) {
+  const ExcelJS = await p.excel()
   const wb = new ExcelJS.Workbook()
   wb.created = new Date()
   const ws = wb.addWorksheet('Сотрудники', {
@@ -75,16 +86,7 @@ export async function exportEmployeesXlsx(rows, { fileSuffix = '' } = {}) {
   })
   ws.autoFilter = { from: 'A1', to: 'D1' }
 
-  const buf = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  // символы, недопустимые в имени файла Windows, заменяем пробелом
-  const suffix = fileSuffix ? '_' + fileSuffix.replace(/[\\/:*?"<>|]+/g, ' ').trim().replace(/\s+/g, '_') : ''
-  a.download = `сотрудники${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  await p.save(wb, fileName)
 }
 
 // ─── Отчёт по учёткам ТСД (для аутсорсинговых компаний) ─────────────────────
@@ -149,22 +151,18 @@ function addAccountSheet(wb, title, rows, checks, meta) {
  * @param {{ _id: string, fio: string, company: string, phone?: string }[]} rows
  * @param {Map<string, { status: string, code?: string, message?: string, checkedAt?: number }>} checks
  */
-export async function exportAccountReportXlsx(rows, checks, { fileSuffix = '' } = {}) {
-  const [{ default: ExcelJS }, meta] = await Promise.all([import('exceljs'), import('./accountStatus')])
-  const wb = new ExcelJS.Workbook()
-  wb.created = new Date()
-  const problems = rows.filter(r => meta.isProblem(checks.get(r._id)))
-  const ws = addAccountSheet(wb, 'Проблемные учётки', problems, checks, meta)
-  if (!problems.length) ws.addRow(['Проблемных учёток нет'])
-  addAccountSheet(wb, 'Все учётки', rows, checks, meta)
-
-  const buf = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  const suffix = fileSuffix ? '_' + fileSuffix.replace(/[\/:*?"<>|]+/g, ' ').trim().replace(/\s+/g, '_') : ''
-  a.download = `учётки_ТСД${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+export function exportAccountReportXlsx(rows, checks, { fileSuffix = '' } = {}) {
+  const fileName = `учётки_ТСД${fileTag(fileSuffix)}_${today()}.xlsx`
+  return runExport(fileName, async p => {
+    const [ExcelJS, meta] = await Promise.all([p.excel(), import('./accountStatus')])
+    const wb = new ExcelJS.Workbook()
+    wb.created = new Date()
+    const problems = rows.filter(r => meta.isProblem(checks.get(r._id)))
+    await p.stage('Лист «Проблемные учётки»…')
+    const ws = addAccountSheet(wb, 'Проблемные учётки', problems, checks, meta)
+    if (!problems.length) ws.addRow(['Проблемных учёток нет'])
+    await p.stage('Лист «Все учётки»…')
+    addAccountSheet(wb, 'Все учётки', rows, checks, meta)
+    await p.save(wb, fileName)
+  })
 }

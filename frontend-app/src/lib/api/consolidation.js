@@ -31,13 +31,17 @@ export async function deleteComplaint(id) {
   return req(`/api/consolidation/complaints/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export async function exportConsolidationReport(reportNum, { dateFrom, dateTo, companyFullNames, fineAmount }) {
-  const r = await fetch(`/api/consolidation/export/report${reportNum}`, {
+// p — прогресс выгрузки (lib/exportProgress): с ним видно, сколько скачано
+export async function exportConsolidationReport(reportNum, { dateFrom, dateTo, companyFullNames, fineAmount }, p) {
+  const url = `/api/consolidation/export/report${reportNum}`
+  const init = {
     method: 'POST',
     credentials,
     headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ dateFrom, dateTo, companyFullNames, fineAmount }),
-  })
+  }
+  if (p) return p.fetchBlob(url, init)
+  const r = await fetch(url, init)
   if (!r.ok) {
     let msg = r.statusText
     try { msg = (await r.json())?.error || msg } catch { /* ignore */ }

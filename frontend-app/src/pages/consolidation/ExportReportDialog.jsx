@@ -2,6 +2,7 @@ import { whKey } from '@/lib/warehouse'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
+import { runExport } from '@/lib/exportProgress'
 import { Button } from '@/components/ui/button'
 import { DateRangePicker } from '@/components/ui/date-picker'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,12 +16,6 @@ function getCompanyFullNames() {
 }
 function getFineAmount() {
   try { const v = localStorage.getItem(whKey(LS_FINE_AMOUNT)); return v ? Number(v) : 0 } catch { return 0 }
-}
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
-  URL.revokeObjectURL(url)
 }
 function todayStr() {
   const d = new Date()
@@ -41,12 +36,14 @@ export function ExportReportDialog({ onOpenChange, defaultFrom, defaultTo }) {
   const handleExport = async reportNum => {
     setExporting(reportNum)
     try {
-      const blob = await api.exportConsolidationReport(reportNum, {
-        dateFrom: from, dateTo: to, companyFullNames: getCompanyFullNames(), fineAmount: getFineAmount(),
-      })
       const suffix = `${from}_${to}`
-      downloadBlob(blob, reportNum === 1 ? `Нарушения_${suffix}.xlsx` : `Сводка_нарушений_${suffix}.xlsx`)
-      toast.success('Отчёт сформирован')
+      const fileName = reportNum === 1 ? `Нарушения_${suffix}.xlsx` : `Сводка_нарушений_${suffix}.xlsx`
+      await runExport(fileName, async p => {
+        const blob = await api.exportConsolidationReport(reportNum, {
+          dateFrom: from, dateTo: to, companyFullNames: getCompanyFullNames(), fineAmount: getFineAmount(),
+        }, p)
+        p.download(blob, fileName)
+      })
     } catch (err) {
       toast.error('Ошибка экспорта: ' + err.message)
     } finally {

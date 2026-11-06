@@ -7,6 +7,7 @@ import { SortableHead } from '@/components/ui/sortable-head'
 import { Download, ScanBarcode, X } from 'lucide-react'
 import { ScanButton } from '@/components/shared/BarcodeScanner'
 import { DT, NUM, addTable, excelDate, titleRows } from '@/pages/stats/receivingExport'
+import { runExport } from '@/lib/exportProgress'
 
 const thCls = 'h-8 px-2 text-[11px]'
 const tdCls = 'px-2 py-1.5 text-[13px] whitespace-nowrap'
@@ -121,25 +122,22 @@ export function LostEoLookup({ mode, index, cellStores, resolveBarcode, periodLa
 
   const exportXlsx = async () => {
     if (!sorted.length) return
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    wb.creator = 'ВС'
-    wb.created = new Date()
-    const ws = wb.addWorksheet(mode === 'product' ? 'По товару' : 'По ячейке')
-    const cols = columns.map(c => ({
-      header: c.label, key: c.key,
-      numFmt: c.date ? DT : c.text ? undefined : NUM,
-      width: c.key === 'name' ? 50 : c.key === 'store' ? 34 : c.key === 'executor' || c.key === 'pickedBy' ? 30 : c.date ? 15 : 14,
-    }))
-    titleRows(ws, `Поиск потеряшек — ${title}`, `${periodLabel} · строк ${sorted.length} · штук ${totalQty} · выгружено ${new Date().toLocaleString('ru-RU')}`, cols.length)
-    addTable(ws, cols, sorted.map(r => ({ ...r, completedAt: excelDate(r.completedAt), pickedAt: excelDate(r.pickedAt) })), { freezeCols: 1, total: { [cols[0].key]: 'Итого', qty: totalQty } })
-    const buf = await wb.xlsx.writeBuffer()
-    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `потеряшки_${mode === 'product' ? (query.code || 'товар') : query.cell}.xlsx`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    const fileName = `потеряшки_${mode === 'product' ? (query.code || 'товар') : query.cell}.xlsx`
+    await runExport(fileName, async p => {
+      const ExcelJS = await p.excel()
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ВС'
+      wb.created = new Date()
+      const ws = wb.addWorksheet(mode === 'product' ? 'По товару' : 'По ячейке')
+      const cols = columns.map(c => ({
+        header: c.label, key: c.key,
+        numFmt: c.date ? DT : c.text ? undefined : NUM,
+        width: c.key === 'name' ? 50 : c.key === 'store' ? 34 : c.key === 'executor' || c.key === 'pickedBy' ? 30 : c.date ? 15 : 14,
+      }))
+      titleRows(ws, `Поиск потеряшек — ${title}`, `${periodLabel} · строк ${sorted.length} · штук ${totalQty} · выгружено ${new Date().toLocaleString('ru-RU')}`, cols.length)
+      addTable(ws, cols, sorted.map(r => ({ ...r, completedAt: excelDate(r.completedAt), pickedAt: excelDate(r.pickedAt) })), { freezeCols: 1, total: { [cols[0].key]: 'Итого', qty: totalQty } })
+      await p.save(wb, fileName)
+    })
   }
 
   return (
