@@ -13,6 +13,7 @@ import { LostEoJournal } from './LostEoJournal'
 import { ScanButton } from '@/components/shared/BarcodeScanner'
 import { fmtTime } from './format'
 import { LostEoLookup } from './LostEoLookup'
+import { LostEoNotMoved } from './LostEoNotMoved'
 
 // Режимы: подбор ЕО по товарам внутри; куда кидали товар; что кидали в ячейку.
 const MODES = [
@@ -20,6 +21,8 @@ const MODES = [
   { key: 'product', label: 'По товару' },
   { key: 'cell', label: 'По ячейке' },
   { key: 'journal', label: 'Журнал найденных' },
+  // не зависит от загруженных переводов: остатки WMS по зонам КДК
+  { key: 'notMoved', label: 'Не переведены в ЗГЗ' },
 ]
 
 // "YYYY-MM-DDTHH:mm" по Москве
@@ -239,7 +242,7 @@ export default function LostEoPage() {
 
       {busy && !index && <Spinner label="Загрузка переводов в ЗГЗ…" />}
 
-      {(index || mode === 'journal') && (
+      {(index || mode === 'journal' || mode === 'notMoved') && (
         <div className="flex w-fit gap-1 rounded-md border bg-muted/30 p-0.5">
           {MODES.map(m => (
             <Button key={m.key} size="sm" className="h-8 px-4" variant={mode === m.key ? 'default' : 'ghost'} onClick={() => setMode(m.key)}>{m.label}</Button>
@@ -248,6 +251,7 @@ export default function LostEoPage() {
       )}
 
       {mode === 'journal' && <LostEoJournal />}
+      {mode === 'notMoved' && <LostEoNotMoved />}
 
       {index && (mode === 'product' || mode === 'cell') && (
         <LostEoLookup

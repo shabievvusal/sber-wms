@@ -44,10 +44,8 @@ export async function fetchProductStock(token, productId) {
     const r = await fetch(STOCKS_DETAILS_URL, {
       method: 'POST',
       headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
-      body: JSON.stringify({
-        productId, parts: null, statuses: null, cellId: null, handlingUnitBarcode: null, zoneIds: null, locationIds: null,
-        rows: null, sections: null, levels: null, owner: null, sortByQuantity: null, pageNumber, pageSize: size,
-      }),
+      // только заданные фильтры, как шлёт сама WMS (пустые с её обновления 05.11 отсекают всё)
+      body: JSON.stringify({ productId, pageNumber, pageSize: size }),
     })
     if (!r.ok) throw new Error(`WMS stocks/v2/details ${r.status}`)
     const data = await r.json()
@@ -154,4 +152,40 @@ export async function getEoPicking(token, sourceHandlingUnitBarcode) {
     lastType: sorted[0]?.operationType || null,
     pickers: [...byUser.values()],
   }
+}
+
+// Остатки зон (stocks/v2/details по zoneIds) — все строки: товар в ЕО в ячейке,
+// со статусом (PICKED — скомплектован). onProgress({ done, total }).
+export async function fetchZoneStock(token, zoneIds, onProgress) {
+  const size = 100
+  const page = async pageNumber => {
+    const r = await fetch(STOCKS_DETAILS_URL, {
+      method: 'POST',
+      headers: { ...wmsHeaders(token), 'Content-Type': 'application/json', 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' },
+      body: JSON.stringify({ zoneIds, pageNumber, pageSize: size }),
+    })
+    if (!r.ok) throw new Error(`WMS stocks/v2/details ${r.status}`)
+    const data = await r.json()
+    return { items: data?.value?.items || [], total: data?.value?.total ?? 0 }
+  }
+  const first = await page(1)
+  const pages = Math.ceil(first.total / size)
+  const out = [...first.items]
+  onProgress?.({ done: out.length, total: first.total })
+  // по 4 страницы параллельно
+  for (let p = 2; p <= pages; p += 4) {
+    const batch = await Promise.all([p, p + 1, p + 2, p + 3].filter(n => n <= pages).map(page))
+    for (const b of batch) out.push(...b.items)
+    onProgress?.({ done: out.length, total: first.total })
+  }
+  return out.map(s => ({
+    status: s.status || '',
+    cell: s.address?.cellAddress || '',
+    eo: s.address?.handlingUnitBarcode || '',
+    zone: s.location?.zoneName || '',
+    code: s.product?.nomenclatureCode || '',
+    name: s.product?.name || '',
+    qty: Number(s.quantity) || 0,
+    bestBefore: s.part?.bestBeforeDate || '',
+  }))
 }
