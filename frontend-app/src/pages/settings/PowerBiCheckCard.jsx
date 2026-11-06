@@ -78,8 +78,13 @@ export function PowerBiCheckCard() {
   // сайт: СЗ по выбранному типу; штуки — только «хранение + КДК» (по типам отчёт их не делит)
   const siteOf = r => {
     const e = loaded?.site?.get(r.execId)
-    if (!e) return { sz: 0, qty: type === 'all' ? 0 : null }
-    return { sz: type === 'all' ? e.tasks : type === 'kdk' ? e.kdkTasks : e.storageTasks, qty: type === 'all' ? Number(e.qty) || 0 : null }
+    if (!e) return { sz: 0, qty: type === 'all' ? 0 : null, kg: type === 'all' ? 0 : null }
+    return {
+      sz: type === 'all' ? e.tasks : type === 'kdk' ? e.kdkTasks : e.storageTasks,
+      qty: type === 'all' ? Number(e.qty) || 0 : null,
+      // вес — по нашему справочнику весов (товары без веса в него не попадают)
+      kg: type === 'all' ? Math.round((Number(e.grams) || 0) / 10) / 100 : null,
+    }
   }
   // с чем сравниваем сайт: строка детализации PowerBI и «положено»
   const isDiff = r => {
@@ -94,7 +99,10 @@ export function PowerBiCheckCard() {
     return list
   }, [result, query, onlyDiff, type, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   const siteTotal = useMemo(() => (result
-    ? result.rows.reduce((t, r) => { const s = siteOf(r); return { sz: t.sz + s.sz, qty: s.qty == null ? null : (t.qty ?? 0) + s.qty } }, { sz: 0, qty: type === 'all' ? 0 : null })
+    ? result.rows.reduce((t, r) => {
+      const s = siteOf(r)
+      return { sz: t.sz + s.sz, qty: s.qty == null ? null : (t.qty ?? 0) + s.qty, kg: s.kg == null ? null : Math.round(((t.kg ?? 0) + s.kg) * 100) / 100 }
+    }, { sz: 0, qty: type === 'all' ? 0 : null, kg: type === 'all' ? 0 : null })
     : null), [result, type, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   const diffCount = result ? result.rows.filter(isDiff).length : 0
 
@@ -113,12 +121,12 @@ export function PowerBiCheckCard() {
       { header: 'Компания', key: 'company', width: 18 },
       ...variants.map(v => ({ header: `${v.group}: ${v.label}`, key: v.key, numFmt: NUM, width: 14 })),
       { header: 'Сайт: СЗ', key: 'siteSz', numFmt: NUM, width: 12 },
-      ...(type === 'all' ? [{ header: 'Сайт: штук', key: 'siteQty', numFmt: NUM, width: 12 }] : []),
+      ...(type === 'all' ? [{ header: 'Сайт: штук', key: 'siteQty', numFmt: NUM, width: 12 }, { header: 'Сайт: вес, кг', key: 'siteKg', numFmt: '#,##0.00', width: 12 }] : []),
     ]
     titleRows(ws, 'Комплектация — способы подсчёта', `${periodLabel} · строк в смене ${result.lines}`, cols.length)
-    addTable(ws, cols, result.rows.map(r => ({ fio: r.fio, company: r.company, ...r.values, siteSz: siteOf(r).sz, siteQty: siteOf(r).qty })), {
+    addTable(ws, cols, result.rows.map(r => ({ fio: r.fio, company: r.company, ...r.values, siteSz: siteOf(r).sz, siteQty: siteOf(r).qty, siteKg: siteOf(r).kg })), {
       freezeCols: 1,
-      total: { fio: 'Итого', ...result.total, siteSz: siteTotal.sz, siteQty: siteTotal.qty },
+      total: { fio: 'Итого', ...result.total, siteSz: siteTotal.sz, siteQty: siteTotal.qty, siteKg: siteTotal.kg },
     })
     await p.save(wb, `сверка_PowerBI_${loaded.date}_${loaded.shift}_${type}.xlsx`)
   })
