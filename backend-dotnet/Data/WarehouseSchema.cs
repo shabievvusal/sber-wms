@@ -386,29 +386,49 @@ public static class WarehouseSchema
             if (await TableExists(t))
                 await Exec($"CREATE INDEX IF NOT EXISTS {t}_wh_idx ON {t} (warehouse_id)");
 
-        // 6) разовые правки данных: выполняются один раз, отметка — в schema_steps
-        await Exec("CREATE TABLE IF NOT EXISTS schema_steps (key TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT now())");
-        async Task Once(string key, string sql)
+        Console.WriteLine("[warehouses] схема готова");
+    }
+
+    // Разовые правки данных — в фоне, после старта: правка большой таблицы идёт
+    // минуты, и если ждать её до запуска, сайт всё это время отвечает 502.
+    // Каждая выполняется один раз (отметка в schema_steps); прервалась — при
+    // следующем старте начнётся заново (UPDATE откатывается целиком).
+    public static async Task RunDataFixesAsync(string connectionString)
+    {
+        try
         {
-            await using var check = new NpgsqlCommand("SELECT 1 FROM schema_steps WHERE key = $1", conn);
-            check.Parameters.AddWithValue(key);
-            if (await check.ExecuteScalarAsync() != null) return;
-            await Exec(sql);
-            await using var mark = new NpgsqlCommand("INSERT INTO schema_steps (key) VALUES ($1)", conn);
-            mark.Parameters.AddWithValue(key);
-            await mark.ExecuteNonQueryAsync();
-            Console.WriteLine($"[schema] выполнено: {key}");
-        }
-        // штуки комплектации — сколько положено (стало − было в ЕО-получателе), а
-        // не «стало в ЕО»: так считает PowerBI (сверка 05.11.2026 — совпало у
-        // 109 из 113 сотрудников; «стало в ЕО» завышало штуки и вес на ~9 %)
-        if (await TableExists("wms_ops"))
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+            await using (var t = new NpgsqlCommand("CREATE TABLE IF NOT EXISTS schema_steps (key TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT now())", conn))
+                await t.ExecuteNonQueryAsync();
+
+            async Task Once(string key, string sql)
+            {
+                await using var check = new NpgsqlCommand("SELECT 1 FROM schema_steps WHERE key = $1", conn);
+                check.Parameters.AddWithValue(key);
+                if (await check.ExecuteScalarAsync() != null) return;
+                Console.WriteLine($"[schema] выполняется: {key}");
+                await using (var cmd = new NpgsqlCommand(sql, conn) { CommandTimeout = 0 })
+                    await cmd.ExecuteNonQueryAsync();
+                await using var mark = new NpgsqlCommand("INSERT INTO schema_steps (key) VALUES ($1)", conn);
+                mark.Parameters.AddWithValue(key);
+                await mark.ExecuteNonQueryAsync();
+                Console.WriteLine($"[schema] выполнено: {key}");
+            }
+
+            // штуки комплектации — сколько положено (стало − было в ЕО-получателе), а
+            // не «стало в ЕО»: так считает PowerBI (сверка 05.11.2026 — совпало у
+            // 109 из 113 сотрудников; «стало в ЕО» завышало штуки и вес на ~9 %).
+            // Только где значение меняется — не переписывать лишние строки.
             await Once("2026-11-06_wms_ops_quantity_delta", @"
                 UPDATE wms_ops SET quantity = CASE
                     WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
                     ELSE src_old - src_new END
-                 WHERE (tgt_new IS NOT NULL AND tgt_old IS NOT NULL) OR (src_old IS NOT NULL AND src_new IS NOT NULL)");
-
-        Console.WriteLine("[warehouses] схема готова");
+                 WHERE ((tgt_new IS NOT NULL AND tgt_old IS NOT NULL) OR (src_old IS NOT NULL AND src_new IS NOT NULL))
+                   AND quantity IS DISTINCT FROM CASE
+                    WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
+                    ELSE src_old - src_new END");
+        }
+        catch (Exception err) { Console.WriteLine($"[schema] разовая правка данных не выполнена: {err.Message}"); }
     }
 }

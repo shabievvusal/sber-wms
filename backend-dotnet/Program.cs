@@ -61,6 +61,8 @@ var app = builder.Build();
 
 // данные по складам: столбец warehouse_id и ключи со складом (один раз)
 await WarehouseSchema.EnsureAsync(connString);
+// разовые правки данных — в фоне, сайт не ждёт их (иначе 502 на минуты)
+_ = Task.Run(() => WarehouseSchema.RunDataFixesAsync(connString));
 // склад запроса (заголовок X-Warehouse) — до всех эндпоинтов
 app.UseWarehouseContext();
 // после записи выгрузки WMS (WmsSaveEndpoints) — новые
