@@ -40,11 +40,7 @@ export function MissingWeightPanel() {
     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-card shadow-card p-3">
       <span className="text-sm" title="Вес берётся из справочника: остатки по МХ (как в PowerBI) → Excel ВГХ → карточка WMS. «Неучтённый» — товара нет ни в одном из них: обычно его нет и в остатках сейчас (закончился) или он не попал в загруженный файл остатков.">
         {loading ? 'Сверка ВГХ…' : error ? error : items?.length ? `Неучтённый вес: ${items.length} товаров за ${DAYS} дней (${items.reduce((s, i) => s + (i.uses || 0), 0).toLocaleString('ru-RU')} операций)` : items ? 'Неучтённого веса не найдено' : ''}
-      </span>
-      {items?.length > 0 && !loading && (
-        <span className="text-xs text-muted-foreground">нет ни в остатках, ни в Excel ВГХ, ни в WMS — загрузите свежие остатки (Настройки → Веса товаров)</span>
-      )}
-      <Button size="sm" variant="secondary" onClick={load} disabled={loading}>
+      </span>      <Button size="sm" variant="secondary" onClick={load} disabled={loading}>
         <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Сверить ВГХ
       </Button>
       {items?.length > 0 && (
