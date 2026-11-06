@@ -698,7 +698,11 @@ public partial class StatsService
                 SrcNew = GetNum(sourceQty, "newQuantity"),
                 TgtOld = GetNum(targetQty, "oldQuantity"),
                 TgtNew = GetNum(targetQty, "newQuantity"),
-                Quantity = GetNum(targetQty, "newQuantity") ?? GetNum(sourceQty, "oldQuantity"),
+                // сколько положено: стало − было в ЕО-получателе (иначе — сколько взято
+                // из источника); так считает PowerBI. Раньше было «стало в ЕО» —
+                // завышало штуки, если в ЕО уже что-то лежало
+                Quantity = GetNum(targetQty, "newQuantity") - GetNum(targetQty, "oldQuantity")
+                    ?? GetNum(sourceQty, "oldQuantity") - GetNum(sourceQty, "newQuantity"),
             });
             added++;
         }

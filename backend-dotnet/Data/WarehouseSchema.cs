@@ -386,6 +386,29 @@ public static class WarehouseSchema
             if (await TableExists(t))
                 await Exec($"CREATE INDEX IF NOT EXISTS {t}_wh_idx ON {t} (warehouse_id)");
 
+        // 6) разовые правки данных: выполняются один раз, отметка — в schema_steps
+        await Exec("CREATE TABLE IF NOT EXISTS schema_steps (key TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+        async Task Once(string key, string sql)
+        {
+            await using var check = new NpgsqlCommand("SELECT 1 FROM schema_steps WHERE key = $1", conn);
+            check.Parameters.AddWithValue(key);
+            if (await check.ExecuteScalarAsync() != null) return;
+            await Exec(sql);
+            await using var mark = new NpgsqlCommand("INSERT INTO schema_steps (key) VALUES ($1)", conn);
+            mark.Parameters.AddWithValue(key);
+            await mark.ExecuteNonQueryAsync();
+            Console.WriteLine($"[schema] выполнено: {key}");
+        }
+        // штуки комплектации — сколько положено (стало − было в ЕО-получателе), а
+        // не «стало в ЕО»: так считает PowerBI (сверка 05.11.2026 — совпало у
+        // 109 из 113 сотрудников; «стало в ЕО» завышало штуки и вес на ~9 %)
+        if (await TableExists("wms_ops"))
+            await Once("2026-11-06_wms_ops_quantity_delta", @"
+                UPDATE wms_ops SET quantity = CASE
+                    WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
+                    ELSE src_old - src_new END
+                 WHERE (tgt_new IS NOT NULL AND tgt_old IS NOT NULL) OR (src_old IS NOT NULL AND src_new IS NOT NULL)");
+
         Console.WriteLine("[warehouses] схема готова");
     }
 }

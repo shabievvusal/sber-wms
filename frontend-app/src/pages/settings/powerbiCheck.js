@@ -28,6 +28,7 @@ export function normalize(it) {
     // ячейка — как у нас при записи: куда, иначе откуда
     cell: it.targetAddress?.cellAddress || it.sourceAddress?.cellAddress || '',
     srcCell: it.sourceAddress?.cellAddress || '',
+    srcHu: it.sourceAddress?.handlingUnitBarcode || '',
     tgtHu: it.targetAddress?.handlingUnitBarcode || '',
     product: it.product?.nomenclatureCode || it.product?.name || '',
     at: Date.parse(it.operationCompletedAt),
@@ -64,6 +65,8 @@ export function buildVariants(idFields = []) {
   return [
     { key: 'lines', group: 'СЗ', label: 'Строк журнала', hint: 'каждая строка WMS — одно СЗ', unique: null },
     { key: 'ours', group: 'СЗ', label: 'Как у нас сейчас', hint: 'хранение — по ID строки; КДК — сотрудник + ячейка + товар', unique: l => (l.type === 'PICK_BY_LINE' ? `kdk|${l.cell}|${l.product}` : `op|${l.id}`) },
+    // строка детализации PowerBI = «ЕО 1 + ЕО 2 + артикул» (сверка 05.11.2026)
+    { key: 'srcTgtProduct', group: 'СЗ', label: 'ЕО-источник + ЕО-получатель + товар', hint: 'как строка детализации PowerBI', unique: l => `${l.srcHu}|${l.tgtHu}|${l.product}` },
     { key: 'hu', group: 'СЗ', label: 'ЕО-получателей', hint: 'уникальные ЕО, куда собирали', unique: l => l.tgtHu || `nohu|${l.id}` },
     { key: 'huProduct', group: 'СЗ', label: 'ЕО + товар', hint: 'уникальные пары «ЕО-получатель + товар»', unique: l => `${l.tgtHu}|${l.product}` },
     { key: 'cellProduct', group: 'СЗ', label: 'Ячейка + товар', hint: 'уникальные пары «ячейка + товар»', unique: l => `${l.cell}|${l.product}` },
