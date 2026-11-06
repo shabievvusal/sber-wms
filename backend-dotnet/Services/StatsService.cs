@@ -117,7 +117,7 @@ public partial class StatsService
     // СЗ комплектации — одна строка (ключ строки уже включает сотрудника; у
     // строк, записанных до перевода ключей, — тоже). Везде, где считаются СЗ
     // комплектации, — только через эту функцию.
-    private static string GetTaskKeySummary(WmsOpEntity item)
+    internal static string GetTaskKeySummary(WmsOpEntity item)
     {
         var type = (item.OperationType ?? "").ToUpperInvariant();
         if ((type == "PICK_BY_LINE" || type == "PIECE_SELECTION_PICKING") && !string.IsNullOrEmpty(item.MergeKey))

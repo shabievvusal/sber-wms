@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { SettingCard } from './SettingCard'
+import { WmsHourlyCompare } from './WmsHourlyCompare'
 import { PICK_TYPES, buildVariants, computeCheck, discoverIdFields, normalize, shiftWindow } from './powerbiCheck'
 import { Download, Scale, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -61,7 +62,8 @@ export function PowerBiCheckCard() {
       // цифры сайта (наша база) за ту же смену — тот же отчёт, что в статистике
       const report = await api.getOpReport('selection', date, date, shift).catch(() => null)
       const site = new Map((report?.executors || []).map(e => [e.key, e]))
-      setLoaded({ date, shift, lines: raw.map(normalize), idFields: discoverIdFields(raw), sample: raw[0] || null, site })
+      const siteHours = new Map((report?.hours || []).map(h => [String(h.key), h]))
+      setLoaded({ date, shift, lines: raw.map(normalize), idFields: discoverIdFields(raw), sample: raw[0] || null, site, siteHours })
       setShiftHours(0)
     } catch (err) {
       toast.error('Не удалось загрузить из WMS: ' + (err.message || err))
@@ -269,6 +271,8 @@ export function PowerBiCheckCard() {
           <ul className="space-y-0.5 text-xs text-muted-foreground">
             {variants.map(v => <li key={v.key}><span className="font-medium text-foreground">{v.group}: {v.label}</span> — {v.hint}</li>)}
           </ul>
+
+          <WmsHourlyCompare loaded={loaded} />
 
           {loaded.sample && (
             <details className="text-xs">

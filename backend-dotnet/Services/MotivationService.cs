@@ -20,9 +20,8 @@ namespace BackendDotnet.Services;
 //     снимаются только полные шаги (в пользу работника), добавляются тоже
 //     только полные (в пользу склада);
 //   — нет учётки / учётка после срока / нет отбора под учёткой — 0 часов.
-// СЗ считаются так же, как колонка «Итого» в почасовой таблице статистики
-// (StatsService.BuildSummaryFromItems): хранение — каждая запись
-// PIECE_SELECTION_PICKING, КДК — уникальные «товар+ячейка» в пределах часа.
+// СЗ считаются так же, как во всей статистике (StatsService.GetTaskKeySummary —
+// строка детализации PowerBI), с 06.11.2026; раньше КДК — «товар+ячейка» за час.
 public class MotivationService
 {
     private const string SettingsKey = "norms";
@@ -257,7 +256,7 @@ public class MotivationService
     {
         public string ExecutorId = "";
         public string Name = "";
-        public int StorageTasks;
+        public HashSet<string> StorageKeys = new();
         public HashSet<string> KdkKeys = new();
         public WeightPart Storage = new();
         public WeightPart Kdk = new();
@@ -286,15 +285,7 @@ public class MotivationService
                 byAccount[executorId] = acc;
             }
 
-            if (isStorage) acc.StorageTasks++;
-            else
-            {
-                var hour = item.CompletedAt.Value.AddHours(MoscowUtcOffsetHours).Hour;
-                var product = !string.IsNullOrEmpty(item.NomenclatureCode) ? item.NomenclatureCode
-                    : (!string.IsNullOrEmpty(item.ProductName) ? item.ProductName : "no-product");
-                var cell = !string.IsNullOrEmpty(item.Cell) ? item.Cell : "no-target-cell";
-                acc.KdkKeys.Add($"{hour}|{product}||{cell}");
-            }
+            (isStorage ? acc.StorageKeys : acc.KdkKeys).Add(StatsService.GetTaskKeySummary(item));
 
             var part = isKdk ? acc.Kdk : acc.Storage;
             var article = (item.NomenclatureCode ?? "").Trim();
@@ -434,7 +425,7 @@ public class MotivationService
     // Вес — с учётом оценки для отборов без веса в справочнике (WeightPart).
     private static void FillStats(MotivationResultRow row, AccountStats acc)
     {
-        row.StorageTasks = acc.StorageTasks;
+        row.StorageTasks = acc.StorageKeys.Count;
         row.KdkTasks = acc.KdkKeys.Count;
         row.StorageWeightKg = Math.Round((double)acc.Storage.Total / 1000, 1);
         row.KdkWeightKg = Math.Round((double)acc.Kdk.Total / 1000, 1);
