@@ -420,14 +420,15 @@ public static class WarehouseSchema
             // не «стало в ЕО»: так считает PowerBI (сверка 05.11.2026 — совпало у
             // 109 из 113 сотрудников; «стало в ЕО» завышало штуки и вес на ~9 %).
             // Только где значение меняется — не переписывать лишние строки. Только
-            // последние 7 дней (вся история — минуты на большой таблице); старые
-            // периоды — вручную тем же UPDATE с нужными датами (повторная выгрузка из
-            // WMS их не исправит: уже записанные строки она пропускает).
-            await Once("2026-11-06_wms_ops_quantity_delta_7d", @"
+            // смены 30.10–05.11.2026 — период сверки с PowerBI (даты по 06.11: ночь
+            // 05.11 кончается 06.11 в 09:00); вся история — минуты на большой
+            // таблице. Старые периоды — вручную тем же UPDATE с нужными датами
+            // (повторная выгрузка из WMS их не исправит: записанные строки она пропускает).
+            await Once("2026-11-06_wms_ops_quantity_delta_1030_1105", @"
                 UPDATE wms_ops SET quantity = CASE
                     WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
                     ELSE src_old - src_new END
-                 WHERE date >= current_date - 7
+                 WHERE date BETWEEN DATE '2026-10-30' AND DATE '2026-11-06'
                    AND ((tgt_new IS NOT NULL AND tgt_old IS NOT NULL) OR (src_old IS NOT NULL AND src_new IS NOT NULL))
                    AND quantity IS DISTINCT FROM CASE
                     WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
