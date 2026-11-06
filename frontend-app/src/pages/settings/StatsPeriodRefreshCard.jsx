@@ -56,8 +56,7 @@ const DOMAINS = [
     },
   },
   {
-    // Выключена по умолчанию — приёмка обновляется только вручную. Приёмщик — из
-    // журнала приёмки; оригинал: «за приёмщиком — запрос в WMS на каждую новую поставку».
+    // Выключена по умолчанию: за приёмщиком — запрос в WMS на каждую новую поставку.
     key: 'receiving', label: 'Приёмка', defaultOn: false,
     run: async (token, r) => {
       const res = await fetchReceivingViaBrowser(token, { completedDateFrom: r.from, completedDateTo: r.to })
