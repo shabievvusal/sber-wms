@@ -625,25 +625,26 @@ public partial class StatsService
             parsedDates[i] = (dh.Item1, dh.Item2, completedAtUtc);
             dateHourPairs.Add(dh);
         }
-        // Уже записанные строки часа: ключ → id строки и ID строк WMS, что в неё
-        // вошли. Строка у нас = строка детализации PowerBI (сверка 05.11.2026:
-        // 1145 из 1145), а в неё может входить несколько строк WMS — PowerBI их
-        // штуки суммирует. Раньше вторая и следующие строки WMS отбрасывались
-        // («первый выигрывает») вместе со штуками — недосчёт до ~20 %.
-        // У старых строк список пуст — учтённой считается только item_id.
-        var existingByDateHour = new Dictionary<(DateOnly, short), Dictionary<string, (long Id, HashSet<string> Lines)>>();
+        // Строка у нас = строка детализации PowerBI (сверка 05.11.2026: 1145 из
+        // 1145), а в неё может входить несколько строк WMS — PowerBI их штуки
+        // суммирует. Раньше вторая и следующие строки WMS отбрасывались («первый
+        // выигрывает») вместе со штуками — недосчёт до ~20 %. Теперь штуки всех
+        // строк WMS с этим ключом в выгрузке суммируются, и в базу пишется
+        // большее из «записано» и «сумма»: повторная выгрузка того же периода даёт
+        // ту же сумму (не задваивает), частичная (автообновление за последний
+        // час) не уменьшает. На ID строк WMS не опираемся — у уже записанных
+        // строк они не совпали с выгрузкой (06.11.2026 штуки задвоились).
+        var existingByDateHour = new Dictionary<(DateOnly, short), Dictionary<string, long>>();
         foreach (var (date, hour) in dateHourPairs)
         {
             var rows = await _db.WmsOps.Where(o => o.Date == date && o.Hour == hour)
-                .Select(o => new { o.Id, o.MergeKey, o.ItemId, o.LineIds }).ToListAsync();
-            existingByDateHour[(date, hour)] = rows.ToDictionary(r => r.MergeKey,
-                r => (r.Id, new HashSet<string>(r.LineIds.Append(r.ItemId ?? "").Where(s => s != ""))));
+                .Select(o => new { o.Id, o.MergeKey }).ToListAsync();
+            existingByDateHour[(date, hour)] = rows.ToDictionary(r => r.MergeKey, r => r.Id);
         }
         var freshByKey = new Dictionary<(DateOnly, short, string), WmsOpEntity>(); // новые в этом батче
-        var updates = new Dictionary<long, (decimal Add, List<string> Lines)>();   // дописать к записанным
+        var sums = new Dictionary<long, decimal>();                                // сумма штук для записанных
 
         var added = 0;
-        var merged = 0;
         for (var i = 0; i < rawItems.Count; i++)
         {
             var raw = rawItems[i];
@@ -672,7 +673,6 @@ public partial class StatsService
             var targetBarcodeForKey = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
             var mergeKey = GetMergeKeyFromLight(operationType, type, executor, cell, nomenclatureCode, productName, GetStr(raw, "id"), targetBarcodeForKey);
 
-            var lineId = GetStr(raw, "id") ?? "";
             var sourceQty = GetObj(raw, "sourceQuantity");
             var targetQty = GetObj(raw, "targetQuantity");
             // сколько положено: стало − было в ЕО-получателе (иначе — сколько взято
@@ -681,22 +681,16 @@ public partial class StatsService
             var qty = GetNum(targetQty, "newQuantity") - GetNum(targetQty, "oldQuantity")
                 ?? GetNum(sourceQty, "oldQuantity") - GetNum(sourceQty, "newQuantity");
 
-            // строка с таким ключом уже записана — дописать штуки, если эта строка WMS ещё не учтена
-            if (existingByDateHour[(date, hourShort)].TryGetValue(mergeKey, out var ex))
+            // строка с таким ключом уже записана — копим сумму штук по выгрузке
+            if (existingByDateHour[(date, hourShort)].TryGetValue(mergeKey, out var existingId))
             {
-                if (lineId == "" || !ex.Lines.Add(lineId)) continue;
-                var (sum, lines) = updates.GetValueOrDefault(ex.Id, (0m, new List<string>()));
-                lines.Add(lineId);
-                updates[ex.Id] = (sum + (qty ?? 0), lines);
-                merged++;
+                sums[existingId] = sums.GetValueOrDefault(existingId) + (qty ?? 0);
                 continue;
             }
-            // уже добавлена в этом же батче
+            // уже добавлена в этой же выгрузке — прибавить штуки
             if (freshByKey.TryGetValue((date, hourShort, mergeKey), out var fresh))
             {
-                if (lineId == "" || fresh.LineIds.Contains(lineId)) continue;
                 fresh.Quantity = (fresh.Quantity ?? 0) + (qty ?? 0);
-                fresh.LineIds.Add(lineId);
                 continue;
             }
 
@@ -710,8 +704,7 @@ public partial class StatsService
                 Date = date,
                 Hour = (short)hour,
                 MergeKey = mergeKey,
-                ItemId = lineId,
-                LineIds = lineId != "" ? new List<string> { lineId } : new List<string>(),
+                ItemId = GetStr(raw, "id") ?? "",
                 Type = type,
                 OperationType = operationType,
                 ProductName = productName,
@@ -739,19 +732,19 @@ public partial class StatsService
         }
         await _db.SaveChangesAsync();
 
-        // дописать штуки и ID строк WMS к уже записанным строкам — одним запросом на кусок
-        foreach (var chunk in updates.Chunk(5000))
+        // записанным строкам — большее из «записано» и «сумма по выгрузке»; меняются
+        // только те, где сумма больше (одним запросом на кусок)
+        var raised = 0;
+        foreach (var chunk in sums.Chunk(5000))
         {
-            await _db.Database.ExecuteSqlRawAsync(@"
-                UPDATE wms_ops w SET quantity = COALESCE(w.quantity, 0) + u.add,
-                                     line_ids = w.line_ids || string_to_array(u.lines, ',')
-                  FROM unnest(@ids, @adds, @lines) AS u(id, add, lines)
-                 WHERE w.id = u.id",
+            raised += await _db.Database.ExecuteSqlRawAsync(@"
+                UPDATE wms_ops w SET quantity = u.sum
+                  FROM unnest(@ids, @sums) AS u(id, sum)
+                 WHERE w.id = u.id AND COALESCE(w.quantity, 0) < u.sum",
                 new Npgsql.NpgsqlParameter("ids", chunk.Select(c => c.Key).ToArray()),
-                new Npgsql.NpgsqlParameter("adds", chunk.Select(c => c.Value.Add).ToArray()),
-                new Npgsql.NpgsqlParameter("lines", chunk.Select(c => string.Join(",", c.Value.Lines)).ToArray()));
+                new Npgsql.NpgsqlParameter("sums", chunk.Select(c => c.Value).ToArray()));
         }
-        return added + merged;
+        return added + raised;
     }
 
     private static string? GetStr(System.Text.Json.JsonElement el, string prop)

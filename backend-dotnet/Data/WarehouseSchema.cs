@@ -84,9 +84,6 @@ public static class WarehouseSchema
               UNIQUE (date, hour, merge_key)
             )");
         await Exec("CREATE INDEX IF NOT EXISTS wms_ops_date_idx ON wms_ops (date)");
-        // ID строк WMS, вошедших в строку (PowerBI суммирует их штуки) — чтобы
-        // повторная выгрузка не прибавила одну строку дважды. ADD COLUMN с DEFAULT — без переписи таблицы
-        await Exec("ALTER TABLE wms_ops ADD COLUMN IF NOT EXISTS line_ids TEXT[] NOT NULL DEFAULT '{}'");
         // маршруты РК — раньше создавал Node (route-rk-pg.js, удалён 2026-10-31)
         await Exec(@"
             CREATE TABLE IF NOT EXISTS routes (
@@ -436,6 +433,21 @@ public static class WarehouseSchema
                    AND quantity IS DISTINCT FROM CASE
                     WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
                     ELSE src_old - src_new END");
+
+            // 06.11.2026: учёт строк WMS по их ID (колонка line_ids) задвоил штуки
+            // при перезагрузке — ID у записанных строк не совпали с выгрузкой.
+            // Тронутые им строки — к штукам первой строки WMS (их поднимет до суммы
+            // повторная выгрузка периода), колонку — убрать.
+            await Once("2026-11-06_wms_ops_drop_line_ids", @"
+                DO $$ BEGIN
+                  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wms_ops' AND column_name = 'line_ids') THEN
+                    UPDATE wms_ops SET quantity = CASE
+                        WHEN tgt_new IS NOT NULL AND tgt_old IS NOT NULL THEN tgt_new - tgt_old
+                        ELSE src_old - src_new END
+                     WHERE cardinality(line_ids) > 0;
+                    ALTER TABLE wms_ops DROP COLUMN line_ids;
+                  END IF;
+                END $$;");
         }
         catch (Exception err) { Console.WriteLine($"[schema] разовая правка данных не выполнена: {err.Message}"); }
     }
