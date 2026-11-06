@@ -93,6 +93,9 @@ public class WmsOpEntity
     public decimal? TgtOld { get; set; }
     public decimal? TgtNew { get; set; }
     public decimal? Quantity { get; set; }
+    // ID строк WMS, вошедших в эту строку: строка = «ЕО + ЕО + товар» у сотрудника,
+    // как строка детализации PowerBI; штуки всех вошедших строк суммируются
+    public List<string> LineIds { get; set; } = new();
 }
 
 // ─── Placement (wms_placement) ─────────────────────────────────────────────

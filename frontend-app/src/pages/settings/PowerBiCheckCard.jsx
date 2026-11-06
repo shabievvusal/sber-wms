@@ -32,7 +32,8 @@ const BOUNDS = {
 export function PowerBiCheckCard() {
   const [date, setDate] = useState(yesterday())
   const [shift, setShift] = useState('day')
-  const [loaded, setLoaded] = useState(null) // { date, shift, lines, idFields, sample }
+  const [loaded, setLoaded] = useState(null) // { date, shift, lines, idFields, sample, site }
+  const [onlyDiff, setOnlyDiff] = useState(false)
   const [loading, setLoading] = useState(null) // { page, pages, rows }
   const [type, setType] = useState('all')
   const [shiftHours, setShiftHours] = useState(0)
@@ -57,7 +58,10 @@ export function PowerBiCheckCard() {
         from: new Date(w.from - HOUR).toISOString(),
         to: new Date(w.to + HOUR - 1).toISOString(),
       }, setLoading)
-      setLoaded({ date, shift, lines: raw.map(normalize), idFields: discoverIdFields(raw), sample: raw[0] || null })
+      // цифры сайта (наша база) за ту же смену — тот же отчёт, что в статистике
+      const report = await api.getOpReport('selection', date, date, shift).catch(() => null)
+      const site = new Map((report?.executors || []).map(e => [e.key, e]))
+      setLoaded({ date, shift, lines: raw.map(normalize), idFields: discoverIdFields(raw), sample: raw[0] || null, site })
       setShiftHours(0)
     } catch (err) {
       toast.error('Не удалось загрузить из WMS: ' + (err.message || err))
@@ -71,11 +75,28 @@ export function PowerBiCheckCard() {
     ? computeCheck(loaded.lines, { date: loaded.date, shift: loaded.shift, shiftHours, type, variants, companyById })
     : null), [loaded, shiftHours, type, variants, companyById])
 
+  // сайт: СЗ по выбранному типу; штуки — только «хранение + КДК» (по типам отчёт их не делит)
+  const siteOf = r => {
+    const e = loaded?.site?.get(r.execId)
+    if (!e) return { sz: 0, qty: type === 'all' ? 0 : null }
+    return { sz: type === 'all' ? e.tasks : type === 'kdk' ? e.kdkTasks : e.storageTasks, qty: type === 'all' ? Number(e.qty) || 0 : null }
+  }
+  // с чем сравниваем сайт: строка детализации PowerBI и «положено»
+  const isDiff = r => {
+    const s = siteOf(r)
+    return s.sz !== r.values.srcTgtProduct || (s.qty != null && s.qty !== r.values.qtyDelta)
+  }
   const shown = useMemo(() => {
     if (!result) return []
     const q = query.trim().toLowerCase()
-    return q ? result.rows.filter(r => r.fio.toLowerCase().includes(q) || r.company.toLowerCase().includes(q)) : result.rows
-  }, [result, query])
+    let list = q ? result.rows.filter(r => r.fio.toLowerCase().includes(q) || r.company.toLowerCase().includes(q)) : result.rows
+    if (onlyDiff) list = list.filter(isDiff)
+    return list
+  }, [result, query, onlyDiff, type, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  const siteTotal = useMemo(() => (result
+    ? result.rows.reduce((t, r) => { const s = siteOf(r); return { sz: t.sz + s.sz, qty: s.qty == null ? null : (t.qty ?? 0) + s.qty } }, { sz: 0, qty: type === 'all' ? 0 : null })
+    : null), [result, type, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  const diffCount = result ? result.rows.filter(isDiff).length : 0
 
   const typeLabel = { all: 'хранение + КДК', storage: 'хранение', kdk: 'КДК' }[type]
   const periodLabel = result
@@ -91,11 +112,13 @@ export function PowerBiCheckCard() {
       { header: 'Сотрудник', key: 'fio', width: 34 },
       { header: 'Компания', key: 'company', width: 18 },
       ...variants.map(v => ({ header: `${v.group}: ${v.label}`, key: v.key, numFmt: NUM, width: 14 })),
+      { header: 'Сайт: СЗ', key: 'siteSz', numFmt: NUM, width: 12 },
+      ...(type === 'all' ? [{ header: 'Сайт: штук', key: 'siteQty', numFmt: NUM, width: 12 }] : []),
     ]
     titleRows(ws, 'Комплектация — способы подсчёта', `${periodLabel} · строк в смене ${result.lines}`, cols.length)
-    addTable(ws, cols, result.rows.map(r => ({ fio: r.fio, company: r.company, ...r.values })), {
+    addTable(ws, cols, result.rows.map(r => ({ fio: r.fio, company: r.company, ...r.values, siteSz: siteOf(r).sz, siteQty: siteOf(r).qty })), {
       freezeCols: 1,
-      total: { fio: 'Итого', ...result.total },
+      total: { fio: 'Итого', ...result.total, siteSz: siteTotal.sz, siteQty: siteTotal.qty },
     })
     await p.save(wb, `сверка_PowerBI_${loaded.date}_${loaded.shift}_${type}.xlsx`)
   })
@@ -104,7 +127,7 @@ export function PowerBiCheckCard() {
     <SettingCard
       icon={Scale}
       title="Сверка комплектации с PowerBI"
-      subtitle="Одна смена из WMS, посчитанная разными способами. Найдите в PowerBI 3–5 сотрудников и сравните: колонка, где цифры совпали у всех, — это правило PowerBI."
+      subtitle="Одна смена из WMS, посчитанная разными способами, и цифры нашего сайта. Красным — где сайт расходится со строкой PowerBI («ЕО-источник + ЕО-получатель + товар») или штуками «положено»."
       actions={result && (
         <Button size="sm" variant="secondary" onClick={() => exportXlsx().catch(err => toast.error(err.message))}>
           <Download className="size-3.5" /> Excel
@@ -142,6 +165,10 @@ export function PowerBiCheckCard() {
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input className="h-8 w-56 pl-8" placeholder="Сотрудник или компания" value={query} onChange={e => setQuery(e.target.value)} />
             </div>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} />
+              Только расхождения с сайтом ({diffCount})
+            </label>
             <span className="text-xs text-muted-foreground">{periodLabel} · строк в смене {result.lines.toLocaleString('ru-RU')}</span>
           </div>
 
@@ -157,6 +184,16 @@ export function PowerBiCheckCard() {
                       <div className="whitespace-normal text-xs font-semibold text-foreground">{v.label}</div>
                     </TableHead>
                   ))}
+                  <TableHead className="text-center normal-case" title="СЗ сотрудника в нашей статистике (база сайта), смена 09–21 / 21–09">
+                    <div className="text-[10px] uppercase tracking-wide">Сайт</div>
+                    <div className="text-xs font-semibold text-foreground">СЗ</div>
+                  </TableHead>
+                  {type === 'all' && (
+                    <TableHead className="text-center normal-case" title="Штуки сотрудника в нашей статистике (база сайта)">
+                      <div className="text-[10px] uppercase tracking-wide">Сайт</div>
+                      <div className="text-xs font-semibold text-foreground">Штук</div>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -164,12 +201,23 @@ export function PowerBiCheckCard() {
                   <TableCell className="sticky left-0 bg-card">Итого</TableCell>
                   <TableCell>{result.rows.length} чел.</TableCell>
                   {variants.map(v => <TableCell key={v.key} className="text-center">{result.total[v.key].toLocaleString('ru-RU')}</TableCell>)}
+                  <TableCell className={cn('text-center', siteTotal.sz !== result.total.srcTgtProduct && 'text-destructive')}>{siteTotal.sz.toLocaleString('ru-RU')}</TableCell>
+                  {type === 'all' && <TableCell className={cn('text-center', siteTotal.qty !== result.total.qtyDelta && 'text-destructive')}>{siteTotal.qty.toLocaleString('ru-RU')}</TableCell>}
                 </TableRow>
                 {shown.map(r => (
                   <TableRow key={r.execId || r.fio}>
                     <TableCell className="sticky left-0 bg-card">{r.fio}</TableCell>
                     <TableCell className={cn(r.company === '—' && 'text-muted-foreground')}>{r.company}</TableCell>
                     {variants.map(v => <TableCell key={v.key} className="text-center">{r.values[v.key].toLocaleString('ru-RU')}</TableCell>)}
+                    {(() => {
+                      const s = siteOf(r)
+                      return (
+                        <>
+                          <TableCell className={cn('text-center font-medium', s.sz !== r.values.srcTgtProduct && 'bg-destructive/10 text-destructive')}>{s.sz.toLocaleString('ru-RU')}</TableCell>
+                          {type === 'all' && <TableCell className={cn('text-center font-medium', s.qty !== r.values.qtyDelta && 'bg-destructive/10 text-destructive')}>{s.qty.toLocaleString('ru-RU')}</TableCell>}
+                        </>
+                      )
+                    })()}
                   </TableRow>
                 ))}
               </TableBody>

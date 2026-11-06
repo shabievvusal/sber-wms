@@ -598,7 +598,7 @@ public partial class StatsService
             .ToList();
     }
 
-    // ─── Ops: запись (upsert по merge_key, "первый выигрывает" — как loadHourly) ─
+    // ─── Ops: запись (строка = merge_key; строки WMS с тем же ключом дописывают штуки) ─
     // Единственное хранилище операций WMS: /api/save-fetched-data (Node)
     // пересылает сюда сырые item'ы кусками. Почасовые JSON-файлы и утилиты
     // tools/* убраны 2026-10-31.
@@ -625,14 +625,25 @@ public partial class StatsService
             parsedDates[i] = (dh.Item1, dh.Item2, completedAtUtc);
             dateHourPairs.Add(dh);
         }
-        var existingKeysByDateHour = new Dictionary<(DateOnly, short), HashSet<string>>();
+        // Уже записанные строки часа: ключ → id строки и ID строк WMS, что в неё
+        // вошли. Строка у нас = строка детализации PowerBI (сверка 05.11.2026:
+        // 1145 из 1145), а в неё может входить несколько строк WMS — PowerBI их
+        // штуки суммирует. Раньше вторая и следующие строки WMS отбрасывались
+        // («первый выигрывает») вместе со штуками — недосчёт до ~20 %.
+        // У старых строк список пуст — учтённой считается только item_id.
+        var existingByDateHour = new Dictionary<(DateOnly, short), Dictionary<string, (long Id, HashSet<string> Lines)>>();
         foreach (var (date, hour) in dateHourPairs)
         {
-            var keys = await _db.WmsOps.Where(o => o.Date == date && o.Hour == hour).Select(o => o.MergeKey).ToListAsync();
-            existingKeysByDateHour[(date, hour)] = new HashSet<string>(keys);
+            var rows = await _db.WmsOps.Where(o => o.Date == date && o.Hour == hour)
+                .Select(o => new { o.Id, o.MergeKey, o.ItemId, o.LineIds }).ToListAsync();
+            existingByDateHour[(date, hour)] = rows.ToDictionary(r => r.MergeKey,
+                r => (r.Id, new HashSet<string>(r.LineIds.Append(r.ItemId ?? "").Where(s => s != ""))));
         }
+        var freshByKey = new Dictionary<(DateOnly, short, string), WmsOpEntity>(); // новые в этом батче
+        var updates = new Dictionary<long, (decimal Add, List<string> Lines)>();   // дописать к записанным
 
         var added = 0;
+        var merged = 0;
         for (var i = 0; i < rawItems.Count; i++)
         {
             var raw = rawItems[i];
@@ -661,24 +672,46 @@ public partial class StatsService
             var targetBarcodeForKey = targetAddr != null ? (GetStr(targetAddr.Value, "handlingUnitBarcode") ?? "") : "";
             var mergeKey = GetMergeKeyFromLight(operationType, type, executor, cell, nomenclatureCode, productName, GetStr(raw, "id"), targetBarcodeForKey);
 
-            // `HashSet.Add` возвращает false и для уже существующих в БД ключей
-            // (сет засеян ими выше), и для дублей внутри этого же батча — "первый
-            // выигрывает", как в loadHourly/merge, без похода в БД на каждый элемент.
-            if (!existingKeysByDateHour[(date, (short)hour)].Add(mergeKey)) continue;
-
-            var part = GetObj(raw, "part");
+            var lineId = GetStr(raw, "id") ?? "";
             var sourceQty = GetObj(raw, "sourceQuantity");
             var targetQty = GetObj(raw, "targetQuantity");
+            // сколько положено: стало − было в ЕО-получателе (иначе — сколько взято
+            // из источника); так считает PowerBI. Раньше было «стало в ЕО» —
+            // завышало штуки, если в ЕО уже что-то лежало
+            var qty = GetNum(targetQty, "newQuantity") - GetNum(targetQty, "oldQuantity")
+                ?? GetNum(sourceQty, "oldQuantity") - GetNum(sourceQty, "newQuantity");
+
+            // строка с таким ключом уже записана — дописать штуки, если эта строка WMS ещё не учтена
+            if (existingByDateHour[(date, hourShort)].TryGetValue(mergeKey, out var ex))
+            {
+                if (lineId == "" || !ex.Lines.Add(lineId)) continue;
+                var (sum, lines) = updates.GetValueOrDefault(ex.Id, (0m, new List<string>()));
+                lines.Add(lineId);
+                updates[ex.Id] = (sum + (qty ?? 0), lines);
+                merged++;
+                continue;
+            }
+            // уже добавлена в этом же батче
+            if (freshByKey.TryGetValue((date, hourShort, mergeKey), out var fresh))
+            {
+                if (lineId == "" || fresh.LineIds.Contains(lineId)) continue;
+                fresh.Quantity = (fresh.Quantity ?? 0) + (qty ?? 0);
+                fresh.LineIds.Add(lineId);
+                continue;
+            }
+
+            var part = GetObj(raw, "part");
             var barcodesArr = product != null && product.Value.TryGetProperty("barcodes", out var barcodesEl) && barcodesEl.ValueKind == System.Text.Json.JsonValueKind.Array
                 ? string.Join(", ", barcodesEl.EnumerateArray().Select(b => b.ToString()))
                 : "";
 
-            _db.WmsOps.Add(new WmsOpEntity
+            var entity = new WmsOpEntity
             {
                 Date = date,
                 Hour = (short)hour,
                 MergeKey = mergeKey,
-                ItemId = GetStr(raw, "id") ?? "",
+                ItemId = lineId,
+                LineIds = lineId != "" ? new List<string> { lineId } : new List<string>(),
                 Type = type,
                 OperationType = operationType,
                 ProductName = productName,
@@ -698,16 +731,27 @@ public partial class StatsService
                 SrcNew = GetNum(sourceQty, "newQuantity"),
                 TgtOld = GetNum(targetQty, "oldQuantity"),
                 TgtNew = GetNum(targetQty, "newQuantity"),
-                // сколько положено: стало − было в ЕО-получателе (иначе — сколько взято
-                // из источника); так считает PowerBI. Раньше было «стало в ЕО» —
-                // завышало штуки, если в ЕО уже что-то лежало
-                Quantity = GetNum(targetQty, "newQuantity") - GetNum(targetQty, "oldQuantity")
-                    ?? GetNum(sourceQty, "oldQuantity") - GetNum(sourceQty, "newQuantity"),
-            });
+                Quantity = qty,
+            };
+            _db.WmsOps.Add(entity);
+            freshByKey[(date, hourShort, mergeKey)] = entity;
             added++;
         }
         await _db.SaveChangesAsync();
-        return added;
+
+        // дописать штуки и ID строк WMS к уже записанным строкам — одним запросом на кусок
+        foreach (var chunk in updates.Chunk(5000))
+        {
+            await _db.Database.ExecuteSqlRawAsync(@"
+                UPDATE wms_ops w SET quantity = COALESCE(w.quantity, 0) + u.add,
+                                     line_ids = w.line_ids || string_to_array(u.lines, ',')
+                  FROM unnest(@ids, @adds, @lines) AS u(id, add, lines)
+                 WHERE w.id = u.id",
+                new Npgsql.NpgsqlParameter("ids", chunk.Select(c => c.Key).ToArray()),
+                new Npgsql.NpgsqlParameter("adds", chunk.Select(c => c.Value.Add).ToArray()),
+                new Npgsql.NpgsqlParameter("lines", chunk.Select(c => string.Join(",", c.Value.Lines)).ToArray()));
+        }
+        return added + merged;
     }
 
     private static string? GetStr(System.Text.Json.JsonElement el, string prop)

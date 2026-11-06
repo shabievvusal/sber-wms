@@ -83,6 +83,7 @@ public class AppDbContext : DbContext
         ops.Property(o => o.TgtOld).HasColumnName("tgt_old");
         ops.Property(o => o.TgtNew).HasColumnName("tgt_new");
         ops.Property(o => o.Quantity).HasColumnName("quantity");
+        ops.Property(o => o.LineIds).HasColumnName("line_ids");
 
         var placement = modelBuilder.Entity<WmsPlacementEntity>();
         placement.ToTable("wms_placement");

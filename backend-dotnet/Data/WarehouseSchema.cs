@@ -84,6 +84,9 @@ public static class WarehouseSchema
               UNIQUE (date, hour, merge_key)
             )");
         await Exec("CREATE INDEX IF NOT EXISTS wms_ops_date_idx ON wms_ops (date)");
+        // ID строк WMS, вошедших в строку (PowerBI суммирует их штуки) — чтобы
+        // повторная выгрузка не прибавила одну строку дважды. ADD COLUMN с DEFAULT — без переписи таблицы
+        await Exec("ALTER TABLE wms_ops ADD COLUMN IF NOT EXISTS line_ids TEXT[] NOT NULL DEFAULT '{}'");
         // маршруты РК — раньше создавал Node (route-rk-pg.js, удалён 2026-10-31)
         await Exec(@"
             CREATE TABLE IF NOT EXISTS routes (
