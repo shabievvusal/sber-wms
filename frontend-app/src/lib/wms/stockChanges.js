@@ -46,3 +46,19 @@ export async function _fetchOnePageFromBrowser(token, body) {
   const total = value?.total ?? data?.totalElements ?? null
   return { items, total }
 }
+
+// Все строки журнала за период, сырыми (как отдаёт WMS) — для сверки
+// подсчётов. onProgress({ page, pages, rows }) — после каждой страницы.
+export async function fetchAllStockChanges(token, { operationTypes, from, to, pageSize = 2000 }, onProgress) {
+  const body = pageNumber => ({ operationTypes, operationCompletedAtFrom: from, operationCompletedAtTo: to, pageNumber, pageSize })
+  const first = await _fetchOnePageFromBrowser(token, body(1))
+  const pages = Math.max(1, Math.ceil((first.total ?? first.items.length) / pageSize))
+  let rows = first.items
+  onProgress?.({ page: 1, pages, rows: rows.length })
+  for (let page = 2; page <= pages; page++) {
+    const next = await _fetchOnePageFromBrowser(token, body(page))
+    rows = rows.concat(next.items)
+    onProgress?.({ page, pages, rows: rows.length })
+  }
+  return rows
+}

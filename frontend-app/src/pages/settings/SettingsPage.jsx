@@ -21,6 +21,7 @@ import { StatsPeriodRefreshCard } from './StatsPeriodRefreshCard'
 import { ZgzDataCard } from './ZgzDataCard'
 import { CellStoresCard } from './CellStoresCard'
 import { AuditLogCard } from './AuditLogCard'
+import { PowerBiCheckCard } from './PowerBiCheckCard'
 import { Users, Lock, FileText, History, Settings as SettingsIcon } from 'lucide-react'
 
 const TAB_DEFS = [
@@ -118,6 +119,7 @@ export default function SettingsPage() {
             <TsdManualEmployeesCard />
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <CellStoresCard />}
             <ZonesSettingsCard />
+            {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <PowerBiCheckCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <StatsPeriodRefreshCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ReceivingRefreshCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
