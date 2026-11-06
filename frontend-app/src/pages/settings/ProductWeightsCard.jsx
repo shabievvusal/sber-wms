@@ -88,6 +88,26 @@ export function ProductWeightsCard() {
     }
   }
 
+  const [stockUploading, setStockUploading] = useState(false)
+  const handleStockUpload = async e => {
+    const files = [...(e.target.files || [])]
+    if (!files.length) return
+    setStockUploading(true)
+    try {
+      for (const file of files) {
+        const res = await api.uploadStockWeightsExcel(file)
+        toast.success(`${file.name}: артикулов ${res.articles.toLocaleString('ru-RU')} (новых ${res.added.toLocaleString('ru-RU')}, обновлено ${res.updated.toLocaleString('ru-RU')})`)
+        if (res.truncated) toast.warning(`${file.name}: в файле ~150 тыс. строк — PowerBI обрезал выгрузку. Выгрузите остатки частями (например, только РЦ СПБ-3 или по зонам) и загрузите все части.`, { duration: 12000 })
+      }
+      await loadInfo()
+    } catch (err) {
+      toast.error('Ошибка: ' + err.message)
+    } finally {
+      setStockUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const handleDelete = async () => {
     if (!(await confirmDialog({ title: 'Удалить файл весов товаров?', description: 'Без него в статистике не посчитается вес операций. Действие нельзя отменить — понадобится загрузить файл заново.', confirmText: 'Удалить', danger: true }))) return
     setDeleting(true)
@@ -133,6 +153,25 @@ export function ProductWeightsCard() {
       </div>
       <div className="mt-3 rounded-2xl border p-3.5">
         <div className="flex flex-wrap items-center gap-2">
+          <FileSpreadsheet className="size-4 text-muted-foreground" />
+          <div className="min-w-0 flex-1 basis-48">
+            <div className="text-sm font-medium">Вес из остатков (как в PowerBI)</div>
+            <div className="text-xs text-muted-foreground">
+              {info?.stockCount
+                ? `${info.stockCount.toLocaleString('ru-RU')} артикулов · обновлено ${fmtDateTime(info.stockUpdatedAt)}`
+                : 'PowerBI → «Детализация по остаткам на МХ». Главнее Excel и WMS'}
+            </div>
+          </div>
+          <Button size="sm" variant="outline" disabled={stockUploading} asChild>
+            <label className="cursor-pointer">
+              <Upload className="size-3.5" /> {stockUploading ? 'Загрузка…' : 'Загрузить остатки'}
+              <input type="file" accept=".xlsx" multiple className="hidden" onChange={handleStockUpload} disabled={stockUploading} />
+            </label>
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 rounded-2xl border p-3.5">
+        <div className="flex flex-wrap items-center gap-2">
           <CloudDownload className="size-4 text-muted-foreground" />
           <span className="text-sm font-medium">Дозаполнить из WMS</span>
           <div className="ml-auto flex gap-1">
@@ -162,7 +201,7 @@ export function ProductWeightsCard() {
         )}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Вес из WMS — карточка товара (вес единицы). Вес из Excel главнее: из WMS дописываются только отсутствующие артикулы, новая загрузка Excel их не стирает.
+        Порядок: вес из остатков (тот же, что в PowerBI) → Excel → WMS (карточка товара, только если веса нигде нет). Файлы остатков дополняют друг друга — большую выгрузку можно грузить частями.
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         Нужны колонки <span className="font-medium text-foreground">«Артикул товара»</span> и <span className="font-medium text-foreground">«Вес товара»</span>. Вес — в кг (0.5) или граммах (500г).

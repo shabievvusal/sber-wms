@@ -26,6 +26,17 @@ export async function uploadProductWeightsExcel(file) {
   return data
 }
 
+// «Детализация по остаткам на МХ» из PowerBI — вес штуки как в PowerBI;
+// файлы дополняют друг друга
+export async function uploadStockWeightsExcel(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const r = await fetch('/api/vs/admin/product-weights/stock', { method: 'POST', credentials: 'include', headers: apiHeaders(), body: fd })
+  const data = await r.json()
+  if (!r.ok) throw new Error(data.error || 'Ошибка загрузки')
+  return data
+}
+
 export async function deleteProductWeightsExcel() {
   return req('/api/vs/admin/product-weights', { method: 'DELETE' })
 }

@@ -19,9 +19,41 @@ public static class ProductWeightsAdminEndpoints
         admin.MapGet("/info", async (ProductWeightsService svc) =>
         {
             var file = new FileInfo(ProductWeightsService.ExcelPath);
-            if (!file.Exists) return Results.Json(new { exists = false, count = 0 });
+            var (stockCount, stockAt) = await svc.StockInfoAsync();
+            var stockUpdatedAt = stockAt?.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
             var (count, wmsCount, barcodes) = await svc.CountsAsync();
-            return Results.Json(new { exists = true, updatedAt = file.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), sizeBytes = file.Length, count, wmsCount, barcodes });
+            if (!file.Exists) return Results.Json(new { exists = false, count, wmsCount, barcodes, stockCount, stockUpdatedAt });
+            return Results.Json(new { exists = true, updatedAt = file.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), sizeBytes = file.Length, count, wmsCount, barcodes, stockCount, stockUpdatedAt });
+        });
+
+        // «Детализация по остаткам на МХ» из PowerBI — вес штуки как в PowerBI.
+        // Файлы дополняют друг друга (выгрузку больше 150 тыс. строк PowerBI обрезает).
+        admin.MapPost("/stock", async (HttpContext ctx, ProductWeightsService svc) =>
+        {
+            var sizeFeature = ctx.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (sizeFeature is { IsReadOnly: false }) sizeFeature.MaxRequestBodySize = MaxExcelBytes + 1024 * 1024;
+            if (!ctx.Request.HasFormContentType) return Results.BadRequest(new { error = "Файл не получен" });
+            var form = await ctx.Request.ReadFormAsync(new FormOptions { MultipartBodyLengthLimit = MaxExcelBytes + 1024 * 1024 });
+            var file = form.Files.GetFile("file");
+            if (file == null) return Results.BadRequest(new { error = "Файл не получен" });
+            if (!System.Text.RegularExpressions.Regex.IsMatch(file.FileName, @"\.xlsx$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                return Results.BadRequest(new { error = "Только Excel-файлы (.xlsx)" });
+            if (file.Length > MaxExcelBytes) return Results.BadRequest(new { error = "Файл больше 50 МБ" });
+            try
+            {
+                using var ms = new MemoryStream();
+                await file.CopyToAsync(ms);
+                ms.Position = 0;
+                var parsed = ProductWeightsService.ParseStockExcel(ms);
+                if (parsed == null)
+                    return Results.BadRequest(new { error = "Не похоже на «Детализацию по остаткам»: нужны столбцы «Номер номенклатуры», «Остатки SKU, шт», «Вес товаров в кг»" });
+                var (weights, rows) = parsed.Value;
+                var (added, updated) = await svc.AddStockAsync(weights);
+                var (count, _, _) = await svc.CountsAsync();
+                // ровно ~150 тыс. строк — PowerBI обрезал выгрузку
+                return Results.Json(new { ok = true, rows, articles = weights.Count, added, updated, count, truncated = rows >= 149_000 });
+            }
+            catch (Exception err) { return Results.Json(new { error = err.Message }, statusCode: 500); }
         });
 
         admin.MapPost("/upload", async (HttpContext ctx, ProductWeightsService svc) =>

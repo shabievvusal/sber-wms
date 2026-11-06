@@ -15,6 +15,11 @@ namespace BackendDotnet.Services;
 // по нему пересобираются таблицы product_weights и product_barcodes — их
 // читают статистика, отчёты и «Поиск потеряшек». Таблицы общие для складов.
 //
+// Вес из «Детализации по остаткам на МХ» (PowerBI) — в product_weights_stock: это
+// тот же вес, что в отчётах PowerBI (сверка 06.11.2026: 3049 из 3049 артикулов
+// до грамма), поэтому он главнее Excel ВГХ. Файлы дополняют друг друга —
+// выгрузку больше 150 тыс. строк PowerBI обрезает, её грузят частями.
+//
 // Дозапрошенное из WMS для товаров без веса в Excel — в product_weights_wms
 // (раньше product-weights-wms.json): новая загрузка Excel его не стирает,
 // но Excel главнее — вес из WMS идёт в справочник, только если артикула нет.
@@ -39,6 +44,7 @@ public class ProductWeightsService
     {
         async Task Exec(string sql) { await using var cmd = new NpgsqlCommand(sql, conn); await cmd.ExecuteNonQueryAsync(); }
         await Exec("CREATE TABLE IF NOT EXISTS product_weights (article TEXT PRIMARY KEY, grams NUMERIC NOT NULL)");
+        await Exec("CREATE TABLE IF NOT EXISTS product_weights_stock (article TEXT PRIMARY KEY, grams NUMERIC NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())");
         await Exec(@"CREATE TABLE IF NOT EXISTS product_weights_wms (
             article TEXT PRIMARY KEY, grams NUMERIC NOT NULL DEFAULT 0, product_id TEXT, name TEXT NOT NULL DEFAULT '',
             barcodes JSONB NOT NULL DEFAULT '[]', packages JSONB NOT NULL DEFAULT '[]', fetched_at TIMESTAMPTZ NOT NULL DEFAULT now())");
@@ -182,6 +188,10 @@ public class ProductWeightsService
             var (weights, barcodes) = File.Exists(ExcelPath) ? ParseExcel(ExcelPath) : (new(), new());
             await using var conn = new NpgsqlConnection(_connString);
             await conn.OpenAsync();
+            // вес из остатков (как в PowerBI) — главнее Excel ВГХ; из WMS — только если нигде нет
+            await using (var st = new NpgsqlCommand("SELECT article, grams FROM product_weights_stock", conn))
+            await using (var sr = await st.ExecuteReaderAsync())
+                while (await sr.ReadAsync()) weights[sr.GetString(0)] = sr.GetDecimal(1);
             var wms = await LoadWmsAsync(conn);
             foreach (var e in wms) if (e.Grams > 0) weights.TryAdd(e.Article, e.Grams);
             MergeWmsBarcodes(barcodes, wms);
@@ -268,6 +278,76 @@ public class ProductWeightsService
             return saved;
         }
         finally { Lock.Release(); }
+    }
+
+    // ─── вес из «Детализации по остаткам на МХ» ───────────────────────────────
+
+    /// Вес штуки по артикулу: «Вес товаров в кг» ÷ «Остатки SKU, шт» (г).
+    /// Возвращает веса и число строк с остатком; null — нет нужных столбцов.
+    public static (Dictionary<string, decimal> Weights, int Rows)? ParseStockExcel(Stream stream)
+    {
+        using var reader = ExcelReaderFactory.CreateReader(stream);
+        List<string>? headers = null;
+        for (var i = 0; i < 10 && reader.Read(); i++)
+        {
+            var row = Enumerable.Range(0, reader.FieldCount).Select(c => CellStr(reader.GetValue(c)).Trim()).ToList();
+            if (row.Contains("Номер номенклатуры") && row.Contains("Остатки SKU, шт") && row.Contains("Вес товаров в кг")) { headers = row; break; }
+        }
+        if (headers == null) return null;
+        int artIdx = headers.IndexOf("Номер номенклатуры"), qtyIdx = headers.IndexOf("Остатки SKU, шт"), kgIdx = headers.IndexOf("Вес товаров в кг");
+        object? Get(int c) => c < reader.FieldCount ? reader.GetValue(c) : null;
+        static decimal Num(object? v) => v switch
+        {
+            double d => (decimal)d,
+            _ => decimal.TryParse(CellStr(v).Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var p) ? p : 0,
+        };
+        var weights = new Dictionary<string, decimal>();
+        var rows = 0;
+        while (reader.Read())
+        {
+            var art = CellStr(Get(artIdx)).Trim();
+            var qty = Num(Get(qtyIdx));
+            var kg = Num(Get(kgIdx));
+            if (art == "" || qty <= 0 || kg <= 0) continue;
+            rows++;
+            weights.TryAdd(art, Math.Round(kg / qty * 1000, 2));
+        }
+        return (weights, rows);
+    }
+
+    /// Дописать веса из остатков (новые — добавить, известные — обновить) и пересобрать справочник.
+    public async Task<(int Added, int Updated)> AddStockAsync(Dictionary<string, decimal> weights)
+    {
+        int added = 0, updated = 0;
+        await using (var conn = new NpgsqlConnection(_connString))
+        {
+            await conn.OpenAsync();
+            foreach (var chunk in weights.Chunk(5000))
+            {
+                // xmax = 0 — строка вставлена, иначе обновлена
+                await using var cmd = new NpgsqlCommand(@"
+                    INSERT INTO product_weights_stock (article, grams, updated_at)
+                    SELECT a, g, now() FROM unnest($1::text[], $2::numeric[]) AS u(a, g)
+                    ON CONFLICT (article) DO UPDATE SET grams = EXCLUDED.grams, updated_at = now()
+                    RETURNING (xmax = 0)", conn);
+                cmd.Parameters.AddWithValue(chunk.Select(k => k.Key).ToArray());
+                cmd.Parameters.AddWithValue(chunk.Select(k => k.Value).ToArray());
+                await using var r = await cmd.ExecuteReaderAsync();
+                while (await r.ReadAsync()) if (r.GetBoolean(0)) added++; else updated++;
+            }
+        }
+        await RebuildAsync();
+        return (added, updated);
+    }
+
+    public async Task<(long Count, DateTime? UpdatedAt)> StockInfoAsync()
+    {
+        await using var conn = new NpgsqlConnection(_connString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("SELECT count(*), max(updated_at) FROM product_weights_stock", conn);
+        await using var r = await cmd.ExecuteReaderAsync();
+        await r.ReadAsync();
+        return (r.GetInt64(0), r.IsDBNull(1) ? null : r.GetDateTime(1));
     }
 
     public async Task<(long Weights, long Wms, long Barcodes)> CountsAsync()
