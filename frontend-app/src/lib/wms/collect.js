@@ -240,16 +240,22 @@ function _journalByHu(lines) {
 function _matchAcceptor(fact, byHu) {
   const perUser = new Map()
   let journalPieces = 0
-  for (const hu of fact.hus.keys()) {
+  // ЕО, где журнал и карточка расходятся, — для разбора причины
+  const diffs = []
+  for (const [hu, factQty] of fact.hus) {
+    let huQty = 0
     for (const { user, qty } of byHu.get(hu) ?? []) {
       journalPieces += qty
+      huQty += qty
       const cur = perUser.get(user.id) || { user, qty: 0 }
       cur.qty += qty
       perUser.set(user.id, cur)
     }
+    if (huQty !== factQty) diffs.push({ hu, fact: factQty, journal: huQty })
   }
-  if (!perUser.size) return { reason: 'noJournal' }
-  if (journalPieces !== fact.pieces) return { reason: 'mismatch' }
+  const diag = { factPieces: fact.pieces, journalPieces, huCount: fact.hus.size, diffs }
+  if (!perUser.size) return { reason: 'noJournal', diag }
+  if (journalPieces !== fact.pieces) return { reason: 'mismatch', diag }
   const top = [...perUser.values()].sort((a, b) => b.qty - a.qty)[0]
   return { user: top.user, several: perUser.size > 1 }
 }
@@ -296,15 +302,27 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
   // Поставка без найденного приёмщика сохраняется без него (строка «—» в
   // статистике); при следующем обновлении её приёмщик будет запрошен снова.
   const enriched = []
+  const issues = []
   let done = 0
   const BATCH = 8
   for (let i = 0; i < toEnrich.length; i += BATCH) {
     const rows = await Promise.all(toEnrich.slice(i, i + BATCH).map(async task => {
       let fact = null
+      let detailValue = null
       try {
         const detail = await getInboundTaskDetail(token, { taskType: task.type, id: task.id })
-        fact = _inboundFact(detail?.value)
+        detailValue = detail?.value
+        fact = _inboundFact(detailValue)
       } catch { /* карточка не открылась — приёмщик запросом */ }
+      const issueOf = (m, user) => ({
+        id: task.id, taskNumber: task.taskNumber, orderNumber: task.orderNumber, type: task.type,
+        supplier: task.supplier?.name || task.supplierName || '',
+        gate: detailValue?.gateInfo?.gateNumber || '',
+        startedAt: detailValue?.startedAt || task.startedAt || null,
+        completedAt: detailValue?.completedAt || task.completedAt || null,
+        reason: m.reason, acceptor: user ? [user.lastName, user.firstName].filter(Boolean).join(' ') : '',
+        ...(m.diag || {}),
+      })
       // фактическое число SKU (в списке поставок — только плановое)
       const withFact = fact ? { ...task, actualSkuCount: fact.sku } : task
       const m = fact ? _matchAcceptor(fact, byHu) : { reason: 'noDetail' }
@@ -312,18 +330,59 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
       try {
         const res = await getInboundTaskResponsibleUsers(token, { taskType: task.type, id: task.id })
         const user = _pickInboundAcceptedUser(res?.value?.responsibleUsers ?? [])
-        return { task: user ? { ...withFact, responsibleUser: user } : withFact, via: 'request', reason: m.reason, noAcceptor: !user }
+        return { task: user ? { ...withFact, responsibleUser: user } : withFact, via: 'request', reason: m.reason, noAcceptor: !user, issue: issueOf(m, user) }
       } catch {
-        return { task: withFact, via: 'request', reason: m.reason, noAcceptor: true }
+        return { task: withFact, via: 'request', reason: m.reason, noAcceptor: true, issue: issueOf(m, null) }
       }
     }))
     for (const r of rows) {
       enriched.push(r.task)
       if (r.via === 'journal') { stat.byJournal++; if (r.several) stat.several++ }
-      else { stat.requested++; stat[r.reason]++; if (r.noAcceptor) stat.noAcceptor++ }
+      else { stat.requested++; stat[r.reason]++; if (r.noAcceptor) stat.noAcceptor++; issues.push(r.issue) }
     }
     done += rows.length
     report(done)
+  }
+
+  // Разбор несошедшихся: вся история WMS по расходящимся ЕО (любые операции,
+  // ЕО — получатель или источник) за 3 дня до начала приёмки … сутки после.
+  if (issues.length) {
+    onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done, ...stat, stage: 'issues' })
+    for (const issue of issues.slice(0, 20)) {
+      const t0 = Date.parse(issue.startedAt || issue.completedAt || completedDateFrom)
+      const t1 = Date.parse(issue.completedAt || completedDateTo)
+      const window = {
+        operationCompletedAtFrom: new Date(t0 - 3 * 86400000).toISOString(),
+        operationCompletedAtTo: new Date(t1 + 86400000).toISOString(),
+      }
+      // ЕО нет в журнале — смотрим все ЕО поставки (до 10), иначе — только расходящиеся
+      const hus = (issue.diffs || []).slice(0, 10)
+      for (const d of hus) {
+        try {
+          const [asTarget, asSource] = await Promise.all([
+            _fetchOnePageFromBrowser(token, { ...window, targetHandlingUnitBarcode: d.hu, pageNumber: 1, pageSize: 200 }),
+            _fetchOnePageFromBrowser(token, { ...window, sourceHandlingUnitBarcode: d.hu, pageNumber: 1, pageSize: 200 }),
+          ])
+          const seen = new Set()
+          d.history = [...asTarget.items, ...asSource.items]
+            .filter(l => !seen.has(l.id) && seen.add(l.id))
+            .sort((a, b) => Date.parse(a.operationCompletedAt) - Date.parse(b.operationCompletedAt))
+            .map(l => ({
+              at: l.operationCompletedAt,
+              op: l.operationType,
+              dir: l.targetAddress?.handlingUnitBarcode === d.hu ? 'in' : 'out',
+              cell: (l.targetAddress?.handlingUnitBarcode === d.hu ? l.targetAddress?.cellAddress : l.sourceAddress?.cellAddress) || '',
+              other: (l.targetAddress?.handlingUnitBarcode === d.hu ? l.sourceAddress?.handlingUnitBarcode : l.targetAddress?.handlingUnitBarcode) || '',
+              product: l.product?.nomenclatureCode || '',
+              old: l.targetAddress?.handlingUnitBarcode === d.hu ? l.targetQuantity?.oldQuantity : l.sourceQuantity?.oldQuantity,
+              new: l.targetAddress?.handlingUnitBarcode === d.hu ? l.targetQuantity?.newQuantity : l.sourceQuantity?.newQuantity,
+              user: [l.responsibleUser?.lastName, l.responsibleUser?.firstName].filter(Boolean).join(' '),
+            }))
+        } catch (err) {
+          d.historyError = err.message || String(err)
+        }
+      }
+    }
   }
 
   let saveRes = { added: 0, skipped: 0 }
@@ -337,6 +396,7 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
     known: knownIds.size,
     journalLines,
     ...stat,
+    issues,
     saved: enriched.length,
     added: saveRes.added ?? 0,
     newEmployees: saveRes.newEmployees || [],
