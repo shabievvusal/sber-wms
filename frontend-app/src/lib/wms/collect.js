@@ -1,7 +1,7 @@
 // Выгрузка статистики из WMS в свой бэкенд: комплектация, размещение, остатки, спуск/пополнение, приёмка.
-import { _buildBodyForBrowser, _fetchOnePageFromBrowser } from './stockChanges.js'
+import { _buildBodyForBrowser, _fetchOnePageFromBrowser, fetchAllStockChanges } from './stockChanges.js'
 import { postOwnBackend, wmsHeaders } from './core.js'
-import { getInboundTaskResponsibleUsers, getInboundTasks } from './reports.js'
+import { getInboundTaskDetail, getInboundTaskResponsibleUsers, getInboundTasks } from './reports.js'
 
 const PLACEMENT_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/placement/tasks'
 
@@ -180,15 +180,78 @@ export async function fetchStockMovesViaBrowser(token, { dateFrom, dateTo, pageS
 }
 
 // Приёмка — порт fetchReceivingViaBrowser из оригинала (frontend/app api).
-// Список принятых поставок за период лёгкий (SKU/штуки/вес/ЕО уже в нём), а
-// приёмщика WMS отдаёт только отдельным запросом на каждую поставку — это и
-// грузило WMS. Поэтому: запускается только вручную (Настройки → Система,
-// admin/developer), и за приёмщиком ходим лишь по поставкам, которых ещё нет
-// у нас в базе (/api/stats/receiving/known).
+// Список принятых поставок за период лёгкий (SKU/штуки/вес/ЕО уже в нём), но
+// приёмщика в нём нет.
+// С 07.11.2026 приёмщик сверяется по факту: по каждой новой поставке
+// открывается её карточка (inbound/{тип}/tasks/{id}) — в ней все ЕО поставки
+// с фактически принятыми штуками. Журнал приёмки WMS (stocks/changes,
+// RECEIVING) за сутки грузится 1–2 запросами, у каждой его строки — ЕО, штуки
+// и приёмщик (responsibleUser.id). Приёмщик поставки — тот, кто по журналу
+// принял её ЕО; засчитывается, только если штуки журнала по этим ЕО равны
+// факту карточки. Не сошлось, ЕО в журнале нет или карточка не открылась —
+// как раньше, запрос responsible-users по этой поставке.
+// Прежняя схема (до 07.11.2026): за приёмщиком — запрос responsible-users на
+// каждую новую поставку; запускается только вручную (Настройки → Система,
+// admin/developer), поставки, которые уже есть в базе
+// (/api/stats/receiving/known), не запрашиваются.
 function _pickInboundAcceptedUser(responsibleUsers = []) {
   const accepted = responsibleUsers.find(u => u.type === 'ACCEPTANCE_COMPLETED')
     ?? responsibleUsers.find(u => u.type === 'ACCEPTANCE_STARTED')
   return accepted?.user || null
+}
+
+// Карточка поставки → ЕО и факт: { hus: Map(ЕО → штук), pieces, sku }
+function _inboundFact(detail) {
+  const hus = new Map()
+  let sku = 0
+  for (const p of detail?.products ?? []) {
+    if ((p.actualQuantity?.pieceProducts ?? 0) > 0) sku++
+    for (const part of p.parts ?? []) {
+      for (const hu of part.handlingUnits ?? []) {
+        const q = Number(hu.actualQuantity?.pieceProducts) || 0
+        if (hu.handlingUnitBarcode) hus.set(hu.handlingUnitBarcode, (hus.get(hu.handlingUnitBarcode) || 0) + q)
+      }
+    }
+  }
+  let pieces = 0
+  for (const q of hus.values()) pieces += q
+  return { hus, pieces, sku }
+}
+
+// Журнал приёмки → ЕО → [{ user, qty }]
+function _journalByHu(lines) {
+  const map = new Map()
+  for (const l of lines) {
+    const hu = l.targetAddress?.handlingUnitBarcode
+    const user = l.responsibleUser
+    if (!hu || !user?.id) continue
+    const t = l.targetQuantity
+    const qty = t ? (Number(t.newQuantity) || 0) - (Number(t.oldQuantity) || 0) : 0
+    const list = map.get(hu) || []
+    list.push({ user, qty })
+    map.set(hu, list)
+  }
+  return map
+}
+
+// Сверка поставки с журналом: { user } — приёмщик подтверждён штуками,
+// { reason } — почему нет. Несколько приёмщиков на одной поставке — тот, кто
+// принял больше штук.
+function _matchAcceptor(fact, byHu) {
+  const perUser = new Map()
+  let journalPieces = 0
+  for (const hu of fact.hus.keys()) {
+    for (const { user, qty } of byHu.get(hu) ?? []) {
+      journalPieces += qty
+      const cur = perUser.get(user.id) || { user, qty: 0 }
+      cur.qty += qty
+      perUser.set(user.id, cur)
+    }
+  }
+  if (!perUser.size) return { reason: 'noJournal' }
+  if (journalPieces !== fact.pieces) return { reason: 'mismatch' }
+  const top = [...perUser.values()].sort((a, b) => b.qty - a.qty)[0]
+  return { user: top.user, several: perUser.size > 1 }
 }
 
 export async function fetchReceivingViaBrowser(token, { completedDateFrom, completedDateTo, onProgress } = {}) {
@@ -214,33 +277,53 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
   const known = await postOwnBackend('/api/stats/receiving/known', { ids: tasks.map(t => t.id) }, token, { wrap: false })
   const knownIds = new Set(known?.ids || [])
   const toEnrich = tasks.filter(t => !knownIds.has(t.id))
-  onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done: 0 })
 
-  // Поставка без найденного приёмщика (WMS не вернул его или запрос упал)
-  // раньше выбрасывалась целиком — и итог по поставкам расходился с WMS.
-  // Теперь сохраняется без приёмщика (строка «—» в статистике); при
-  // следующем обновлении её приёмщик будет запрошен снова.
+  const stat = { byJournal: 0, mismatch: 0, noJournal: 0, noDetail: 0, several: 0, requested: 0, noAcceptor: 0 }
+  const report = done => onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done, ...stat })
+
+  // Журнал приёмки за период, с запасом в час до начала — строки журнала
+  // датированы завершением приёмки, как и поставка, запас — для надёжности.
+  let byHu = new Map()
+  let journalLines = 0
+  if (toEnrich.length > 0) {
+    onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done: 0, stage: 'journal' })
+    const from = new Date(Date.parse(completedDateFrom) - 60 * 60 * 1000).toISOString()
+    const lines = await fetchAllStockChanges(token, { operationTypes: ['RECEIVING'], from, to: completedDateTo })
+    journalLines = lines.length
+    byHu = _journalByHu(lines)
+  }
+
+  // Поставка без найденного приёмщика сохраняется без него (строка «—» в
+  // статистике); при следующем обновлении её приёмщик будет запрошен снова.
   const enriched = []
-  let noAcceptor = 0
   let done = 0
   const BATCH = 8
   for (let i = 0; i < toEnrich.length; i += BATCH) {
     const rows = await Promise.all(toEnrich.slice(i, i + BATCH).map(async task => {
+      let fact = null
+      try {
+        const detail = await getInboundTaskDetail(token, { taskType: task.type, id: task.id })
+        fact = _inboundFact(detail?.value)
+      } catch { /* карточка не открылась — приёмщик запросом */ }
+      // фактическое число SKU (в списке поставок — только плановое)
+      const withFact = fact ? { ...task, actualSkuCount: fact.sku } : task
+      const m = fact ? _matchAcceptor(fact, byHu) : { reason: 'noDetail' }
+      if (m.user) return { task: { ...withFact, responsibleUser: m.user }, via: 'journal', several: m.several }
       try {
         const res = await getInboundTaskResponsibleUsers(token, { taskType: task.type, id: task.id })
         const user = _pickInboundAcceptedUser(res?.value?.responsibleUsers ?? [])
-        return user ? { ...task, responsibleUser: user } : { ...task, _noAcceptor: true }
+        return { task: user ? { ...withFact, responsibleUser: user } : withFact, via: 'request', reason: m.reason, noAcceptor: !user }
       } catch {
-        return { ...task, _noAcceptor: true }
+        return { task: withFact, via: 'request', reason: m.reason, noAcceptor: true }
       }
     }))
     for (const r of rows) {
-      if (r._noAcceptor) noAcceptor++
-      const { _noAcceptor, ...task } = r
-      enriched.push(task)
+      enriched.push(r.task)
+      if (r.via === 'journal') { stat.byJournal++; if (r.several) stat.several++ }
+      else { stat.requested++; stat[r.reason]++; if (r.noAcceptor) stat.noAcceptor++ }
     }
     done += rows.length
-    onProgress?.({ total: tasks.length, known: knownIds.size, toEnrich: toEnrich.length, done })
+    report(done)
   }
 
   let saveRes = { added: 0, skipped: 0 }
@@ -252,10 +335,12 @@ export async function fetchReceivingViaBrowser(token, { completedDateFrom, compl
     success: true,
     fetched: tasks.length,
     known: knownIds.size,
-    requested: toEnrich.length,
+    journalLines,
+    ...stat,
     saved: enriched.length,
-    noAcceptor,
     added: saveRes.added ?? 0,
     newEmployees: saveRes.newEmployees || [],
   }
 }
+
+

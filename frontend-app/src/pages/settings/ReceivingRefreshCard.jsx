@@ -22,8 +22,10 @@ function dayRange(date) {
 }
 
 // Только admin/developer (см. SettingsPage.jsx). Статистика приёмки не входит
-// в обычное «Обновить данные»: чтобы узнать приёмщика, WMS нужно спросить по
-// каждой поставке отдельно — обновляем вручную, по одному дню.
+// в обычное «Обновить данные» — обновляем вручную, по одному дню. Приёмщик —
+// из журнала приёмки WMS (stocks/changes, RECEIVING), сверенный по ЕО и штукам
+// с карточкой поставки; не сошлось — запрос приёмщика (см. fetchReceivingViaBrowser).
+// Оригинал: «чтобы узнать приёмщика, WMS нужно спросить по каждой поставке отдельно».
 export function ReceivingRefreshCard() {
   const [date, setDate] = useState(todayStr())
   const [running, setRunning] = useState(false)
@@ -66,20 +68,32 @@ export function ReceivingRefreshCard() {
 
       {running && progress && (
         <div className="mt-3 text-sm text-muted-foreground">
-          Поставок: {progress.total}, уже в базе: {progress.known} · приёмщики: {progress.done} из {progress.toEnrich}
+          Поставок: {progress.total}, уже в базе: {progress.known} · {progress.stage === 'journal'
+            ? 'загружаю журнал приёмки…'
+            : <>поставки: {progress.done} из {progress.toEnrich} · сошлось с журналом {progress.byJournal}{progress.requested > 0 && `, запросом ${progress.requested}`}</>}
         </div>
       )}
       {result && (
         <div className="mt-3 text-sm text-muted-foreground">
-          Поставок за день: {result.fetched} · уже были в базе: {result.known} · запрошено у WMS: {result.requested} · сохранено: {result.saved}
-          {result.noAcceptor > 0 && ` · из них без приёмщика: ${result.noAcceptor} (в статистике — строка «—»)`}
+          Поставок за день: {result.fetched} · уже были в базе: {result.known} · сохранено: {result.saved}
+          <br />Приёмщик сверен с журналом по ЕО и штукам: {result.byJournal}
+          {result.several > 0 && ` (из них с несколькими приёмщиками: ${result.several} — записан принявший больше штук)`}
+          {result.requested > 0 && <>
+            <br />Отдельным запросом: {result.requested}
+            {[
+              result.mismatch > 0 && `штуки не сошлись с журналом — ${result.mismatch}`,
+              result.noJournal > 0 && `ЕО нет в журнале — ${result.noJournal}`,
+              result.noDetail > 0 && `карточка не открылась — ${result.noDetail}`,
+            ].filter(Boolean).join(', ').replace(/^(.)/, ' ($1').replace(/(.)$/, '$1)')}
+          </>}
+          {result.noAcceptor > 0 && <><br />Без приёмщика: {result.noAcceptor} (в статистике — строка «—»)</>}
         </div>
       )}
 
       <NewEmployeesNotice employees={newEmployees} onDone={() => setNewEmployees([])} />
 
       <p className="mt-4 text-xs text-muted-foreground">
-        По каждой новой поставке — отдельный запрос в WMS за приёмщиком. Поставки, которые уже сохранены, повторно не запрашиваются.
+        По каждой новой поставке открывается её карточка: ЕО и фактически принятые штуки. Приёмщик берётся из журнала приёмки WMS и засчитывается, только если штуки по этим ЕО совпали с фактом. Иначе приёмщик запрашивается у поставки отдельно. Уже сохранённые поставки повторно не запрашиваются.
       </p>
     </SettingCard>
   )

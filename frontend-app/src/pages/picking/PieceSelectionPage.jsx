@@ -10,7 +10,7 @@ import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { DEFAULT_STATUSES, STATUS_LABELS, TEMP_LABELS, TEMP_OPTIONS, ZONE_OPTIONS } from './constants'
 import { fmtDay, fmtKg, fmtLiters, fmtNum, userName, dateToApiFrom, dateToApiTo, selectedOrAll } from './format'
-import { Printer, RefreshCw } from 'lucide-react'
+import { Printer, RefreshCw, Search, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AddressLabelsPrint, printAddressLabels } from './AddressLabels'
 import { Select } from '@/components/ui/select'
@@ -51,6 +51,10 @@ export default function PieceSelectionPage() {
   const [zoneId, setZoneId] = useState('')
   const [temperatureMode, setTemperatureMode] = useState('')
   const [search, setSearch] = useState('')
+  // поиск по ЕО — отдельный запрос в WMS (targetHandlingUnitBarcode), без
+  // фильтров статуса/зоны/температуры; eoFound — ЕО, по которой показаны строки
+  const [eo, setEo] = useState('')
+  const [eoFound, setEoFound] = useState('')
   const [rows, setRows] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -62,7 +66,7 @@ export default function PieceSelectionPage() {
 
   const toggleSort = key => setSort(prev => prev.key === key ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' })
 
-  const load = async () => {
+  const load = async (eoBarcode = '') => {
     setLoading(true)
     setError('')
     setSelected(new Set())
@@ -74,14 +78,19 @@ export default function PieceSelectionPage() {
       return
     }
     try {
-      const base = {
+      const period = {
         dateFrom: dateToApiFrom(new Date(dateRange.from || todayStr())),
         dateTo: dateToApiTo(new Date(dateRange.to || dateRange.from || todayStr())),
         pageSize: PAGE_SIZE,
-        status: status ? [status] : DEFAULT_STATUSES,
-        sourceZoneId: selectedOrAll(zoneId, ZONE_OPTIONS, 'id'),
-        shipmentTemperatureMode: selectedOrAll(temperatureMode, TEMP_OPTIONS, 'value'),
       }
+      const base = eoBarcode
+        ? { ...period, status: null, targetHandlingUnitBarcode: eoBarcode }
+        : {
+            ...period,
+            status: status ? [status] : DEFAULT_STATUSES,
+            sourceZoneId: selectedOrAll(zoneId, ZONE_OPTIONS, 'id'),
+            shipmentTemperatureMode: selectedOrAll(temperatureMode, TEMP_OPTIONS, 'value'),
+          }
       const first = await getPieceSelectionTasks(token, { ...base, pageNumber: 1 })
       const firstValue = first?.value ?? first
       const total = firstValue?.total ?? 0
@@ -94,6 +103,8 @@ export default function PieceSelectionPage() {
         for (const r of rest) items = items.concat((r?.value ?? r)?.items ?? [])
       }
       setRows(items)
+      setEoFound(eoBarcode)
+      if (eoBarcode && !items.length) toast.info(`По ЕО ${eoBarcode} за выбранный период заданий нет`)
     } catch (err) {
       toast.error('Ошибка загрузки: ' + err.message)
       setRows([])
@@ -101,6 +112,13 @@ export default function PieceSelectionPage() {
       setLoading(false)
     }
   }
+
+  const searchEo = () => {
+    const code = eo.replace(/s+/g, '')
+    if (!code) { toast.error('Введите ШК ЕО'); return }
+    load(code)
+  }
+  const resetEo = () => { setEo(''); load() }
 
   const filtered = useMemo(() => {
     const list = rows || []
@@ -169,13 +187,31 @@ export default function PieceSelectionPage() {
           <option value="">Все температуры</option>
           {TEMP_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
         </Select>
-        <Button onClick={load} disabled={loading}>
+        <Button onClick={() => load()} disabled={loading}>
           <RefreshCw className="size-3.5" /> {loading ? 'Загрузка...' : 'Загрузить'}
         </Button>
+        <form className="flex items-center gap-1" onSubmit={e => { e.preventDefault(); searchEo() }}>
+          <Input className="w-44 font-mono" placeholder="ШК ЕО (022…)" value={eo} onChange={e => setEo(e.target.value)} inputMode="numeric" />
+          <Button type="submit" variant="secondary" disabled={loading}>
+            <Search className="size-3.5" /> Найти ЕО
+          </Button>
+        </form>
         <span className="ml-auto text-sm text-muted-foreground">
           {rows ? `Загружено: ${fmtNum(rows.length)}` : 'Данные не загружены'}
         </span>
       </div>
+
+      {eoFound && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2 text-sm">
+          <Search className="size-4 text-muted-foreground" />
+          <span>
+            Задания по ЕО <span className="font-mono font-semibold">{eoFound}</span> за выбранный период — все статусы, зоны и температуры
+          </span>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={resetEo} disabled={loading}>
+            <X className="size-3.5" /> Сбросить поиск
+          </Button>
+        </div>
+      )}
 
       {rows && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-surface-2/40 px-3 py-2 text-sm">

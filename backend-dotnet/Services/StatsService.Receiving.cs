@@ -53,10 +53,12 @@ public partial class StatsService
             var eoCount = GetTopNum(raw, "handlingUnitsQuantity") ?? GetTopNum(raw, "eoCount") ?? 0;
             // Вес в ответе inbound/tasks — actualTotalWeight (граммы); прежние
             // weightInGrams/actualWeightInGrams там не встречаются, из-за чего
-            // вес приёмки всегда был 0. SKU — плановое (фактического WMS не
-            // отдаёт), штуки — фактически принятые.
+            // вес приёмки всегда был 0. Штуки — фактически принятые. SKU — с
+            // 07.11.2026 фактическое (actualSkuCount: браузер считает его по
+            // карточке поставки), без него — плановое; оригинал: «SKU — плановое
+            // (фактического WMS не отдаёт)».
             var weightGrams = GetTopNum(raw, "actualTotalWeight") ?? GetTopNum(raw, "weightInGrams") ?? GetTopNum(raw, "actualWeightInGrams");
-            var skuCount = GetTopNum(raw, "plannedSkuCount");
+            var skuCount = GetTopNum(raw, "actualSkuCount") ?? GetTopNum(raw, "plannedSkuCount");
             var pieces = GetNum(GetObj(raw, "actualQuantities"), "pieceProducts");
 
             var mergeKey = itemId != "" ? itemId : $"{completedAt:o}|{executorId}|{taskNumber}";
