@@ -71,6 +71,15 @@ public class ZgzService
             if (r.CompletedAt > hu.At) hus[r.Hu] = hu = (hu.Source, r.TargetCell, r.Executor, r.CompletedAt, hu.Items);
             hu.Items[pid] = hu.Items.GetValueOrDefault(pid) + r.Quantity;
         }
+
+        // ЕО, скомплектованные за период, но не переведённые в ЗГЗ: ЕО лежит в
+        // ячейке KDH, её состав — по истории комплектации (wms_ops, ЕО-получатель).
+        // Так находку можно опознать и без перевода. Корректировки после
+        // комплектации (вынули, переложили) история не видит.
+        var notMoved = await GetNotMovedAsync(hus.Keys.ToHashSet(), fromUtc, toUtc, products);
+        foreach (var (huCode, nm) in notMoved) hus[huCode] = nm;
+        var notMovedSet = notMoved.Keys.ToHashSet();
+
         // Штрихкоды из файла весов («ШК товара») — в WMS у товара бывают не все,
         // и скан такого штрихкода не находился. Подмешиваем по артикулу.
         var codes = products.Values.Select(p => p.Code).Where(c => c != "").Distinct().ToList();
@@ -105,6 +114,8 @@ public class ZgzService
                 targetCell = kv.Value.Target,
                 executor = kv.Value.Executor,
                 completedAt = kv.Value.At,
+                // не переводилась в ЗГЗ: targetCell — ячейка KDH, где собирали, completedAt — последняя раскладка
+                notMoved = notMovedSet.Contains(kv.Key),
                 // [товар, штук, кто комплектовал, когда (последняя раскладка)]
                 items = kv.Value.Items.Select(i =>
                 {
@@ -152,6 +163,48 @@ public class ZgzService
             if (!result.TryGetValue((o.TargetBarcode, pid), out var p)) result[(o.TargetBarcode, pid)] = p = new PickInfo();
             if (!string.IsNullOrEmpty(o.Executor)) p.Names.Add(o.Executor);
             if (o.CompletedAt != null && (p.LastAt == null || o.CompletedAt > p.LastAt)) p.LastAt = o.CompletedAt;
+        }
+        return result;
+    }
+
+    // ЕО из комплектации за период (КДК и хранение), которых нет среди переводов
+    // в ЗГЗ — ни за период, ни позже. Состав — товар × штуки по строкам
+    // комплектации; товары и их штрихкоды дописываются в общий справочник.
+    private async Task<Dictionary<string, (string Source, string Target, string Executor, DateTime? At, Dictionary<string, decimal> Items)>> GetNotMovedAsync(
+        HashSet<string> movedInPeriod, DateTime fromUtc, DateTime toUtc,
+        Dictionary<string, (string Name, string Code, HashSet<string> Barcodes, Dictionary<string, decimal> Packs)> products)
+    {
+        var result = new Dictionary<string, (string, string, string, DateTime?, Dictionary<string, decimal>)>();
+        var fromDate = DateOnly.FromDateTime(ToMoscow(fromUtc));
+        var toDate = DateOnly.FromDateTime(ToMoscow(toUtc));
+        var ops = await _db.WmsOps.AsNoTracking()
+            .Where(o => o.Date >= fromDate && o.Date <= toDate
+                && o.CompletedAt >= fromUtc && o.CompletedAt <= toUtc
+                && (o.OperationType == "PICK_BY_LINE" || o.OperationType == "PIECE_SELECTION_PICKING")
+                && o.TargetBarcode != "")
+            .Select(o => new { o.TargetBarcode, o.ProductId, o.NomenclatureCode, o.ProductName, o.Barcodes, o.Cell, o.CompletedAt, o.Quantity })
+            .ToListAsync();
+        var candidates = ops.Select(o => o.TargetBarcode).Where(h => !movedInPeriod.Contains(h)).Distinct().ToList();
+        if (candidates.Count == 0) return result;
+        // переведённые в ЗГЗ позже периода — тоже не «потерянные»
+        var movedLater = (await _db.WmsZgzMoves.AsNoTracking()
+            .Where(m => m.CompletedAt >= fromUtc && candidates.Contains(m.Hu))
+            .Select(m => m.Hu).Distinct().ToListAsync()).ToHashSet();
+
+        foreach (var o in ops.OrderBy(o => o.CompletedAt))
+        {
+            var huCode = o.TargetBarcode;
+            if (movedInPeriod.Contains(huCode) || movedLater.Contains(huCode)) continue;
+            var pid = o.ProductId != "" ? o.ProductId : (o.NomenclatureCode != "" ? o.NomenclatureCode : o.ProductName);
+            if (!products.ContainsKey(pid))
+                products[pid] = (o.ProductName, o.NomenclatureCode,
+                    new HashSet<string>(o.Barcodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
+                    new Dictionary<string, decimal>());
+            if (!result.TryGetValue(huCode, out var hu)) result[huCode] = hu = ("", "", "", null, new Dictionary<string, decimal>());
+            // ячейка и время — по последней раскладке в ЕО; «кто перевёл» — пусто (кто
+            // комплектовал — у товаров, GetPicksAsync)
+            result[huCode] = hu = ("", o.Cell, "", o.CompletedAt, hu.Item5);
+            hu.Item5[pid] = hu.Item5.GetValueOrDefault(pid) + (o.Quantity is > 0 ? o.Quantity.Value : 0);
         }
         return result;
     }

@@ -320,23 +320,41 @@ export default function LostEoPage() {
                       <div className="text-xs text-muted-foreground">ЕО</div>
                       <div className="font-mono text-xl font-semibold tracking-wide">{hu.hu}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Прибита в ЗГЗ</div>
-                      <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Из ячейки КДК</div>
-                      <div className="text-lg font-semibold">{hu.sourceCell || '—'}</div>
-                    </div>
-                    {cellStores.get(hu.sourceCell) && (
+                    {hu.notMoved ? (
+                      // в ЗГЗ не переводилась — числится в ячейке KDH, где собирали (по истории комплектации)
+                      <>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Статус</div>
+                          <div className="text-lg font-semibold text-warning">Не в ЗГЗ</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Ячейка КДК</div>
+                          <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Прибита в ЗГЗ</div>
+                          <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Из ячейки КДК</div>
+                          <div className="text-lg font-semibold">{hu.sourceCell || '—'}</div>
+                        </div>
+                      </>
+                    )}
+                    {cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell) && (
                       <div>
                         <div className="text-xs text-muted-foreground">ЦФЗ</div>
-                        <div className="text-lg font-semibold">{cellStores.get(hu.sourceCell)}</div>
+                        <div className="text-lg font-semibold">{cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell)}</div>
                       </div>
                     )}
-                    <FoundButton hu={hu} store={cellStores.get(hu.sourceCell) || ''} onSaved={() => { setScans([]); inputRef.current?.focus() }} />
+                    <FoundButton hu={hu} store={cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell) || ''} onSaved={() => { setScans([]); inputRef.current?.focus() }} />
                     <div className="basis-full text-sm text-muted-foreground">
-                      скомплектовал {hu.pickedBy || '—'}{hu.pickedAt ? ` · ${fmtTime(hu.pickedAt)}` : ''} · перевёл {hu.executor || '—'} · {fmtTime(hu.completedAt)} · товаров в ЕО: {hu.total}
+                      скомплектовал {hu.pickedBy || '—'}{hu.pickedAt ? ` · ${fmtTime(hu.pickedAt)}` : ''}
+                      {hu.notMoved ? ' · в ЗГЗ не переводилась, состав — по комплектации' : ` · перевёл ${hu.executor || '—'} · ${fmtTime(hu.completedAt)}`}
+                      {` · товаров в ЕО: ${hu.total}`}
                     </div>
                   </div>
                   <div className="mt-3 overflow-x-auto">
