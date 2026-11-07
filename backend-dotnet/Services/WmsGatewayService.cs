@@ -27,6 +27,28 @@ public class WmsGatewayService
     }
 
     public record GatewayInfo(string Login, DateTime LastSeen, int Done, int Failed);
+
+    // Задание целиком (выгрузка статистики) идёт минутами — сотрудник не держит
+    // открытый запрос (браузер телефона обрывает его примерно через минуту
+    // тишины), а получает номер задания и спрашивает, готово ли.
+    public class TaskState
+    {
+        public string Id { get; init; } = "";
+        public string Login { get; init; } = "";
+        public string Status { get; set; } = "queued"; // queued → running → done
+        public int Code { get; set; }
+        public string? Body { get; set; }
+        public DateTime CreatedAt { get; } = DateTime.UtcNow;
+    }
+    private readonly ConcurrentDictionary<string, TaskState> _tasks = new();
+
+    public TaskState AddTask(string id, string login)
+    {
+        // старые задания (час и больше) — убираем
+        foreach (var kv in _tasks) if (DateTime.UtcNow - kv.Value.CreatedAt > TimeSpan.FromHours(1)) _tasks.TryRemove(kv.Key, out _);
+        return _tasks[id] = new TaskState { Id = id, Login = login };
+    }
+    public TaskState? GetTask(string id) => _tasks.TryGetValue(id, out var t) ? t : null;
     public record GatewaySummary(int Online, DateTime? LastSeen, int Done, int Failed, List<GatewayInfo> Hosts);
 
     private readonly ConcurrentDictionary<string, ConcurrentQueue<Job>> _queues = new();
@@ -102,6 +124,7 @@ public class WmsGatewayService
                 _inFlight[job.Id] = job;
                 _takenBy[job.Id] = login;
                 job.HostLogin = login;
+                if (_tasks.TryGetValue(job.Id, out var task)) task.Status = "running";
                 return job;
             }
             var left = deadline - DateTime.UtcNow;
@@ -112,12 +135,23 @@ public class WmsGatewayService
         return null;
     }
 
-    /// <summary>Ответ шлюза; принимается только от того, кто взял запрос.</summary>
+    /// <summary>Ответ шлюза; принимается только от того, кто взял запрос.
+    /// status 0 — шлюз не достучался до WMS по сети: запрос уходит обратно в
+    /// очередь, его возьмёт другой шлюз.</summary>
     public bool Complete(string jobId, string wh, string login, int status, string body)
     {
         if (!_takenBy.TryGetValue(jobId, out var taker) || taker != login) return false;
         if (!_inFlight.TryRemove(jobId, out var job) || job.WarehouseId != wh) return false;
         _takenBy.TryRemove(jobId, out _);
+        if (status == 0)
+        {
+            // этот шлюз до WMS не достаёт — не считаем его в сети, пока не переподключится
+            Hosts(wh).TryRemove(login, out _);
+            if (_tasks.TryGetValue(job.Id, out var t)) t.Status = "queued";
+            Queue(wh).Enqueue(job);
+            Signal(wh).Release();
+            return true;
+        }
         Count(wh, login, status is >= 200 and < 300);
         return job.Result.TrySetResult((status, body));
     }

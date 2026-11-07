@@ -97,7 +97,29 @@ export async function runGatewayTask(name, args = {}) {
     if (r.status === 503 || r.status === 504) refreshGatewayStatus()
     throw new Error(d?.error || `Шлюз WMS: HTTP ${r.status}`)
   }
-  return d
+  // задание идёт в фоне — спрашиваем раз в 2 с, готово ли (долгий открытый
+  // запрос браузер телефона обрывает примерно через минуту тишины); сбой сети
+  // между опросами (экран погас, сменилась сеть) не страшен — спросим снова
+  const deadline = Date.now() + 20 * 60_000
+  while (Date.now() < deadline) {
+    await new Promise(res => setTimeout(res, 2000))
+    let t
+    try {
+      const tr = await directFetch(`/api/wms-gateway/task/${encodeURIComponent(d.taskId)}`, { credentials: 'include', headers: apiHeaders() })
+      t = await tr.json().catch(() => null)
+      if (tr.status === 404) throw new Error(t?.error || 'Задание шлюза потерялось (сервер перезапускался?)')
+      if (!tr.ok) continue
+    } catch (err) {
+      if (err instanceof TypeError) continue
+      throw err
+    }
+    if (t?.status !== 'done') continue
+    let result = null
+    try { result = t.body ? JSON.parse(t.body) : null } catch { /* не JSON */ }
+    if (t.code < 200 || t.code >= 300) throw new Error(result?.error || `Шлюз WMS: HTTP ${t.code}`)
+    return result
+  }
+  throw new Error('Шлюз WMS не выполнил задание за 20 минут')
 }
 
 let installed = false
@@ -151,7 +173,7 @@ const WMS_EXTRA_HEADERS = { 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' }
  * с сервера, выполнять их в WMS токеном getToken() и возвращать ответ.
  * onEvent({ type: 'job'|'done'|'idle'|'error', ... }) — для экрана шлюза.
  */
-export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, loops = 1 }) {
+export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, onNetworkFail, loops = 1 }) {
   let stopped = false
   const nativeFetch = window.fetch.bind(window)
   const own = (url, init = {}) => nativeFetch(url, { credentials: 'include', ...init, headers: apiHeaders({ 'Content-Type': 'application/json', ...(init.headers || {}) }) })
@@ -180,7 +202,10 @@ export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, loo
       })
       return { status: r.status, body: await r.text() }
     } catch (err) {
-      return { status: 502, body: JSON.stringify({ error: 'Шлюз не достучался до WMS: ' + (err.message || err) }) }
+      // до WMS отсюда не достать (нет сети/VPN) — status 0: сервер вернёт
+      // запрос в очередь другому шлюзу, а этот шлюз остановится
+      onNetworkFail?.(err)
+      return { status: 0, body: '' }
     }
   }
 
@@ -199,6 +224,7 @@ export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, loo
         const res = await execute(job)
         await own('/api/wms-gateway/result', { method: 'POST', body: JSON.stringify({ id: job.id, wh: wmsWarehouseId, status: res.status, body: res.body }) })
         onEvent?.({ type: 'done', job, status: res.status, ms: Date.now() - started })
+        if (res.status === 0) { stopped = true; return }
       } catch (err) {
         onEvent?.({ type: 'error', message: err.message || String(err) })
         await new Promise(res => setTimeout(res, 5000))

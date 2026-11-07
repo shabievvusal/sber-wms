@@ -32,6 +32,17 @@ public static class WmsGatewayEndpoints
     private static IResult Error(string message, int status) =>
         Results.Json(new { error = message, gateway = true }, statusCode: status);
 
+    private static async Task WriteLogAsync(AppDbContext db, string login, string wh, string method, string path, int status, Stopwatch sw, string? host)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO wms_gateway_log (login, warehouse_id, method, path, status, ms, host_login)
+                VALUES ({login}, {wh}, {method}, {path}, {status}, {(int)sw.ElapsedMilliseconds}, {host ?? ""})");
+        }
+        catch { /* журнал не должен ронять ответ */ }
+    }
+
     private static async Task<string> AccessStatusAsync(AppDbContext db, string login) =>
         (await db.Database.SqlQuery<string>($"SELECT status AS \"Value\" FROM wms_gateway_access WHERE login = {login}").ToListAsync()).FirstOrDefault() ?? "none";
 
@@ -59,7 +70,7 @@ public static class WmsGatewayEndpoints
         // кнопка в боковом меню) — убрано 07.11.2026.
 
         // запрос к WMS через шлюз склада
-        app.MapPost("/api/wms-gateway/request", async (GatewayRequest body, HttpContext ctx, AppDbContext db, WmsGatewayService gw) =>
+        app.MapPost("/api/wms-gateway/request", async (GatewayRequest body, HttpContext ctx, AppDbContext db, WmsGatewayService gw, IServiceScopeFactory scopes) =>
         {
             var login = Session(ctx)!.Login;
             if (!IsDeveloper(ctx) && await AccessStatusAsync(db, login) != "approved")
@@ -74,19 +85,38 @@ public static class WmsGatewayEndpoints
 
             var sw = Stopwatch.StartNew();
             var job = new WmsGatewayService.Job(Guid.NewGuid().ToString("N"), method, url, method == "GET" ? null : body.Body, login, wh);
-            var res = await gw.RunAsync(job, method == "TASK" ? TaskTimeout : RequestTimeout, ctx.RequestAborted);
-            var status = res?.Status ?? 504;
-            var path = method == "TASK" ? url : new Uri(url).AbsolutePath;
-            try
+
+            // задание целиком — в фоне, сотруднику сразу номер (см. TaskState)
+            if (method == "TASK")
             {
-                await db.Database.ExecuteSqlInterpolatedAsync($@"
-                    INSERT INTO wms_gateway_log (login, warehouse_id, method, path, status, ms, host_login)
-                    VALUES ({login}, {wh}, {method}, {path}, {status}, {(int)sw.ElapsedMilliseconds}, {job.HostLogin ?? ""})");
+                var task = gw.AddTask(job.Id, login);
+                _ = Task.Run(async () =>
+                {
+                    var r = await gw.RunAsync(job, TaskTimeout, CancellationToken.None);
+                    task.Code = r?.Status ?? 504;
+                    task.Body = r?.Body ?? JsonSerializer.Serialize(new { error = "Шлюз WMS не выполнил задание вовремя" });
+                    task.Status = "done";
+                    using var scope = scopes.CreateScope();
+                    await WriteLogAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), login, wh, method, url, task.Code, sw, job.HostLogin);
+                });
+                return Results.Json(new { taskId = job.Id });
             }
-            catch { /* журнал не должен ронять ответ */ }
+
+            var res = await gw.RunAsync(job, RequestTimeout, ctx.RequestAborted);
+            await WriteLogAsync(db, login, wh, method, new Uri(url).AbsolutePath, res?.Status ?? 504, sw, job.HostLogin);
             if (res == null) return Error("Шлюз WMS не ответил вовремя", 504);
             ctx.Response.Headers["X-Wms-Gateway"] = "1";
             return Results.Content(res.Value.Body, "application/json; charset=utf-8", statusCode: res.Value.Status);
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // состояние задания: queued / running / done (+ код и ответ шлюза)
+        app.MapGet("/api/wms-gateway/task/{id}", (string id, HttpContext ctx, WmsGatewayService gw) =>
+        {
+            var t = gw.GetTask(id);
+            if (t == null || t.Login != Session(ctx)!.Login) return Error("Задание не найдено", 404);
+            if (t.Status != "done") return Results.Json(new { status = t.Status });
+            ctx.Response.Headers["X-Wms-Gateway"] = "1";
+            return Results.Json(new { status = t.Status, code = t.Code, body = t.Body });
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
         // ─── шлюз: вкладка сайта со своей сессией WMS ───────────────────────

@@ -24,6 +24,9 @@ function runTask(name, token, args) {
 }
 
 const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
+// второй сервер WMS (штучный отбор, отгрузки, КДК) — бывает недоступен там,
+// где api.samokat.ru открывается (телефон без VPN)
+const WMS_P01_PROBE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
 
 // Склад в WMS — запросом напрямую, без шлюза: заодно проверка, что с этого
 // компьютера WMS вообще доступна. Нет — эта вкладка шлюзом не работает.
@@ -32,6 +35,8 @@ async function probeWms(token) {
     const r = await directFetch(WMS_FEATURES_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } })
     if (!r.ok) return null
     const d = await r.json()
+    // до второго сервера — достаточно любого ответа (сеть есть)
+    await directFetch(WMS_P01_PROBE_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } })
     markWmsDirectOk()
     return d?.value?.warehouseId || null
   } catch {
@@ -113,7 +118,11 @@ async function tick() {
   if (store.state.running && store.state.wh === wh) return
   // склад в WMS сменили — обслуживаем новый
   if (store.state.running) stop()
-  stopLoop = runGatewayHost({ getToken: getOwnToken, wmsWarehouseId: wh, onEvent, runTask, loops: 4 })
+  stopLoop = runGatewayHost({
+    getToken: getOwnToken, wmsWarehouseId: wh, onEvent, runTask, loops: 4,
+    // сеть до WMS пропала — запросы этого компьютера тоже через шлюз, шлюзом не работаем
+    onNetworkFail: () => { markWmsDirectBroken(); stop(); store.set({ error: 'WMS с этого компьютера недоступна — шлюзом не работаю' }) },
+  })
   store.set({ running: true, wh, error: '' })
 }
 
