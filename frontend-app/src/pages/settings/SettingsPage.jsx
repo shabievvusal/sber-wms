@@ -22,13 +22,15 @@ import { ZgzDataCard } from './ZgzDataCard'
 import { CellStoresCard } from './CellStoresCard'
 import { AuditLogCard } from './AuditLogCard'
 import { PowerBiCheckCard } from './PowerBiCheckCard'
-import { Users, Lock, FileText, History, Settings as SettingsIcon } from 'lucide-react'
+import { WmsGatewayCard } from './WmsGatewayCard'
+import { Users, Lock, FileText, History, Network, Settings as SettingsIcon } from 'lucide-react'
 
 const TAB_DEFS = [
   { key: 'employees', label: 'Сотрудники', Icon: Users },
   { key: 'access', label: 'Доступ', Icon: Lock },
   { key: 'docs', label: 'Документы', Icon: FileText },
   { key: 'system', label: 'Система', Icon: SettingsIcon },
+  { key: 'gateway', label: 'Шлюз WMS', Icon: Network, developerOnly: true },
   { key: 'audit', label: 'Журнал', Icon: History, developerOnly: true },
 ]
 
@@ -125,6 +127,12 @@ export default function SettingsPage() {
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <DeleteShiftDataCard />}
             {(currentUser?.role === 'admin' || currentUser?.role === 'developer') && <ZgzDataCard />}
           </TabsContent>
+
+          {isDeveloper && (
+            <TabsContent value="gateway" className="space-y-4">
+              <WmsGatewayCard />
+            </TabsContent>
+          )}
 
           {isDeveloper && (
             <TabsContent value="audit" className="space-y-4">

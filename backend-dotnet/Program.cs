@@ -52,6 +52,7 @@ builder.Services.AddSingleton<FetchRequestService>();
 builder.Services.AddScoped<CellStoreService>();
 builder.Services.AddSingleton<StockConsolidationService>();
 builder.Services.AddSingleton<PhotoService>();
+builder.Services.AddSingleton<WmsGatewayService>();
 
 // Тело запроса может быть большим (фото + JSON-импорт маршрутов) — снимаем
 // дефолтный лимит Kestrel, конкретный лимит на файл — в PhotoEndpoints.
@@ -103,6 +104,7 @@ app.MapAuditEndpoints();
 app.MapFallback("/api/{**path}", (HttpContext ctx) =>
     Results.Json(new { error = $"Нет такого адреса API: {ctx.Request.Method} {ctx.Request.Path}" }, statusCode: 404));
 app.MapCellStoreEndpoints();
+app.MapWmsGatewayEndpoints();
 
 var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "5080";
 app.Run($"http://0.0.0.0:{port}");

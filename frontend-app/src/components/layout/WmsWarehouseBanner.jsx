@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { getStoredToken, getWmsWarehouseId, switchWmsWarehouse } from '@/lib/wmsFetch'
+import { getStoredToken, getOwnToken, getWmsWarehouseId, switchWmsWarehouse } from '@/lib/wmsFetch'
 import { useWarehouse, shortWarehouseName, switchWarehouse } from '@/lib/warehouse'
 import { isEmbedded } from '@/lib/embed'
 import { confirmDialog } from '@/components/ui/confirm'
@@ -25,7 +25,8 @@ export function WmsWarehouseBanner() {
   const [busy, setBusy] = useState(false)
 
   const check = useCallback(async (fresh = false) => {
-    const token = getStoredToken()
+    // через шлюз склад WMS всегда тот, что выбран на сайте, — сверять нечего
+    const token = getOwnToken()
     if (!token) { setWmsId(null); return }
     try { setWmsId(await getWmsWarehouseId(token, { fresh })) } catch { /* WMS недоступен — промолчим */ }
   }, [])

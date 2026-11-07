@@ -14,6 +14,8 @@ import { usePresence } from '@/lib/presence'
 import { isEmbedded, initEmbedBridge, postEmbedUser, setEmbedLogout } from '@/lib/embed'
 import { useWarehouse } from '@/lib/warehouse'
 import { WmsWarehouseBanner } from '@/components/layout/WmsWarehouseBanner'
+import { installGatewayFetch, startGatewayStatus, refreshGatewayStatus } from '@/lib/wms/gateway'
+import { startAutoGatewayHost } from '@/lib/wms/gatewayHost'
 import ShipmentsPage from '@/pages/shipments/ShipmentsPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import ConsolidationPage from '@/pages/consolidation/ConsolidationPage'
@@ -112,6 +114,10 @@ function AppShell() {
   const [route, setRoute] = useState(parseHash)
   const [navOpen, setNavOpen] = useState(false)
   usePresence(!!user) // «Был в сети» в Настройках → Пользователи
+  // шлюз WMS: запросы в WMS без своей сессии — через шлюз склада (lib/wms/gateway.js);
+  // со своей сессией WMS эта вкладка сама работает шлюзом (lib/wms/gatewayHost.js)
+  useEffect(() => { installGatewayFetch(); startGatewayStatus(); startAutoGatewayHost() }, [])
+  useEffect(() => { if (wh.id) refreshGatewayStatus() }, [wh.id])
   // встроено в WMS расширением: разделы переключает меню WMS (см. lib/embed.js)
   useEffect(() => initEmbedBridge({ onNavigate: p => setHash(p) }), [])
 

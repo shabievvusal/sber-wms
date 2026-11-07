@@ -44,6 +44,8 @@ public static class AuditLog
         ["POST /api/empl/account-check"] = "Проверил учётки ТСД",
         ["POST /api/stats/shift-data/delete"] = "Удалил данные за смену",
         ["POST /api/cell-stores/sync"] = "Обновил справочник ячеек → ЦФЗ",
+        ["POST /api/wms-gateway/access/request"] = "Запросил доступ к шлюзу WMS",
+        ["POST /api/wms-gateway/admin/decide"] = "Выдал или отозвал доступ к шлюзу WMS",
         ["POST /api/cell-stores/delete-zone"] = "Удалил зону из справочника ячеек",
         ["POST /api/vs/admin/product-weights/upload"] = "Загрузил Excel весов товаров",
         ["POST /api/vs/admin/product-weights/wms"] = "Дозаписал веса из WMS",
@@ -95,6 +97,8 @@ public static class AuditLog
         "POST /api/wms/products-by-id", "POST /api/stats/receiving/known", "POST /api/supply-plans/facts",
         "POST /api/consolidation/export/report1", "POST /api/consolidation/export/report2",
         "POST /api/reports/stock-consolidation",
+        // шлюз WMS — у него свой журнал (wms_gateway_log)
+        "POST /api/wms-gateway/request", "POST /api/wms-gateway/result",
     };
 
     private static readonly Regex Secret = new("pass|token|secret|hash|cookie", RegexOptions.IgnoreCase);

@@ -13,6 +13,7 @@ import { WarehouseLabel, WarehousePicker, useWarehouseCount } from '@/components
 import { useAuth } from '@/context/AuthContext'
 import { ROLE_LABELS } from '@/pages/settings/constants'
 import { hashFor } from '@/lib/hashRoute'
+import { WmsGatewayLink } from '@/components/layout/WmsGatewayLink'
 
 // Пункт меню — настоящая ссылка (#/раздел): правая кнопка → «Открыть в новой
 // вкладке», Ctrl/Shift/колёсико работают как у обычной ссылки. Простой клик —
@@ -363,6 +364,7 @@ export function Sidebar({ activePage, onNavigate }) {
 
       <div className="space-y-3 px-1">
         <ExtensionLink activePage={activePage} onNavigate={onNavigate} collapsed={collapsed} />
+        <WmsGatewayLink collapsed={collapsed} />
         <div className={cn('flex items-center', collapsed ? 'justify-center' : 'justify-between')}>
           {!collapsed && <ThemeToggle id="sidebar-theme" />}
           <button
@@ -437,6 +439,7 @@ export function MobileDrawer({ open, onOpenChange, activePage, onNavigate }) {
 
                 <div className="space-y-3 px-1">
                   <ExtensionLink activePage={activePage} onNavigate={onNavigate} />
+                  <WmsGatewayLink />
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground">Тема</span>
                     <ThemeToggle id="drawer-theme" />

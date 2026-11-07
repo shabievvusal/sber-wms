@@ -1,5 +1,6 @@
 // Общее для запросов в WMS: токен из браузера, заголовки, GET/POST в api.samokat.ru, склад учётки в WMS и запись выгрузки в свой бэкенд.
 import { apiHeaders } from '@/lib/api'
+import { GATEWAY_TOKEN, gatewayAvailable } from './gateway.js'
 
 // склад, выбранный сейчас в WMS у учётки (у учётки он один на все её сессии)
 const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
@@ -13,7 +14,15 @@ const LS_ACCESS_EXPIRY_KEY = 'wms_access_token_expiry'
 // Общий геттер токена — раньше был задублирован в FetchModal.jsx, вынесен
 // сюда (единственная разница с дублем: теперь один источник истины для
 // всех потребителей wmsFetch.js).
+// Своего токена нет, но есть одобренный доступ к шлюзу WMS и шлюз в сети —
+// метка шлюза: запросы с ней уходят через шлюз (lib/wms/gateway.js).
 export function getStoredToken() {
+  return getOwnToken() || (gatewayAvailable() ? GATEWAY_TOKEN : null)
+}
+
+/** Только свой токен WMS этого браузера (без шлюза) — для фоновых обновлений
+ *  и всего, что должно работать лишь там, где WMS открыта по-настоящему. */
+export function getOwnToken() {
   const token = localStorage.getItem(LS_ACCESS_KEY)
   const expiry = localStorage.getItem(LS_ACCESS_EXPIRY_KEY)
   if (!token) return null

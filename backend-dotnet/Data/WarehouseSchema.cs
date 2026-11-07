@@ -188,6 +188,18 @@ public static class WarehouseSchema
               registered_at TIMESTAMPTZ NOT NULL DEFAULT now(), status TEXT NOT NULL DEFAULT 'pending',
               normalized_phone TEXT NOT NULL UNIQUE)");
         await Exec("CREATE TABLE IF NOT EXISTS vs_logins (login_key TEXT PRIMARY KEY, last_attempt_at TIMESTAMPTZ, last_success_at TIMESTAMPTZ)");
+        // шлюз WMS (WmsGatewayEndpoints): кому разрешён (одобряет разработчик) и журнал
+        // запросов через шлюз — общие на все склады; журнал хранится 90 дней
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_gateway_access (
+              login TEXT PRIMARY KEY, name TEXT, status TEXT NOT NULL DEFAULT 'pending',
+              requested_at TIMESTAMPTZ, decided_at TIMESTAMPTZ, decided_by TEXT)");
+        await Exec(@"
+            CREATE TABLE IF NOT EXISTS wms_gateway_log (
+              id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), login TEXT NOT NULL,
+              warehouse_id TEXT NOT NULL, method TEXT NOT NULL, path TEXT NOT NULL, status INT NOT NULL, ms INT NOT NULL)");
+        await Exec("ALTER TABLE wms_gateway_log ADD COLUMN IF NOT EXISTS host_login TEXT");
+        await Exec("DELETE FROM wms_gateway_log WHERE at < now() - interval '90 days'");
         // привязка Telegram больше не используется (2026-10-31) — таблица не нужна
         await Exec("DROP TABLE IF EXISTS vs_telegram_bind_codes");
         await Exec("ALTER TABLE wms_ops ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''");

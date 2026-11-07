@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { withMinDuration } from '@/lib/timing'
 import { runExport } from '@/lib/exportProgress'
-import { getStoredToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
+import { getStoredToken, getOwnToken, fetchDataViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, mergeNewEmployees } from '@/lib/wmsFetch'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -313,7 +313,8 @@ export default function StatsPage() {
     const incrementalMs = Math.max(5, Number(settings.incrementalMinutes) || 30) * 60_000
     const shouldRunIncremental = forceIncremental || (Date.now() - lastAutoIncrementalRunRef.current >= incrementalMs)
     if (!shouldRunFull && !shouldRunIncremental) return
-    if (!getStoredToken()) return
+    // автообновление — только со своей сессией WMS, не через шлюз
+    if (!getOwnToken()) return
 
     autoFetchBusyRef.current = true
     try {

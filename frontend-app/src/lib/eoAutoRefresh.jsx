@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import * as api from '@/lib/api'
-import { getStoredToken, fetchRouteFromWMS, getWmsWarehouseId } from '@/lib/wmsFetch'
+import { getOwnToken, fetchRouteFromWMS, getWmsWarehouseId } from '@/lib/wmsFetch'
 
 // ─── Фоновое обновление списков ЕО ─────────────────────────────────────────
 // У обычного кладовщика нет WMS-токена: сходить за ЕО в WMS может только
@@ -80,8 +80,8 @@ export function EoAutoRefresh() {
       if (busyRef.current) return
       if (!autoFetchEnabled()) return
       if (Date.now() - lastRunRef.current < EO_AUTO_REFRESH_MS) return
-      const token = getStoredToken()
-      if (!token) return // без WMS-сессии это устройство ничем помочь не может
+      const token = getOwnToken()
+      if (!token) return // без своей WMS-сессии (шлюз не в счёт) это устройство ничем помочь не может
       busyRef.current = true
       try { await refreshAll(token) } finally { busyRef.current = false }
     }
