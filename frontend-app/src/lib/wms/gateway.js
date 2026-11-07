@@ -67,16 +67,39 @@ function authOf(headers) {
   return key ? headers[key] : ''
 }
 
+// fetch браузера как есть, без перехвата: прямой запрос в WMS
+export const directFetch = typeof window !== 'undefined' ? window.fetch.bind(window) : null
+
+// Свой токен есть, но до WMS с этого компьютера не достучаться (нет VPN или
+// корпоративной сети — «Failed to fetch»): 5 минут запросы сразу идут через
+// шлюз, без попытки напрямую; такая вкладка и шлюзом не работает.
+const DIRECT_RETRY_MS = 5 * 60_000
+let directBrokenAt = 0
+export const wmsDirectBroken = () => Date.now() - directBrokenAt < DIRECT_RETRY_MS
+export const markWmsDirectOk = () => { directBrokenAt = 0 }
+
 let installed = false
 export function installGatewayFetch() {
   if (installed || typeof window === 'undefined') return
   installed = true
-  const nativeFetch = window.fetch.bind(window)
+  const nativeFetch = directFetch
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input?.url
     let host = ''
     try { host = new URL(url, window.location.href).host } catch { /* не адрес */ }
-    if (!WMS_HOSTS.has(host) || authOf(init.headers) !== `Bearer ${GATEWAY_TOKEN}`) return nativeFetch(input, init)
+    if (!WMS_HOSTS.has(host)) return nativeFetch(input, init)
+    if (authOf(init.headers) !== `Bearer ${GATEWAY_TOKEN}`) {
+      // свой токен: напрямую; сеть до WMS недоступна и шлюз есть — через шлюз
+      const canGateway = state.access === 'approved' && state.online
+      if (!(canGateway && wmsDirectBroken())) {
+        try {
+          return await nativeFetch(input, init)
+        } catch (err) {
+          if (!(err instanceof TypeError) || !(state.access === 'approved' && state.online)) throw err
+          directBrokenAt = Date.now()
+        }
+      }
+    }
     const method = (init.method || 'GET').toUpperCase()
     const body = typeof init.body === 'string' ? init.body : null
     const r = await nativeFetch('/api/wms-gateway/request', {

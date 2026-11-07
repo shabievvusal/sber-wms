@@ -5,8 +5,24 @@
 // её — эстафету берёт следующая. Сессия WMS кончилась — вкладка перестаёт
 // брать запросы, их берёт другой шлюз склада.
 import { useSyncExternalStore } from 'react'
-import { getOwnToken, getWmsWarehouseId } from './core.js'
-import { runGatewayHost } from './gateway.js'
+import { getOwnToken } from './core.js'
+import { runGatewayHost, directFetch, markWmsDirectOk } from './gateway.js'
+
+const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
+
+// Склад в WMS — запросом напрямую, без шлюза: заодно проверка, что с этого
+// компьютера WMS вообще доступна. Нет — эта вкладка шлюзом не работает.
+async function probeWms(token) {
+  try {
+    const r = await directFetch(WMS_FEATURES_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } })
+    if (!r.ok) return null
+    const d = await r.json()
+    markWmsDirectOk()
+    return d?.value?.warehouseId || null
+  } catch {
+    return null
+  }
+}
 
 const CHECK_MS = 30_000
 const LOCK = 'robops-wms-gateway-host'
@@ -74,9 +90,9 @@ async function tick() {
   const token = getOwnToken()
   if (!token) { if (store.state.running) stop(); dropLock(); return }
   if (!(await acquireLock())) return // шлюзом уже работает другая вкладка этого браузера
-  let wh = null
-  try { wh = await getWmsWarehouseId(token, { fresh: true }) } catch { /* WMS не ответил — попробуем позже */ }
-  if (!wh) return
+  const wh = await probeWms(token)
+  // WMS с этого компьютера недоступна — шлюзом не работаем, запросы возьмут другие
+  if (!wh) { if (store.state.running) stop(); store.set({ error: 'WMS с этого компьютера недоступна (нет сети до WMS или сессия не действует)' }); return }
   if (store.state.running && store.state.wh === wh) return
   // склад в WMS сменили — обслуживаем новый
   if (store.state.running) stop()
