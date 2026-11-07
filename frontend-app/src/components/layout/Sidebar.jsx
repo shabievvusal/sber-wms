@@ -244,7 +244,7 @@ function UserBlock({ collapsed, popoverSide = 'right', popoverAlign = 'end', the
   // складов несколько — рядом с «Выйти» кнопка «Сменить склад»
   const manyWarehouses = useWarehouseCount() > 1
   const name = user?.name || 'Без имени'
-  const roleLabel = ROLE_LABELS[user?.role] || user?.role
+  const roleLabel = user?.roleLabel || ROLE_LABELS[user?.role] || user?.role
 
   const avatar = (
     <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-sm font-semibold text-brand">

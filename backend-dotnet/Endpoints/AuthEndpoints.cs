@@ -212,6 +212,8 @@ public static class AuthEndpoints
                     login = session.Login,
                     name = user?.Name,
                     role = rights.Role,
+                    // название роли — свои роли иначе показывались ключом (role_xxxx)
+                    roleLabel = await auth.GetRoleLabelAsync(rights.Role),
                     modules = rights.Modules,
                     actions = rights.Actions,
                     allowWithoutToken = session.AllowWithoutToken,

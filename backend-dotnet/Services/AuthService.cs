@@ -131,6 +131,17 @@ public class AuthService
         return roles;
     }
 
+    /// <summary>Название роли для показа: встроенной — из AuthConstants, своей
+    /// (vs_custom_roles) — то, что ввели в Настройках; неизвестной — ключ.</summary>
+    public async Task<string?> GetRoleLabelAsync(string? role)
+    {
+        if (string.IsNullOrEmpty(role)) return null;
+        if (role == "developer") return "Разработчик";
+        foreach (var (key, label) in AuthConstants.BuiltinRoles) if (key == role) return label;
+        var custom = await LoadCustomRolesAsync();
+        return custom.TryGetValue(role, out var c) && !string.IsNullOrEmpty(c.Label) ? c.Label : role;
+    }
+
     public async Task<List<RoleDto>> GetAllRolesAsync()
     {
         var custom = await LoadCustomRolesAsync();

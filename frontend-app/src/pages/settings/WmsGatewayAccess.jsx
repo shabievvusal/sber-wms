@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ROLE_LABELS } from './constants'
 import { SettingCard } from './SettingCard'
 import { Search, UserCheck } from 'lucide-react'
 
@@ -63,7 +62,7 @@ export function WmsGatewayAccess({ users = [], access = [], busy, onDecide, onRe
                 <div key={u.login} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm">{u.name || '—'}</div>
-                    <div className="truncate text-xs text-muted-foreground">{u.login}{u.role && ` · ${ROLE_LABELS[u.role] || u.role}`}</div>
+                    <div className="truncate text-xs text-muted-foreground">{u.login}{u.role && ` · ${u.role}`}</div>
                   </div>
                   {allowed
                     ? <Badge variant="success">Разрешён</Badge>

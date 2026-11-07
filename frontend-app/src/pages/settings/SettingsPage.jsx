@@ -67,7 +67,7 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.role])
 
-  const roleLabel = ROLE_LABELS[currentUser?.role] || currentUser?.role
+  const roleLabel = currentUser?.roleLabel || ROLE_LABELS[currentUser?.role] || currentUser?.role
 
   return (
     <div className="mx-auto w-full space-y-4 p-6">

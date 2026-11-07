@@ -163,8 +163,10 @@ public static class WmsGatewayEndpoints
             var wh = Wh(ctx);
             var g = gw.Gateway(wh);
             // зарегистрированные на сайте — для поиска «кому выдать» и имён в списках
+            var roleLabels = (await auth.GetAllRolesAsync()).ToDictionary(r => r.Key, r => r.Label);
+            roleLabels["developer"] = "Разработчик";
             var users = (await auth.LoadVsUsersAsync())
-                .Select(u => new { login = u.Login, name = u.Name ?? "", role = u.Role ?? "" })
+                .Select(u => new { login = u.Login, name = u.Name ?? "", role = u.Role != null && roleLabels.TryGetValue(u.Role, out var rl) ? rl : u.Role ?? "" })
                 .OrderBy(u => u.name == "" ? u.login : u.name, StringComparer.Create(new System.Globalization.CultureInfo("ru-RU"), true))
                 .ToList();
             return Results.Json(new
