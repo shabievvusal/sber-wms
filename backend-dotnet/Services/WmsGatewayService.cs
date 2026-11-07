@@ -140,9 +140,19 @@ public class WmsGatewayService
         "/wmsout-wwh/shipment-order/shipments",
     };
 
+    // Задания целиком: шлюз сам выгружает из WMS и сам сохраняет на сервер
+    // (lib/wms/gatewayHost.js, TASKS) — сотруднику возвращается только итог.
+    // Через шлюз по одной странице такая выгрузка шла бы втрое дольше.
+    private static readonly HashSet<string> TasksAllowed = new(StringComparer.Ordinal)
+    {
+        "collect:ops", "collect:placement", "collect:remains", "collect:moves", "collect:receiving",
+    };
+
     /// <summary>null — можно; иначе причина отказа.</summary>
     public static string? Validate(string method, string url)
     {
+        if (method.Equals("TASK", StringComparison.OrdinalIgnoreCase))
+            return TasksAllowed.Contains(url) ? null : "Такое задание через шлюз не выполняется";
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https") return "Неверный адрес";
         if (!Hosts_.Contains(uri.Host, StringComparer.OrdinalIgnoreCase)) return "Шлюз ходит только в WMS";
         var path = uri.AbsolutePath;

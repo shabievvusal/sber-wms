@@ -77,6 +77,28 @@ const DIRECT_RETRY_MS = 5 * 60_000
 let directBrokenAt = 0
 export const wmsDirectBroken = () => Date.now() - directBrokenAt < DIRECT_RETRY_MS
 export const markWmsDirectOk = () => { directBrokenAt = 0 }
+export const markWmsDirectBroken = () => { directBrokenAt = Date.now() }
+
+/**
+ * Задание целиком на шлюзе (выгрузка статистики): шлюз сам качает из WMS и сам
+ * сохраняет на сервер, сюда приходит только итог. Через шлюз по одной странице
+ * та же выгрузка шла бы втрое дольше: каждая страница — шлюз → сервер → сюда →
+ * снова на сервер. Функции в args (onProgress) не передаются.
+ */
+export async function runGatewayTask(name, args = {}) {
+  const r = await directFetch('/api/wms-gateway/request', {
+    method: 'POST',
+    credentials: 'include',
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ method: 'TASK', url: name, body: JSON.stringify(args) }),
+  })
+  const d = await r.json().catch(() => null)
+  if (!r.ok) {
+    if (r.status === 503 || r.status === 504) refreshGatewayStatus()
+    throw new Error(d?.error || `Шлюз WMS: HTTP ${r.status}`)
+  }
+  return d
+}
 
 let installed = false
 export function installGatewayFetch() {
@@ -129,7 +151,7 @@ const WMS_EXTRA_HEADERS = { 'X-Who': 'a3327d34-1f6b-46bb-9936-0306ec6c21ad' }
  * с сервера, выполнять их в WMS токеном getToken() и возвращать ответ.
  * onEvent({ type: 'job'|'done'|'idle'|'error', ... }) — для экрана шлюза.
  */
-export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, loops = 1 }) {
+export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, loops = 1 }) {
   let stopped = false
   const nativeFetch = window.fetch.bind(window)
   const own = (url, init = {}) => nativeFetch(url, { credentials: 'include', ...init, headers: apiHeaders({ 'Content-Type': 'application/json', ...(init.headers || {}) }) })
@@ -137,6 +159,14 @@ export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, loops = 1 })
   const execute = async job => {
     const token = getToken()
     if (!token || isGatewayToken(token)) return { status: 503, body: JSON.stringify({ error: 'На шлюзе нет активной сессии WMS' }) }
+    if (job.method === 'TASK') {
+      try {
+        const result = await runTask(job.url, token, job.body ? JSON.parse(job.body) : {})
+        return { status: 200, body: JSON.stringify(result ?? {}) }
+      } catch (err) {
+        return { status: 500, body: JSON.stringify({ error: 'Шлюз: ' + (err.message || err) }) }
+      }
+    }
     try {
       const r = await nativeFetch(job.url, {
         method: job.method,

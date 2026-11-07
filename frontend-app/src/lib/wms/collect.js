@@ -2,12 +2,15 @@
 import { _buildBodyForBrowser, _fetchOnePageFromBrowser } from './stockChanges.js'
 import { postOwnBackend, wmsHeaders } from './core.js'
 import { getInboundTaskResponsibleUsers, getInboundTasks } from './reports.js'
+import { isGatewayToken, runGatewayTask } from './gateway.js'
 
 const PLACEMENT_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/placement/tasks'
 
 const REMAINS_TASKS_URL = 'https://api.samokat.ru/wmsin-wwh/storage-zone-movements/consolidation/tasks'
 
 export async function fetchDataViaBrowser(token, options = {}) {
+  // через шлюз — целиком на шлюзе: он сам качает и сохраняет (см. runGatewayTask)
+  if (isGatewayToken(token)) return runGatewayTask('collect:ops', options)
   const pageSize = Math.min(2000, Math.max(100, parseInt(options.pageSize, 10) || 2000))
   const first = await _fetchOnePageFromBrowser(token, _buildBodyForBrowser({ ...options, pageNumber: 1, pageSize }))
   let allItems = [...first.items]
@@ -59,6 +62,8 @@ async function _fetchPlacementPage(token, params) {
 }
 
 export async function fetchPlacementViaBrowser(token, { dateFrom, dateTo, createdAtFrom, createdAtTo, pageSize = 500 } = {}) {
+  // через шлюз — целиком на шлюзе: он сам качает и сохраняет (см. runGatewayTask)
+  if (isGatewayToken(token)) return runGatewayTask('collect:placement', { dateFrom, dateTo, createdAtFrom, createdAtTo, pageSize })
   const size = Math.min(500, Math.max(1, parseInt(pageSize, 10) || 500))
   const buildParams = pageNumber => {
     const p = new URLSearchParams()
@@ -105,6 +110,8 @@ async function _fetchRemainsPage(token, params) {
 }
 
 export async function fetchRemainsViaBrowser(token, { dateFrom, dateTo, pageSize = 500 } = {}) {
+  // через шлюз — целиком на шлюзе: он сам качает и сохраняет (см. runGatewayTask)
+  if (isGatewayToken(token)) return runGatewayTask('collect:remains', { dateFrom, dateTo, pageSize })
   const size = Math.min(500, Math.max(1, parseInt(pageSize, 10) || 500))
   const buildParams = pageNumber => {
     const p = new URLSearchParams()
@@ -161,6 +168,8 @@ function _slimStockMove(it) {
 }
 
 export async function fetchStockMovesViaBrowser(token, { dateFrom, dateTo, pageSize = 2000 } = {}) {
+  // через шлюз — целиком на шлюзе: он сам качает и сохраняет (см. runGatewayTask)
+  if (isGatewayToken(token)) return runGatewayTask('collect:moves', { dateFrom, dateTo, pageSize })
   const size = Math.min(2000, Math.max(100, parseInt(pageSize, 10) || 2000))
   const body = pageNumber => ({
     ..._buildBodyForBrowser({ operationCompletedAtFrom: dateFrom, operationCompletedAtTo: dateTo, pageNumber, pageSize: size }),
@@ -192,6 +201,8 @@ function _pickInboundAcceptedUser(responsibleUsers = []) {
 }
 
 export async function fetchReceivingViaBrowser(token, { completedDateFrom, completedDateTo, onProgress } = {}) {
+  // через шлюз — целиком на шлюзе: он сам качает и сохраняет (см. runGatewayTask)
+  if (isGatewayToken(token)) return runGatewayTask('collect:receiving', { completedDateFrom, completedDateTo })
   const size = 100
   const base = {
     completedDateFrom,

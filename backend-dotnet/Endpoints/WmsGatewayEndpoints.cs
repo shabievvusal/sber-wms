@@ -22,6 +22,8 @@ public static class WmsGatewayEndpoints
     public record DecideRequest(string? Login, bool Approve);
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(90);
+    // задание целиком (выгрузка статистики за смену) — шлюз сам качает и сохраняет
+    private static readonly TimeSpan TaskTimeout = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan PollWait = TimeSpan.FromSeconds(25);
 
     private static VsSession? Session(HttpContext ctx) => ctx.Items["vsSession"] as VsSession;
@@ -72,9 +74,9 @@ public static class WmsGatewayEndpoints
 
             var sw = Stopwatch.StartNew();
             var job = new WmsGatewayService.Job(Guid.NewGuid().ToString("N"), method, url, method == "GET" ? null : body.Body, login, wh);
-            var res = await gw.RunAsync(job, RequestTimeout, ctx.RequestAborted);
+            var res = await gw.RunAsync(job, method == "TASK" ? TaskTimeout : RequestTimeout, ctx.RequestAborted);
             var status = res?.Status ?? 504;
-            var path = new Uri(url).AbsolutePath;
+            var path = method == "TASK" ? url : new Uri(url).AbsolutePath;
             try
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($@"

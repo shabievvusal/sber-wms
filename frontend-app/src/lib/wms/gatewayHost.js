@@ -6,7 +6,22 @@
 // брать запросы, их берёт другой шлюз склада.
 import { useSyncExternalStore } from 'react'
 import { getOwnToken } from './core.js'
-import { runGatewayHost, directFetch, markWmsDirectOk } from './gateway.js'
+import { runGatewayHost, directFetch, markWmsDirectOk, markWmsDirectBroken } from './gateway.js'
+import { fetchDataViaBrowser, fetchPlacementViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, fetchReceivingViaBrowser } from './collect.js'
+
+// задания целиком, которые шлюз выполняет сам (WmsGatewayService.TasksAllowed)
+const TASKS = {
+  'collect:ops': fetchDataViaBrowser,
+  'collect:placement': fetchPlacementViaBrowser,
+  'collect:remains': fetchRemainsViaBrowser,
+  'collect:moves': fetchStockMovesViaBrowser,
+  'collect:receiving': fetchReceivingViaBrowser,
+}
+function runTask(name, token, args) {
+  const fn = TASKS[name]
+  if (!fn) throw new Error('Неизвестное задание ' + name)
+  return fn(token, args)
+}
 
 const WMS_FEATURES_URL = 'https://api.samokat.ru/wmsops-wwh/warehouses/features-configuration'
 
@@ -20,6 +35,8 @@ async function probeWms(token) {
     markWmsDirectOk()
     return d?.value?.warehouseId || null
   } catch {
+    // сеть до WMS недоступна — запросы этого компьютера пойдут через шлюз
+    markWmsDirectBroken()
     return null
   }
 }
@@ -96,7 +113,7 @@ async function tick() {
   if (store.state.running && store.state.wh === wh) return
   // склад в WMS сменили — обслуживаем новый
   if (store.state.running) stop()
-  stopLoop = runGatewayHost({ getToken: getOwnToken, wmsWarehouseId: wh, onEvent, loops: 2 })
+  stopLoop = runGatewayHost({ getToken: getOwnToken, wmsWarehouseId: wh, onEvent, runTask, loops: 4 })
   store.set({ running: true, wh, error: '' })
 }
 
