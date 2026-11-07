@@ -319,9 +319,12 @@ public class WarehouseService
         await using var cmd = new NpgsqlCommand($"UPDATE vs_user_warehouses SET {string.Join(", ", sets)} WHERE login = $1 AND warehouse_id = $2", conn);
         cmd.Parameters.AddWithValue(Key(login));
         cmd.Parameters.AddWithValue(warehouseId);
-        cmd.Parameters.AddWithValue((object?)role ?? DBNull.Value);
-        cmd.Parameters.AddWithValue(Json(modules));
-        cmd.Parameters.AddWithValue(Json(actions));
+        // тип явно: параметр, которого нет в SET (массово меняют только разделы —
+        // роль не трогают), Postgres иначе не может определить — 42P18 «could not
+        // determine data type of parameter $3»
+        cmd.Parameters.Add(new NpgsqlParameter { Value = (object?)role ?? DBNull.Value, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text });
+        cmd.Parameters.Add(new NpgsqlParameter { Value = Json(modules), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text });
+        cmd.Parameters.Add(new NpgsqlParameter { Value = Json(actions), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text });
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
