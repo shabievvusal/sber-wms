@@ -13,7 +13,6 @@ import { LostEoJournal } from './LostEoJournal'
 import { ScanButton } from '@/components/shared/BarcodeScanner'
 import { fmtTime } from './format'
 import { LostEoLookup } from './LostEoLookup'
-import { LostEoNotMoved } from './LostEoNotMoved'
 
 // Режимы: подбор ЕО по товарам внутри; куда кидали товар; что кидали в ячейку.
 const MODES = [
@@ -21,8 +20,6 @@ const MODES = [
   { key: 'product', label: 'По товару' },
   { key: 'cell', label: 'По ячейке' },
   { key: 'journal', label: 'Журнал найденных' },
-  // не зависит от загруженных переводов: остатки WMS по зонам КДК
-  { key: 'notMoved', label: 'Не переведены в ЗГЗ' },
 ]
 
 // "YYYY-MM-DDTHH:mm" по Москве
@@ -242,7 +239,7 @@ export default function LostEoPage() {
 
       {busy && !index && <Spinner label="Загрузка переводов в ЗГЗ…" />}
 
-      {(index || mode === 'journal' || mode === 'notMoved') && (
+      {(index || mode === 'journal') && (
         <div className="flex w-fit gap-1 rounded-md border bg-muted/30 p-0.5">
           {MODES.map(m => (
             <Button key={m.key} size="sm" className="h-8 px-4" variant={mode === m.key ? 'default' : 'ghost'} onClick={() => setMode(m.key)}>{m.label}</Button>
@@ -251,7 +248,6 @@ export default function LostEoPage() {
       )}
 
       {mode === 'journal' && <LostEoJournal />}
-      {mode === 'notMoved' && <LostEoNotMoved />}
 
       {index && (mode === 'product' || mode === 'cell') && (
         <LostEoLookup
@@ -320,40 +316,24 @@ export default function LostEoPage() {
                       <div className="text-xs text-muted-foreground">ЕО</div>
                       <div className="font-mono text-xl font-semibold tracking-wide">{hu.hu}</div>
                     </div>
-                    {hu.notMoved ? (
-                      // в ЗГЗ не переводилась — числится в ячейке KDH, где собирали (по истории комплектации)
-                      <>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Статус</div>
-                          <div className="text-lg font-semibold text-warning">Не в ЗГЗ</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Ячейка КДК</div>
-                          <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Прибита в ЗГЗ</div>
-                          <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Из ячейки КДК</div>
-                          <div className="text-lg font-semibold">{hu.sourceCell || '—'}</div>
-                        </div>
-                      </>
-                    )}
-                    {cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell) && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">Прибита в ЗГЗ</div>
+                      <div className="text-lg font-semibold">{hu.targetCell || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Из ячейки КДК</div>
+                      <div className="text-lg font-semibold">{hu.sourceCell || '—'}</div>
+                    </div>
+                    {cellStores.get(hu.sourceCell) && (
                       <div>
                         <div className="text-xs text-muted-foreground">ЦФЗ</div>
-                        <div className="text-lg font-semibold">{cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell)}</div>
+                        <div className="text-lg font-semibold">{cellStores.get(hu.sourceCell)}</div>
                       </div>
                     )}
-                    <FoundButton hu={hu} store={cellStores.get(hu.notMoved ? hu.targetCell : hu.sourceCell) || ''} onSaved={() => { setScans([]); inputRef.current?.focus() }} />
+                    <FoundButton hu={hu} store={cellStores.get(hu.sourceCell) || ''} onSaved={() => { setScans([]); inputRef.current?.focus() }} />
                     <div className="basis-full text-sm text-muted-foreground">
                       скомплектовал {hu.pickedBy || '—'}{hu.pickedAt ? ` · ${fmtTime(hu.pickedAt)}` : ''}
-                      {hu.notMoved ? ' · в ЗГЗ не переводилась, состав — по комплектации' : ` · перевёл ${hu.executor || '—'} · ${fmtTime(hu.completedAt)}`}
+                      {` · перевёл ${hu.executor || '—'} · ${fmtTime(hu.completedAt)}`}
                       {` · товаров в ЕО: ${hu.total}`}
                     </div>
                   </div>

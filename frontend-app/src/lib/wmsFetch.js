@@ -12,4 +12,4 @@ export { getLiveMonitorViaBrowser, getPieceSelectionTasks, getPblZones, getPblGa
 export { fetchDataViaBrowser, fetchPlacementViaBrowser, fetchRemainsViaBrowser, mergeNewEmployees, fetchStockMovesViaBrowser, fetchReceivingViaBrowser } from './wms/collect.js'
 export { fetchInboundAroundDate, getReportMonitoringStats, getInboundTasks, getReportInboundInProgress, getReportInboundCompleted, getReportMovementsCount, getReportMovementsRest, getReportMoveToPickingCount, getReportMoveToPickingRest, getInboundTaskResponsibleUsers, getInboundTaskDetail, getEoRemaining } from './wms/reports.js'
 export { fetchZgzMoves, syncZgzFromWms, fetchZoneCells } from './wms/zgz.js'
-export { findProductsByBarcode, fetchProductStock, fetchZoneStock, fetchWmsProductWeight, fillWeightsFromWms, getEoPicking } from './wms/products.js'
+export { findProductsByBarcode, fetchProductStock, fetchZoneStock, fetchWmsProductWeight, fillWeightsFromWms, getEoPicking, getEoPickedBy } from './wms/products.js'

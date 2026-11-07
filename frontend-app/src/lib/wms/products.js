@@ -123,13 +123,15 @@ export async function fillWeightsFromWms(items, { onProgress, shouldStop } = {})
 // (новые сверху). picked — штук отобрано по этим операциям; pickers —
 // сотрудники с числом отборов, последний сверху.
 export async function getEoPicking(token, sourceHandlingUnitBarcode) {
+  // типы операций и период — обязательно: без них журнал WMS с 05.11 отвечает
+  // пустым. Оригинал: operationTypes: [] и без дат (все операции за всё время).
+  const to = new Date()
   const { items, total } = await _fetchOnePageFromBrowser(token, {
-    productId: null, parts: [], operationTypes: [],
-    sourceCellId: null, targetCellId: null,
-    sourceHandlingUnitBarcode, targetHandlingUnitBarcode: null,
-    operationStartedAtFrom: null, operationStartedAtTo: null,
-    operationCompletedAtFrom: null, operationCompletedAtTo: null,
-    executorId: null, pageNumber: 1, pageSize: 500,
+    operationTypes: ['PICK_BY_LINE', 'PIECE_SELECTION_PICKING'],
+    sourceHandlingUnitBarcode,
+    operationCompletedAtFrom: new Date(to.getTime() - 14 * 86400000).toISOString(),
+    operationCompletedAtTo: to.toISOString(),
+    pageNumber: 1, pageSize: 500,
   })
   const sorted = [...items].sort((a, b) => new Date(b.operationCompletedAt || 0) - new Date(a.operationCompletedAt || 0))
   const byUser = new Map()
@@ -152,6 +154,35 @@ export async function getEoPicking(token, sourceHandlingUnitBarcode) {
     lastType: sorted[0]?.operationType || null,
     pickers: [...byUser.values()],
   }
+}
+
+// Кто скомплектовал товар в ЕО: операции комплектации (КДК и хранение), где ЕО
+// — получатель, по этому товару, за последние 14 дней. Только заданные фильтры
+// и обязательно типы операций — без них журнал WMS с 05.11 отвечает пустым.
+export async function getEoPickedBy(token, targetHandlingUnitBarcode, productId) {
+  const to = new Date()
+  const from = new Date(to.getTime() - 14 * 86400000)
+  const { items } = await _fetchOnePageFromBrowser(token, {
+    operationTypes: ['PICK_BY_LINE', 'PIECE_SELECTION_PICKING'],
+    targetHandlingUnitBarcode,
+    ...(productId ? { productId } : {}),
+    operationCompletedAtFrom: from.toISOString(),
+    operationCompletedAtTo: to.toISOString(),
+    pageNumber: 1, pageSize: 200,
+  })
+  const byUser = new Map()
+  for (const it of items) {
+    const u = it.responsibleUser
+    const key = u?.id || [u?.lastName, u?.firstName].join(' ')
+    if (!u || !key.trim()) continue
+    const t = it.targetQuantity
+    const qty = t ? Math.max(0, (Number(t.newQuantity) || 0) - (Number(t.oldQuantity) || 0)) : 0
+    const cur = byUser.get(key) || { user: u, qty: 0, lastAt: null, type: it.operationType }
+    cur.qty += qty
+    if (!cur.lastAt || it.operationCompletedAt > cur.lastAt) cur.lastAt = it.operationCompletedAt
+    byUser.set(key, cur)
+  }
+  return [...byUser.values()].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)))
 }
 
 // Остатки зон (stocks/v2/details по zoneIds) — все строки: товар в ЕО в ячейке,

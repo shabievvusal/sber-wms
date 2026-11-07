@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getStoredToken, findProductsByBarcode, fetchProductStock, getEoPicking } from '@/lib/wmsFetch'
+import { getStoredToken, findProductsByBarcode, fetchProductStock, getEoPicking, getEoPickedBy } from '@/lib/wmsFetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { Code128Barcode, schedulePrint } from './Code128Barcode'
-import { DoorOpen, Loader2, Package, Printer, Search, UserRound } from 'lucide-react'
+import { DoorOpen, Loader2, Package, PackageCheck, Printer, Search, UserRound } from 'lucide-react'
 import { shortFio, mapLimit } from './format'
 import { ScanButton } from '@/components/shared/BarcodeScanner'
 
@@ -15,7 +15,10 @@ const STOCK_STATUS = {
   AVAILABLE: 'Доступен',
   RESERVED: 'Зарезервирован',
   BLOCKED: 'Заблокирован',
+  PICKED: 'Скомплектован',
 }
+const isPicked = s => s.status === 'PICKED'
+const pickedKey = s => `${s.eo}|${s.product.id}`
 // ворота — ячейки G<номер> (зона «Ворота 147»)
 const isGate = s => /^G\d+$/i.test(s.cell) || /^ворота/i.test(s.zone)
 const fmtD = d => (d ? d.split('-').reverse().join('.') : '—')
@@ -23,6 +26,24 @@ const fmtQty = v => Number(v || 0).toLocaleString('ru-RU')
 const fio = u => [u?.lastName, u?.firstName, u?.middleName].filter(Boolean).join(' ')
 const fmtTime = iso => (iso ? new Date(iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')
 const ACTIVE_MIN = 30 // последний отбор не старше — «комплектуется сейчас»
+
+// Кто скомплектовал товар в ЕО (строка остатка со статусом «скомплектован»)
+function PickedBy({ info }) {
+  if (!info || info === 'loading') return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="size-3 animate-spin" /> ищем…</span>
+  if (info.error) return <span className="text-xs text-destructive">{info.error}</span>
+  if (!info.length) return <span className="text-xs text-muted-foreground">в журнале за 14 дней не нашлось</span>
+  return (
+    <span className="text-sm">
+      {info.map((p, i) => (
+        <span key={i}>
+          {i > 0 && ', '}
+          <span className="font-medium">{fio(p.user) || '—'}</span>
+          <span className="text-xs text-muted-foreground"> · {fmtQty(p.qty)} шт · {fmtTime(p.lastAt)}{p.type === 'PICK_BY_LINE' ? ' · КДК' : ''}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
 
 // Кто комплектует из ЕО (операции, где ЕО — источник)
 function PickingInfo({ info }) {
@@ -67,6 +88,7 @@ export default function EoSearchPage() {
   const [showAll, setShowAll] = useState(false)
   const [printValue, setPrintValue] = useState('')
   const [picking, setPicking] = useState({}) // ЕО → 'loading' | info | { error }
+  const [pickedBy, setPickedBy] = useState({}) // «ЕО|товар» → 'loading' | [{ user, qty, lastAt }] | { error }
 
   const print = useCallback(value => {
     if (!value) return
@@ -85,6 +107,7 @@ export default function EoSearchPage() {
     setResult(null)
     setShowAll(false)
     setPicking({})
+    setPickedBy({})
     try {
       const products = await findProductsByBarcode(token, clean)
       const withStock = await Promise.all(products.map(async p => ({ ...p, stock: await fetchProductStock(getStoredToken() || token, p.id) })))
@@ -95,6 +118,14 @@ export default function EoSearchPage() {
       mapLimit(eos, 4, async eo => {
         const info = await getEoPicking(getStoredToken() || token, eo).catch(err => ({ error: err.message || 'ошибка WMS' }))
         setPicking(prev => ({ ...prev, [eo]: info }))
+      })
+      // кто скомплектовал — по строкам «скомплектован» (ЕО + товар)
+      const pickedRows = withStock.flatMap(p => p.stock.filter(s => isPicked(s) && s.eo).map(s => ({ eo: s.eo, productId: p.id })))
+      const uniq = [...new Map(pickedRows.map(x => [`${x.eo}|${x.productId}`, x])).values()]
+      setPickedBy(Object.fromEntries(uniq.map(x => [`${x.eo}|${x.productId}`, 'loading'])))
+      mapLimit(uniq, 4, async x => {
+        const info = await getEoPickedBy(getStoredToken() || token, x.eo, x.productId).catch(err => ({ error: err.message || 'ошибка WMS' }))
+        setPickedBy(prev => ({ ...prev, [`${x.eo}|${x.productId}`]: info }))
       })
     } catch (err) {
       setError(err.message || 'Ошибка поиска')
@@ -107,8 +138,11 @@ export default function EoSearchPage() {
     if (!result) return null
     const all = result.products.flatMap(p => p.stock.map(s => ({ ...s, product: p })))
     const gates = all.filter(isGate).sort((a, b) => a.cell.localeCompare(b.cell, 'ru', { numeric: true }) || a.eo.localeCompare(b.eo))
-    const other = all.filter(s => !isGate(s)).sort((a, b) => a.zone.localeCompare(b.zone, 'ru') || a.cell.localeCompare(b.cell, 'ru', { numeric: true }))
-    return { gates, other, gateQty: gates.reduce((s, x) => s + x.quantity, 0), gateCount: new Set(gates.map(g => g.cell)).size }
+    const byZoneCell = (a, b) => a.zone.localeCompare(b.zone, 'ru') || a.cell.localeCompare(b.cell, 'ru', { numeric: true })
+    // скомплектованный товар — отдельным списком, с тем, кто комплектовал
+    const picked = all.filter(s => !isGate(s) && isPicked(s)).sort(byZoneCell)
+    const other = all.filter(s => !isGate(s) && !isPicked(s)).sort(byZoneCell)
+    return { gates, picked, other, gateQty: gates.reduce((s, x) => s + x.quantity, 0), gateCount: new Set(gates.map(g => g.cell)).size }
   }, [result])
 
   return (
@@ -193,10 +227,35 @@ export default function EoSearchPage() {
                     <span>{STOCK_STATUS[s.status] || s.status || '—'}</span>
                     <span>произведён {fmtD(s.productionDate)}</span>
                   </div>
+                  {s.eo && isPicked(s) && <div className="text-xs text-muted-foreground">Скомплектовал: <PickedBy info={pickedBy[pickedKey(s)]} /></div>}
                   {s.eo && <PickingInfo info={picking[s.eo]} />}
                   {result.products.length > 1 && <div className="truncate text-xs text-muted-foreground">{s.product.name}</div>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* скомплектовано: товар уже в ЕО заказа — кто его туда положил */}
+          {summary.picked.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <div className="flex items-center gap-2 text-base font-semibold"><PackageCheck className="size-5 text-success" /> Скомплектован</div>
+                <span className="text-sm text-muted-foreground">ЕО {summary.picked.length} · {fmtQty(summary.picked.reduce((a, s) => a + s.quantity, 0))} шт</span>
+              </div>
+              <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+                {summary.picked.map((s, i) => (
+                  <div key={`${s.cell}-${s.eo}-${i}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
+                    <span className="font-mono text-sm font-semibold">{s.eo || '—'}</span>
+                    <span className="text-xs text-muted-foreground">{s.cell || '—'}{s.zone ? ` · ${s.zone}` : ''}</span>
+                    <span className="text-sm tabular-nums">{fmtQty(s.quantity)} шт</span>
+                    <div className="basis-full">
+                      <UserRound className="mr-1 inline size-3.5 text-muted-foreground" />
+                      <PickedBy info={pickedBy[pickedKey(s)]} />
+                    </div>
+                    {result.products.length > 1 && <div className="basis-full truncate text-xs text-muted-foreground">{s.product.name}</div>}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
