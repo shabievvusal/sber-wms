@@ -51,17 +51,10 @@ public static class WmsGatewayEndpoints
             });
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
-        // заявка на доступ к шлюзу — решает разработчик
-        app.MapPost("/api/wms-gateway/access/request", async (HttpContext ctx, AppDbContext db, AuthService auth) =>
-        {
-            var login = Session(ctx)!.Login;
-            var name = (await auth.FindUserByLoginAsync(login))?.Name ?? "";
-            await db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO wms_gateway_access (login, name, status, requested_at) VALUES ({login}, {name}, 'pending', now())
-                ON CONFLICT (login) DO UPDATE SET name = EXCLUDED.name, status = 'pending', requested_at = now()
-                WHERE wms_gateway_access.status <> 'approved'");
-            return Results.Json(new { ok = true, access = await AccessStatusAsync(db, login) });
-        }).AddEndpointFilter<VsSessionRequiredFilter>();
+        // Заявок от сотрудников нет: доступ выдаёт только разработчик, выбирая
+        // человека из зарегистрированных на сайте (admin/decide). Оригинал:
+        // «заявка на доступ к шлюзу — решает разработчик» (POST /access/request,
+        // кнопка в боковом меню) — убрано 07.11.2026.
 
         // запрос к WMS через шлюз склада
         app.MapPost("/api/wms-gateway/request", async (GatewayRequest body, HttpContext ctx, AppDbContext db, WmsGatewayService gw) =>
@@ -114,7 +107,7 @@ public static class WmsGatewayEndpoints
 
         // ─── Управление доступом (только разработчик) ──────────────────────
 
-        app.MapGet("/api/wms-gateway/admin", async (HttpContext ctx, AppDbContext db, WmsGatewayService gw) =>
+        app.MapGet("/api/wms-gateway/admin", async (HttpContext ctx, AppDbContext db, WmsGatewayService gw, AuthService auth) =>
         {
             if (!IsDeveloper(ctx)) return Error("Только для разработчика", 403);
             var access = await db.Database.SqlQuery<AccessRow>($@"
@@ -126,8 +119,14 @@ public static class WmsGatewayEndpoints
                 FROM wms_gateway_log ORDER BY id DESC LIMIT 300").ToListAsync();
             var wh = Wh(ctx);
             var g = gw.Gateway(wh);
+            // зарегистрированные на сайте — для поиска «кому выдать» и имён в списках
+            var users = (await auth.LoadVsUsersAsync())
+                .Select(u => new { login = u.Login, name = u.Name ?? "", role = u.Role ?? "" })
+                .OrderBy(u => u.name == "" ? u.login : u.name, StringComparer.Create(new System.Globalization.CultureInfo("ru-RU"), true))
+                .ToList();
             return Results.Json(new
             {
+                users,
                 access,
                 log,
                 gateway = new
@@ -141,15 +140,28 @@ public static class WmsGatewayEndpoints
         app.MapPost("/api/wms-gateway/admin/decide", async (DecideRequest body, HttpContext ctx, AppDbContext db, AuthService auth) =>
         {
             if (!IsDeveloper(ctx)) return Error("Только для разработчика", 403);
-            var login = (body.Login ?? "").Trim();
-            if (login == "") return Error("Нужен логин", 400);
+            var asked = (body.Login ?? "").Trim();
+            if (asked == "") return Error("Нужен пользователь", 400);
+            // выдать можно только зарегистрированному на сайте; отозвать — и запись без пользователя
+            var user = await auth.FindUserByLoginAsync(asked);
+            if (user == null && body.Approve) return Error("Такого пользователя на сайте нет", 404);
+            var login = user?.Login ?? asked;
             var status = body.Approve ? "approved" : "revoked";
             var by = Session(ctx)!.Login;
-            var name = (await auth.FindUserByLoginAsync(login))?.Name ?? "";
+            var name = user?.Name ?? "";
             await db.Database.ExecuteSqlInterpolatedAsync($@"
                 INSERT INTO wms_gateway_access (login, name, status, requested_at, decided_at, decided_by) VALUES ({login}, {name}, {status}, now(), now(), {by})
                 ON CONFLICT (login) DO UPDATE SET status = EXCLUDED.status, decided_at = now(), decided_by = EXCLUDED.decided_by,
                     name = COALESCE(NULLIF(EXCLUDED.name, ''), wms_gateway_access.name)");
+            return Results.Json(new { ok = true });
+        }).AddEndpointFilter<VsSessionRequiredFilter>();
+
+        // убрать запись из списка доступа (доступа у человека не будет)
+        app.MapPost("/api/wms-gateway/admin/remove", async (DecideRequest body, HttpContext ctx, AppDbContext db) =>
+        {
+            if (!IsDeveloper(ctx)) return Error("Только для разработчика", 403);
+            var login = (body.Login ?? "").Trim();
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM wms_gateway_access WHERE login = {login}");
             return Results.Json(new { ok = true });
         }).AddEndpointFilter<VsSessionRequiredFilter>();
     }

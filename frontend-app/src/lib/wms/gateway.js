@@ -57,14 +57,6 @@ export function useWmsGateway() {
   return s
 }
 
-export async function requestGatewayAccess() {
-  const r = await fetch('/api/wms-gateway/access/request', { method: 'POST', credentials: 'include', headers: apiHeaders() })
-  const d = await r.json().catch(() => null)
-  if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`)
-  await refreshGatewayStatus()
-  return d
-}
-
 // ─── перехват запросов в WMS ────────────────────────────────────────────────
 
 function authOf(headers) {

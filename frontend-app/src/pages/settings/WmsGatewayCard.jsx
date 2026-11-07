@@ -2,7 +2,8 @@
 // 1) Шлюзы склада: шлюзом сам работает каждый открытый сайт со своей живой
 //    сессией WMS (lib/wms/gatewayHost.js) — здесь видно, кто сейчас в сети.
 //    Первая версия: шлюз запускал разработчик кнопкой на одном ПК.
-// 2) Кому разрешён шлюз: заявки сотрудников, одобрение и отзыв доступа.
+// 2) Кому разрешён шлюз: поиск среди зарегистрированных на сайте, выдача и
+//    отзыв (WmsGatewayAccess.jsx). Заявок от сотрудников нет.
 // 3) Журнал запросов через шлюз (кто спросил и чей шлюз выполнил).
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -11,11 +12,11 @@ import { useGatewayHost } from '@/lib/wms/gatewayHost'
 import { useAuth } from '@/context/AuthContext'
 import { useWarehouse, shortWarehouseName } from '@/lib/warehouse'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { SettingCard } from './SettingCard'
-import { Network, UserCheck } from 'lucide-react'
+import { WmsGatewayAccess } from './WmsGatewayAccess'
+import { Network } from 'lucide-react'
 
 // ─── API ──────────────────────────────────────────────────────────────────
 
@@ -27,18 +28,12 @@ async function call(url, init = {}) {
 }
 
 const fmtTime = v => (v ? new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
-const STATUS = {
-  pending: { label: 'Заявка', variant: 'warning' },
-  approved: { label: 'Разрешён', variant: 'success' },
-  revoked: { label: 'Отозван', variant: 'secondary' },
-}
 
 export function WmsGatewayCard() {
   const { user } = useAuth()
   const { list } = useWarehouse(user)
   const h = useGatewayHost()
   const [admin, setAdmin] = useState(null)
-  const [login, setLogin] = useState('')
   const [busy, setBusy] = useState(false)
 
   const load = () => call('/api/wms-gateway/admin').then(setAdmin).catch(err => toast.error(err.message))
@@ -53,7 +48,18 @@ export function WmsGatewayCard() {
     try {
       await call('/api/wms-gateway/admin/decide', { method: 'POST', body: JSON.stringify({ login: who, approve }) })
       toast.success(approve ? 'Доступ к шлюзу выдан' : 'Доступ к шлюзу отозван')
-      setLogin('')
+      await load()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async who => {
+    setBusy(true)
+    try {
+      await call('/api/wms-gateway/admin/remove', { method: 'POST', body: JSON.stringify({ login: who, approve: false }) })
       await load()
     } catch (err) {
       toast.error(err.message)
@@ -64,7 +70,7 @@ export function WmsGatewayCard() {
 
   const whName = id => shortWarehouseName(list.find(w => w.id === id)?.name || '') || id
   const gw = admin?.gateway
-  const pending = (admin?.access || []).filter(a => a.status === 'pending').length
+  const nameOf = login => admin?.users?.find(u => u.login === login)?.name || login
 
   return (
     <div className="space-y-4">
@@ -94,7 +100,7 @@ export function WmsGatewayCard() {
                 <TableBody>
                   {gw.hosts.map(x => (
                     <TableRow key={x.login}>
-                      <TableCell className="font-mono text-xs">{x.login}</TableCell>
+                      <TableCell className="text-xs">{nameOf(x.login)}</TableCell>
                       <TableCell className="text-center"><Badge variant={x.online ? 'success' : 'secondary'}>{x.online ? 'в сети' : 'нет'}</Badge></TableCell>
                       <TableCell className="text-xs">{fmtTime(x.lastSeen)}</TableCell>
                       <TableCell className="text-center">{x.done}</TableCell>
@@ -113,54 +119,7 @@ export function WmsGatewayCard() {
         </div>
       </SettingCard>
 
-      <SettingCard
-        icon={UserCheck}
-        accent={pending > 0}
-        title="Доступ к шлюзу"
-        subtitle="Пользоваться шлюзом может только тот, кому разрешил разработчик. Сотрудник без сессии WMS оставляет заявку из бокового меню («Доступ к WMS через шлюз»)."
-      >
-        <div className="space-y-3">
-          <form className="flex flex-wrap items-center gap-2" onSubmit={e => { e.preventDefault(); if (login.trim()) decide(login.trim(), true) }}>
-            <Input className="h-8 w-64" placeholder="Логин пользователя сайта" value={login} onChange={e => setLogin(e.target.value)} />
-            <Button size="sm" type="submit" disabled={busy || !login.trim()}>Разрешить</Button>
-          </form>
-          {admin?.access?.length ? (
-            <div className="overflow-auto rounded-xl border border-line">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Пользователь</TableHead>
-                    <TableHead>Логин</TableHead>
-                    <TableHead className="text-center">Статус</TableHead>
-                    <TableHead>Заявка</TableHead>
-                    <TableHead>Решение</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {admin.access.map(a => (
-                    <TableRow key={a.login}>
-                      <TableCell>{a.name || '—'}</TableCell>
-                      <TableCell className="font-mono text-xs">{a.login}</TableCell>
-                      <TableCell className="text-center"><Badge variant={STATUS[a.status]?.variant || 'secondary'}>{STATUS[a.status]?.label || a.status}</Badge></TableCell>
-                      <TableCell className="text-xs">{fmtTime(a.requestedAt)}</TableCell>
-                      <TableCell className="text-xs">{a.decidedAt ? `${fmtTime(a.decidedAt)} · ${a.decidedBy}` : '—'}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {a.status !== 'approved' && <Button size="sm" disabled={busy} onClick={() => decide(a.login, true)}>Разрешить</Button>}
-                          {a.status !== 'revoked' && <Button size="sm" variant="ghost" disabled={busy} onClick={() => decide(a.login, false)}>{a.status === 'pending' ? 'Отклонить' : 'Отозвать'}</Button>}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">Заявок пока нет</div>
-          )}
-        </div>
-      </SettingCard>
+      <WmsGatewayAccess users={admin?.users} access={admin?.access} busy={busy} onDecide={decide} onRemove={remove} />
 
       <SettingCard icon={Network} title="Журнал шлюза" subtitle="Последние 300 запросов через шлюз: кто, когда и что смотрел в WMS и чьей сессией WMS выполнен запрос. Хранится 90 дней.">
         {admin?.log?.length ? (
@@ -181,9 +140,9 @@ export function WmsGatewayCard() {
                 {admin.log.map((l, i) => (
                   <TableRow key={i}>
                     <TableCell className="whitespace-nowrap text-xs">{fmtTime(l.at)}</TableCell>
-                    <TableCell className="text-xs">{admin.access.find(a => a.login === l.login)?.name || l.login}</TableCell>
+                    <TableCell className="text-xs">{nameOf(l.login)}</TableCell>
                     <TableCell className="text-xs">{whName(l.warehouseId)}</TableCell>
-                    <TableCell className="font-mono text-xs">{l.hostLogin || '—'}</TableCell>
+                    <TableCell className="text-xs">{l.hostLogin ? nameOf(l.hostLogin) : '—'}</TableCell>
                     <TableCell className="text-xs">{l.method} {l.path}</TableCell>
                     <TableCell className={`text-center text-xs ${l.status >= 300 ? 'text-destructive' : ''}`}>{l.status}</TableCell>
                     <TableCell className="text-center text-xs">{l.ms}</TableCell>

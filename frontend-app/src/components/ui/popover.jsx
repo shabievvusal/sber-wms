@@ -30,4 +30,8 @@ function PopoverContent({ className, align = 'center', sideOffset = 6, ...props 
   )
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+function PopoverAnchor(props) {
+  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
+}
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }
