@@ -36,6 +36,8 @@ public class WmsGatewayService
         public string Id { get; init; } = "";
         public string Login { get; init; } = "";
         public string Status { get; set; } = "queued"; // queued → running → done
+        public string? Host { get; set; }               // логин шлюза, который выполняет
+        public DateTime? StartedAt { get; set; }
         public int Code { get; set; }
         public string? Body { get; set; }
         public DateTime CreatedAt { get; } = DateTime.UtcNow;
@@ -124,7 +126,7 @@ public class WmsGatewayService
                 _inFlight[job.Id] = job;
                 _takenBy[job.Id] = login;
                 job.HostLogin = login;
-                if (_tasks.TryGetValue(job.Id, out var task)) task.Status = "running";
+                if (_tasks.TryGetValue(job.Id, out var task)) { task.Status = "running"; task.Host = login; task.StartedAt = DateTime.UtcNow; }
                 return job;
             }
             var left = deadline - DateTime.UtcNow;

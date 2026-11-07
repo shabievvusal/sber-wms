@@ -110,11 +110,22 @@ public static class WmsGatewayEndpoints
         }).AddEndpointFilter<VsSessionRequiredFilter>();
 
         // состояние задания: queued / running / done (+ код и ответ шлюза)
-        app.MapGet("/api/wms-gateway/task/{id}", (string id, HttpContext ctx, WmsGatewayService gw) =>
+        app.MapGet("/api/wms-gateway/task/{id}", async (string id, HttpContext ctx, WmsGatewayService gw, AuthService auth) =>
         {
             var t = gw.GetTask(id);
             if (t == null || t.Login != Session(ctx)!.Login) return Error("Задание не найдено", 404);
-            if (t.Status != "done") return Results.Json(new { status = t.Status });
+            if (t.Status != "done")
+            {
+                var hostName = t.Host != null ? (await auth.FindUserByLoginAsync(t.Host))?.Name ?? t.Host : null;
+                return Results.Json(new
+                {
+                    status = t.Status,
+                    host = hostName,
+                    waitedSec = (int)(DateTime.UtcNow - t.CreatedAt).TotalSeconds,
+                    runningSec = t.StartedAt != null ? (int)(DateTime.UtcNow - t.StartedAt.Value).TotalSeconds : 0,
+                    hostsOnline = gw.Gateway(Wh(ctx)).Online,
+                });
+            }
             ctx.Response.Headers["X-Wms-Gateway"] = "1";
             return Results.Json(new { status = t.Status, code = t.Code, body = t.Body });
         }).AddEndpointFilter<VsSessionRequiredFilter>();

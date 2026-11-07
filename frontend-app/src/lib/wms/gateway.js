@@ -9,6 +9,7 @@
 //
 // Только чтение: что пропускать, решает сервер (WmsGatewayService.Validate).
 import { apiHeaders } from '@/lib/api'
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 
 export const GATEWAY_TOKEN = 'wms-gateway'
@@ -85,7 +86,22 @@ export const markWmsDirectBroken = () => { directBrokenAt = Date.now() }
  * та же выгрузка шла бы втрое дольше: каждая страница — шлюз → сервер → сюда →
  * снова на сервер. Функции в args (onProgress) не передаются.
  */
+const TASK_LABELS = {
+  'collect:ops': 'комплектация', 'collect:remains': 'остатки', 'collect:moves': 'спуск, пополнение, размещение',
+  'collect:placement': 'размещение', 'collect:receiving': 'приёмка',
+}
+
 export async function runGatewayTask(name, args = {}) {
+  const label = TASK_LABELS[name] || name
+  const toastId = toast.loading(`Шлюз WMS · ${label}: отправляю задание…`)
+  try {
+    return await runGatewayTaskInner(name, args, text => toast.loading(`Шлюз WMS · ${label}: ${text}`, { id: toastId }))
+  } finally {
+    toast.dismiss(toastId)
+  }
+}
+
+async function runGatewayTaskInner(name, args, show) {
   const r = await directFetch('/api/wms-gateway/request', {
     method: 'POST',
     credentials: 'include',
@@ -113,6 +129,13 @@ export async function runGatewayTask(name, args = {}) {
       if (err instanceof TypeError) continue
       throw err
     }
+    if (t?.status === 'queued') {
+      show(t.hostsOnline
+        ? `в очереди ${t.waitedSec} с — шлюз занят другими запросами`
+        : `ждёт шлюз ${t.waitedSec} с — ни одного шлюза в сети`)
+      continue
+    }
+    if (t?.status === 'running') { show(`выгружает шлюз ${t.host || ''} · ${t.runningSec} с`); continue }
     if (t?.status !== 'done') continue
     let result = null
     try { result = t.body ? JSON.parse(t.body) : null } catch { /* не JSON */ }
@@ -120,6 +143,26 @@ export async function runGatewayTask(name, args = {}) {
     return result
   }
   throw new Error('Шлюз WMS не выполнил задание за 20 минут')
+}
+
+// Прямой запрос в WMS, который не дождался даже заголовков ответа за ms, —
+// обрывается как сетевая ошибка. С телефона (мобильный user-agent) защита WMS
+// не отвечает вовсе: запрос висел бесконечно — ни ошибки, ни прогресса; в
+// режиме «версия для ПК» то же самое работало.
+export async function fetchWithTimeout(input, init = {}, ms = 20_000) {
+  const ctrl = new AbortController()
+  const outer = init.signal
+  if (outer) outer.addEventListener('abort', () => ctrl.abort(), { once: true })
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  try {
+    return await directFetch(input, { ...init, signal: ctrl.signal })
+  } catch (err) {
+    // наш таймаут — как сетевая ошибка (TypeError), отмена извне — как есть
+    if (ctrl.signal.aborted && !outer?.aborted) throw new TypeError('WMS не отвечает с этого устройства')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 let installed = false
@@ -137,10 +180,10 @@ export function installGatewayFetch() {
       const canGateway = state.access === 'approved' && state.online
       if (!(canGateway && wmsDirectBroken())) {
         try {
-          return await nativeFetch(input, init)
+          return await fetchWithTimeout(input, init)
         } catch (err) {
+          if (err instanceof TypeError) directBrokenAt = Date.now()
           if (!(err instanceof TypeError) || !(state.access === 'approved' && state.online)) throw err
-          directBrokenAt = Date.now()
         }
       }
     }
@@ -190,7 +233,7 @@ export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, onN
       }
     }
     try {
-      const r = await nativeFetch(job.url, {
+      const r = await fetchWithTimeout(job.url, {
         method: job.method,
         headers: {
           Accept: 'application/json',
@@ -199,7 +242,7 @@ export function runGatewayHost({ getToken, wmsWarehouseId, onEvent, runTask, onN
           ...(job.body != null ? { 'Content-Type': 'application/json' } : {}),
         },
         body: job.method === 'GET' ? undefined : job.body,
-      })
+      }, 30_000)
       return { status: r.status, body: await r.text() }
     } catch (err) {
       // до WMS отсюда не достать (нет сети/VPN) — status 0: сервер вернёт

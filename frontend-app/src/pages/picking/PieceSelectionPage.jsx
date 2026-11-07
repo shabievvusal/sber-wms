@@ -10,7 +10,7 @@ import { SortableHead } from '@/components/ui/sortable-head'
 import { Spinner } from '@/components/ui/spinner'
 import { DEFAULT_STATUSES, STATUS_LABELS, TEMP_LABELS, TEMP_OPTIONS, ZONE_OPTIONS } from './constants'
 import { fmtDay, fmtKg, fmtLiters, fmtNum, userName, dateToApiFrom, dateToApiTo, selectedOrAll } from './format'
-import { Printer, RefreshCw, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Printer, RefreshCw, Search, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AddressLabelsPrint, printAddressLabels } from './AddressLabels'
 import { Select } from '@/components/ui/select'
@@ -21,6 +21,13 @@ const selectClass = 'h-8 rounded-md border border-input bg-transparent px-2 text
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
 const SORT_FIELDS = { cells: 'sourceCellsCount', weight: 'weightInGrams', volume: 'volumeInMilliliters' }
+// кнопки сортировки в мобильной версии — те же ключи, что у колонок таблицы
+const MOBILE_SORTS = [
+  { key: 'cells', label: 'Ячеек' },
+  { key: 'weight', label: 'Вес' },
+  { key: 'volume', label: 'Объём' },
+  { key: 'name', label: 'ЦФЗ' },
+]
 
 function statusBadgeVariant(status) {
   if (status === 'COMPLETED') return 'success'
@@ -63,8 +70,11 @@ export default function PieceSelectionPage() {
   // в порядке таблицы — бригадир сам раскладывает их как удобно
   const [selected, setSelected] = useState(() => new Set())
   const [printItems, setPrintItems] = useState([])
+  // мобильная версия: раскрытая карточка (подробности задания)
+  const [expanded, setExpanded] = useState(null)
 
-  const toggleSort = key => setSort(prev => prev.key === key ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' })
+  // числа — сначала большие, ЦФЗ — по алфавиту
+const toggleSort = key => setSort(prev => prev.key === key ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: key === 'name' ? 'asc' : 'desc' })
 
   const load = async (eoBarcode = '') => {
     setLoading(true)
@@ -234,30 +244,64 @@ export default function PieceSelectionPage() {
         {loading && <Spinner label="Загрузка заданий..." />}
         {rows && !loading && (
           <>
-            {/* Мобильные карточки — до md (768px) */}
-            <div className="divide-y md:hidden">
-              {sorted.map(row => (
-                <div key={row.id} className="space-y-1.5 p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} aria-label="Отметить для печати" />
-                    <span className="min-w-0 flex-1 truncate font-medium">{row.shipTo?.name || '—'}</span>
-                    <Badge variant={statusBadgeVariant(row.status)}>{STATUS_LABELS[row.status] || row.status || '—'}</Badge>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                    <span>Ячеек: <span className="font-medium text-foreground">{fmtNum(row.sourceCellsCount)}</span></span>
-                    <span>Вес: <span className="font-medium text-foreground">{fmtKg(row.weightInGrams)}</span></span>
-                    <span>Объём: <span className="font-medium text-foreground">{fmtLiters(row.volumeInMilliliters)}</span></span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>ШК ЕО: {row.targetHandlingUnitBarcode || '—'}</span>
-                    <span>Зона: {row.sourceZone?.name || '—'}</span>
-                    <span>Темп.: {(row.shipmentTemperatureModes || []).map(t => TEMP_LABELS[t] || t).join(', ') || '—'}</span>
-                    <span>Отгрузка: {fmtDay(row.logisticDate)}</span>
-                    <span>Исполнитель: {userName(row.responsibleUser)}</span>
-                  </div>
-                </div>
-              ))}
-              {!sorted.length && <div className="p-6 text-center text-sm text-muted-foreground">Нет данных</div>}
+            {/* Мобильная версия — до md (768px). Для бригадира, который раздаёт
+                задания: сортировка кнопками сверху и в строке только нужное —
+                ЦФЗ, ячеек, вес, объём, статус (и кто взял, если в работе).
+                Остальное (ШК ЕО, зона, температура, отгрузка) — по нажатию.
+                Оригинал: карточка со всеми полями, без сортировки. */}
+            <div className="md:hidden">
+              <div className="flex items-center gap-1.5 overflow-x-auto border-b px-3 py-2">
+                <span className="shrink-0 text-xs text-muted-foreground">Сортировка:</span>
+                {MOBILE_SORTS.map(m => {
+                  const active = sort.key === m.key
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => toggleSort(m.key)}
+                      className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${active ? 'border-brand bg-brand-soft text-brand' : 'border-line text-muted-foreground'}`}
+                    >
+                      {m.label}{active && (sort.dir === 'desc' ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="divide-y">
+                {sorted.map(row => {
+                  const open = expanded === row.id
+                  return (
+                    <div key={row.id} className={`px-3 py-2.5 text-sm ${selected.has(row.id) ? 'bg-brand-soft/40' : ''}`}>
+                      <div className="flex items-center gap-2.5">
+                        <Checkbox checked={selected.has(row.id)} onCheckedChange={() => toggleOne(row.id)} aria-label="Отметить для печати" />
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpanded(open ? null : row.id)}>
+                          <div className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate font-medium">{row.shipTo?.name || '—'}</span>
+                            {row.status !== 'CREATED' && <Badge variant={statusBadgeVariant(row.status)}>{STATUS_LABELS[row.status] || row.status || '—'}</Badge>}
+                          </div>
+                          <div className="mt-1 grid grid-cols-3 gap-2 text-center">
+                            <div><div className="text-base font-semibold leading-tight">{fmtNum(row.sourceCellsCount)}</div><div className="text-[11px] text-muted-foreground">ячеек</div></div>
+                            <div><div className="text-base font-semibold leading-tight">{fmtKg(row.weightInGrams)}</div><div className="text-[11px] text-muted-foreground">вес</div></div>
+                            <div><div className="text-base font-semibold leading-tight">{fmtLiters(row.volumeInMilliliters)}</div><div className="text-[11px] text-muted-foreground">объём</div></div>
+                          </div>
+                          {row.status === 'IN_PROGRESS' && row.responsibleUser && (
+                            <div className="mt-1 truncate text-xs text-muted-foreground">Взял: {userName(row.responsibleUser)}</div>
+                          )}
+                        </button>
+                      </div>
+                      {open && (
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 pl-7 text-xs text-muted-foreground">
+                          <span>ШК ЕО: {row.targetHandlingUnitBarcode || '—'}</span>
+                          <span>Зона: {row.sourceZone?.name || '—'}</span>
+                          <span>Темп.: {(row.shipmentTemperatureModes || []).map(t => TEMP_LABELS[t] || t).join(', ') || '—'}</span>
+                          <span>Отгрузка: {fmtDay(row.logisticDate)}</span>
+                          {row.status !== 'IN_PROGRESS' && <span>Исполнитель: {userName(row.responsibleUser)}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {!sorted.length && <div className="p-6 text-center text-sm text-muted-foreground">Нет данных</div>}
+              </div>
             </div>
 
             {/* Десктопная таблица — от md и шире */}

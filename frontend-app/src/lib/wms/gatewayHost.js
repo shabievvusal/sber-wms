@@ -6,7 +6,7 @@
 // брать запросы, их берёт другой шлюз склада.
 import { useSyncExternalStore } from 'react'
 import { getOwnToken } from './core.js'
-import { runGatewayHost, directFetch, markWmsDirectOk, markWmsDirectBroken } from './gateway.js'
+import { runGatewayHost, fetchWithTimeout, markWmsDirectOk, markWmsDirectBroken } from './gateway.js'
 import { fetchDataViaBrowser, fetchPlacementViaBrowser, fetchRemainsViaBrowser, fetchStockMovesViaBrowser, fetchReceivingViaBrowser } from './collect.js'
 
 // задания целиком, которые шлюз выполняет сам (WmsGatewayService.TasksAllowed)
@@ -32,11 +32,11 @@ const WMS_P01_PROBE_URL = 'https://api-p01.samokat.ru/wmsout-pdt/pbl/zones'
 // компьютера WMS вообще доступна. Нет — эта вкладка шлюзом не работает.
 async function probeWms(token) {
   try {
-    const r = await directFetch(WMS_FEATURES_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } })
+    const r = await fetchWithTimeout(WMS_FEATURES_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } }, 10_000)
     if (!r.ok) return null
     const d = await r.json()
     // до второго сервера — достаточно любого ответа (сеть есть)
-    await directFetch(WMS_P01_PROBE_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } })
+    await fetchWithTimeout(WMS_P01_PROBE_URL, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } }, 10_000)
     markWmsDirectOk()
     return d?.value?.warehouseId || null
   } catch {
